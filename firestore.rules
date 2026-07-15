@@ -1,0 +1,160 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ───────────────────────────────────────────────────────────────────────
+    // HELPERS
+    // ───────────────────────────────────────────────────────────────────────
+
+    // User must be authenticated via Firebase Auth
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // For collections where each doc has a `userId` field, the requesting
+    // user can only read/write docs that belong to them.
+    function isOwner() {
+      return isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // On create, the doc must stamp itself with the requester's uid
+    function stampsOwner() {
+      return isAuthenticated()
+        && request.resource.data.userId == request.auth.uid;
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // Per-user profile document (one doc per user, keyed by uid)
+    // ───────────────────────────────────────────────────────────────────────
+
+    match /users/{userId} {
+      allow read:  if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /ownerProfiles/{userId} {
+      allow read:  if isAuthenticated() && request.auth.uid == userId;
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update, delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // User-scoped domain collections (every doc carries a `userId` field)
+    // ───────────────────────────────────────────────────────────────────────
+
+    match /properties/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /contracts/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /tenants/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /condominiums/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /movements/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /fastClosing/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /reminders/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /maintenance/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /legalCases/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /communications/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /lawyers/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /creditInstitutions/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /bankAccounts/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /insurancePolicies/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /deliveryReports/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // Default deny — anything not explicitly allowed above is blocked
+    // ───────────────────────────────────────────────────────────────────────
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

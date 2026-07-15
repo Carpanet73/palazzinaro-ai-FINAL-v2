@@ -1,0 +1,6 @@
+{
+  "name": "Palazzinaro AI",
+  "description": "Un gestionale immobiliare modulare e completo con Google Sign-In, persistenza Firestore e Area AI per l'estrazione dati da contratti, condomini e movimenti bancari.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

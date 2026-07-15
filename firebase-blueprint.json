@@ -1,0 +1,355 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Property": {
+      "title": "Property",
+      "description": "Real estate property asset",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string", "enum": ["Available", "Rented", "Maintenance", "Archived"] },
+        "notes": { "type": "string" },
+        "owner": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "address"]
+    },
+    "Contract": {
+      "title": "Contract",
+      "description": "Lease agreement contract details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "rentAmount": { "type": "number" },
+        "frequency": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Draft", "Expired", "Terminated"] },
+        "notes": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "tenantName": { "type": "string" },
+        "propertyName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "propertyId", "rentAmount", "startDate", "endDate"]
+    },
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Tenant registry details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "fiscalCode": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "contractId": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "email"]
+    },
+    "Condominium": {
+      "title": "Condominium",
+      "description": "Condominium and budget items list",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "administrator": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "notes": { "type": "string" },
+        "rates": {
+          "type": "array",
+          "description": "Calculated payment installments"
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name"]
+    },
+    "BankMovement": {
+      "title": "BankMovement",
+      "description": "Imported bank transaction lines",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "reconciled": { "type": "boolean" },
+        "reconciledWith": { "type": "object" },
+        "bankAccountId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "date", "description", "amount"]
+    },
+    "FastClosingItem": {
+      "title": "FastClosingItem",
+      "description": "Deadline, invoice, or expected payment scadenze",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "source": { "type": "string", "enum": ["contract", "condominium", "manual", "reminder"] },
+        "sourceId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["Pending", "Paid", "Overdue", "Cancelled"] },
+        "reconciledWithMovementId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "amount", "dueDate", "status"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "Reminders and late notice tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "tenantName": { "type": "string" },
+        "contractId": { "type": "string" },
+        "amount": { "type": "number" },
+        "reason": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["Pending", "Sent", "Paid", "Cancelled"] },
+        "sentDate": { "type": "string", "format": "date-time" },
+        "followUpNotes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "tenantId", "amount", "status"]
+    },
+    "Maintenance": {
+      "title": "Maintenance",
+      "description": "Property maintenance requests and tickets",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "propertyName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["New", "In Progress", "Completed", "Cancelled"] },
+        "cost": { "type": "number" },
+        "contractor": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "propertyId", "title", "status"]
+    },
+    "LegalCase": {
+      "title": "LegalCase",
+      "description": "Legal proceedings and files tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "propertyName": { "type": "string" },
+        "contractId": { "type": "string" },
+        "tenantName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Pending", "Closed"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "status"]
+    },
+    "Communication": {
+      "title": "Communication",
+      "description": "Tenant communication log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "tenantName": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "sentAt": { "type": "string", "format": "date-time" },
+        "step": { "type": "number" }
+      },
+      "required": ["userId", "tenantId", "type", "title", "body"]
+    },
+    "Lawyer": {
+      "title": "Lawyer",
+      "description": "Assigned lawyers and external legal firms",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "studioName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "specialization": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "studioName"]
+    },
+    "CreditInstitution": {
+      "title": "CreditInstitution",
+      "description": "External credit or bank institution",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "branch": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name"]
+    },
+    "BankAccount": {
+      "title": "BankAccount",
+      "description": "Liquid current bank account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "institutionId": { "type": "string" },
+        "iban": { "type": "string" },
+        "holder": { "type": "string" },
+        "currency": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "institutionId", "iban", "holder"]
+    },
+    "InsurancePolicy": {
+      "title": "InsurancePolicy",
+      "description": "Insurance policy for a property or owner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "company": { "type": "string" },
+        "policyNumber": { "type": "string" },
+        "coverageType": { "type": "string" },
+        "expiryDate": { "type": "string" },
+        "attachmentName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "company", "policyNumber", "coverageType", "expiryDate"]
+    },
+    "DeliveryReport": {
+      "title": "DeliveryReport",
+      "description": "Delivery or return checklist report for a property",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "contractId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "type": { "type": "string", "enum": ["consegna", "riconsegna"] },
+        "date": { "type": "string", "format": "date" },
+        "checklist": { "type": "array" },
+        "signatures": { "type": "object" },
+        "documentName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "propertyId", "type", "date", "checklist"]
+    }
+  },
+  "firestore": {
+    "users/{uid}": {
+      "schema": "User",
+      "description": "Storage for user profile information"
+    },
+    "properties/{propertyId}": {
+      "schema": "Property",
+      "description": "Real estate units managed by the user"
+    },
+    "contracts/{contractId}": {
+      "schema": "Contract",
+      "description": "Rental and lease contracts"
+    },
+    "tenants/{tenantId}": {
+      "schema": "Tenant",
+      "description": "Tenants information connected to properties/contracts"
+    },
+    "condominiums/{condoId}": {
+      "schema": "Condominium",
+      "description": "Condominium registries, administrative records and rates"
+    },
+    "movements/{movementId}": {
+      "schema": "BankMovement",
+      "description": "Transaction log from imported banking details"
+    },
+    "fastClosing/{itemId}": {
+      "schema": "FastClosingItem",
+      "description": "Central ledger for dues and closings to reconciliate"
+    },
+    "reminders/{reminderId}": {
+      "schema": "Reminder",
+      "description": "Late payment or notification alerts"
+    },
+    "maintenance/{maintenanceId}": {
+      "schema": "Maintenance",
+      "description": "Maintenance tickets"
+    },
+    "legalCases/{caseId}": {
+      "schema": "LegalCase",
+      "description": "Legal claims and cases log"
+    },
+    "communications/{commId}": {
+      "schema": "Communication",
+      "description": "Communication archives"
+    },
+    "lawyers/{lawyerId}": {
+      "schema": "Lawyer",
+      "description": "External legal partners catalog"
+    },
+    "creditInstitutions/{instId}": {
+      "schema": "CreditInstitution",
+      "description": "External credit or bank list"
+    },
+    "bankAccounts/{accId}": {
+      "schema": "BankAccount",
+      "description": "Registered bank accounts"
+    },
+    "insurancePolicies/{policyId}": {
+      "schema": "InsurancePolicy",
+      "description": "Insurance policies linked to properties or owners"
+    },
+    "deliveryReports/{reportId}": {
+      "schema": "DeliveryReport",
+      "description": "Delivery or return checklist reports for property handover"
+    }
+  }
+}
