@@ -376,7 +376,15 @@ export default function OwnersView({
       
       propertyClosingItems.forEach(item => {
         if (item.status === "Paid" || item.status === "Cancelled") return;
-        
+
+        // CORREZIONE I — Un ticket di manutenzione può generare più righe (una per
+        // debitore, quando diviso tra proprietario e inquilino). Prima di questa
+        // correzione, il mastrino Proprietari sommava TUTTE le righe che citavano
+        // l'immobile nel titolo, incluse quelle esplicitamente a carico dell'inquilino:
+        // il debito del proprietario risultava gonfiato. Ora la quota a carico
+        // dell'inquilino viene sempre esclusa dal conteggio del proprietario.
+        if (item.debtorType === "tenant") return;
+
         const titleLower = (item.title || "").toLowerCase();
         
         const isRent = item.source === "contract" || titleLower.includes("affitto") || titleLower.includes("canone");
