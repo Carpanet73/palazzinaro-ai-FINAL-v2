@@ -1681,7 +1681,7 @@ export default function ContractsView({
                       >
                         <option value="">-- Seleziona conduttore nel database --</option>
                         {tenants.map(t => (
-                          <option key={t.id} value={t.id}>{t.name} ({t.email})</option>
+                          <option key={t.id} value={t.id}>{!t.propertyId ? "🏠❗ " : ""}{t.name} ({t.email}){!t.propertyId ? " — immobile da assegnare" : ""}</option>
                         ))}
                       </select>
                       {tenants.length === 0 && (

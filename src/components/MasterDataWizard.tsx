@@ -1043,6 +1043,14 @@ export default function MasterDataWizard({
                 subtitle="Se l'immobile è affittato, registra l'inquilino"
               />
 
+              {standaloneEntity === "tenant" && (
+                <InfoBox type="warning">
+                  ⚠️ Stai creando l'inquilino senza collegarlo a un immobile — è consentito
+                  (puoi assegnarlo in seguito), ma finché non lo colleghi comparirà come
+                  "Immobile da assegnare" nell'elenco Inquilini e nella bacheca della Dashboard.
+                </InfoBox>
+              )}
+
               <label className="flex items-center gap-2 text-[13px] text-slate-700 cursor-pointer p-3 rounded-lg bg-slate-50 border border-slate-200">
                 <input
                   type="checkbox"
@@ -1094,8 +1102,9 @@ export default function MasterDataWizard({
                         <option value="">— Scegli —</option>
                         {existingTenants.map((t) => (
                           <option key={t.id} value={t.id}>
-                            {t.name}
+                            {!t.propertyId ? "🏠❗ " : ""}{t.name}
                             {t.email ? ` · ${t.email}` : ""}
+                            {!t.propertyId ? " (immobile da assegnare)" : ""}
                           </option>
                         ))}
                       </select>

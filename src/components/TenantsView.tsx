@@ -163,6 +163,16 @@ export default function TenantsView({
       return;
     }
 
+    // CORREZIONE F — Il collegamento a un immobile resta facoltativo (si può creare
+    // l'inquilino prima dell'immobile), ma il sistema deve sempre ricordarlo esplicitamente
+    // prima di salvare, così la mancanza è una scelta consapevole e non una dimenticanza.
+    if (!propertyId) {
+      const proceedWithoutProperty = confirm(
+        "⚠️ Nessun immobile assegnato a questo inquilino.\n\nPuoi salvarlo comunque (ad esempio se l'immobile verrà creato in seguito), ma resterà segnalato come \"Immobile da assegnare\" nell'elenco e nella bacheca della Dashboard finché non lo colleghi.\n\nVuoi procedere comunque?"
+      );
+      if (!proceedWithoutProperty) return;
+    }
+
     const payload = {
       name: finalName.trim(),
       email: email.trim(),
@@ -1147,6 +1157,14 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                             <span>{tenant.name}</span>
                             {tenant.isCompany && (
                               <span className="ml-1.5 inline-block text-[9px] font-extrabold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-sm uppercase tracking-wide shrink-0">Società</span>
+                            )}
+                            {!tenant.propertyId && (
+                              <span
+                                className="ml-1.5 inline-flex items-center gap-1 text-[9px] font-extrabold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-sm uppercase tracking-wide shrink-0"
+                                title="Nessun immobile collegato a questo inquilino"
+                              >
+                                🏠❗ Immobile da assegnare
+                              </span>
                             )}
                           </h3>
                           <span className="text-[10px] text-slate-400 font-mono">ID: {tenant.id.slice(0, 8)}</span>

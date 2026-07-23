@@ -1638,10 +1638,18 @@ export default function DashboardView({
                   </p>
                 </div>
                 
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap gap-1.5">
                   <span className={`inline-flex items-center space-x-1 border text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${badgeBg}`}>
                     <span>{statusLabel}</span>
                   </span>
+                  {!t.propertyId && (
+                    <span
+                      className="inline-flex items-center space-x-1 border border-amber-300 bg-amber-100 text-amber-800 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider"
+                      title="Nessun immobile collegato a questo inquilino"
+                    >
+                      <span>🏠❗ Immobile da assegnare</span>
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -1734,6 +1742,42 @@ export default function DashboardView({
                   </div>
                 );
               })}
+
+              {/* CORREZIONE F — Promemoria: inquilini creati senza un immobile collegato */}
+              {tenants.filter(t => !t.propertyId).map(t => (
+                <div
+                  key={`tenant-missing-property-${t.id}`}
+                  className="p-4 rounded-xl border-2 border-amber-300 bg-amber-50/70 transition-all duration-300 shadow-2xs"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-2xl mt-0.5 shrink-0">🏠❗</span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-extrabold text-xs text-amber-950 leading-snug">
+                            Immobile da Assegnare: {t.name}
+                          </h4>
+                          <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 uppercase">
+                            Promemoria
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-amber-900/80 mt-1 leading-relaxed">
+                          Questo inquilino è stato registrato senza collegarlo a nessun immobile. Nessun problema se è intenzionale (es. immobile non ancora disponibile), ma finché non viene collegato non potrà avere un contratto né una posizione contabile.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="sm:text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center pt-3 sm:pt-0 border-t sm:border-t-0 border-amber-200">
+                      <button
+                        onClick={() => setCurrentSection("tenants")}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] px-3.5 py-2 rounded-lg -2 border-indigo-800 active:-0 transition-all cursor-pointer"
+                      >
+                        Assegna Ora
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
 
               {/* Multi-step Payment Request Sequence Alerts */}
               {sequenceAlerts.map((alert) => {
