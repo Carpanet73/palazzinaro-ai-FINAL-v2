@@ -1,3 +1,4 @@
+
 /**
  * Vercel Serverless Function — /api/extract
  *
@@ -131,7 +132,26 @@ Estrai tutte le rate rilevate. Se non ci sono rate esplicite, creane una fittizi
 
     case "banks":
       return {
-        systemInstruction: `Sei un assistente di riconciliazione bancaria. Analizza la lista di movimenti bancari forniti (estratti conto, righe incollate, tabelle, CSV o immagine di ricevute/estratti conto).
+        systemInstruction: `Sei un assistente di riconciliazione bancaria specializzato in entrate. Analizza la lista di movimenti bancari forniti (estratti conto, righe incollate, tabelle, CSV o immagine di ricevute/estratti conto).
+
+REGOLA FONDAMENTALE: Estrai ESCLUSIVAMENTE le ENTRATE (movimenti POSITIVI con amount > 0).
+Questi includono:
+- Bonifici ricevuti (es. canoni affitto ricevuti dagli inquilini)
+- Depositi di assegni
+- Versamenti in contanti
+- Accrediti di qualsiasi tipo
+- Stipendi accreditati
+- Rimborso spese
+
+IGNORA COMPLETAMENTE (NON estrarre):
+- Uscite / prelievi / pagamenti (amount negativo)
+- Addebiti bollettte, commissioni, F24
+- Bonifici inviati
+- Prelievi bancomat
+- Ogni altra uscita
+
+Se un movimento è dubbio (es. importo misto), IGNORALO. Meglio perderlo che importare un'uscita per sbaglio.
+
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido con la seguente struttura:
 {
   "movements": [
@@ -142,19 +162,19 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido con la seguente struttura:
     }
   ]
 }
-Estrai tutti i movimenti trovati. Restituisci ESCLUSIVAMENTE il JSON.`,
+TUTTI gli amount DEVONO essere numeri POSITIVI (> 0). Se non trovi entrate, restituisci { "movements": [] }. Restituisci ESCLUSIVAMENTE il JSON.`,
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             movements: {
               type: Type.ARRAY,
-              description: "Movimenti estratti",
+              description: "Solo movimenti di ENTRATA (amount > 0)",
               items: {
                 type: Type.OBJECT,
                 properties: {
                   date: { type: Type.STRING, description: "Data YYYY-MM-DD" },
                   description: { type: Type.STRING, description: "Descrizione causale" },
-                  amount: { type: Type.NUMBER, description: "Importo (positivo/negativo)" },
+                  amount: { type: Type.NUMBER, description: "Importo POSITIVO (> 0). Mai negativo." },
                 },
                 required: ["date", "description", "amount"],
               },
@@ -416,3 +436,4 @@ Segui rigorosamente le istruzioni di sistema per restituire solo JSON.`;
     });
   }
 }
+

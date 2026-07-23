@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { 
   Plus, Edit3, Trash2, FileText, Calendar, Wallet, Link2, 
@@ -2260,3 +2261,4 @@ export default function ContractsView({
     </div>
   );
 }
+

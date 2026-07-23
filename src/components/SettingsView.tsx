@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { 
   User, 
@@ -519,3 +520,4 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
     </div>
   );
 }
+

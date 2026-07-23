@@ -1,3 +1,4 @@
+
 import React from "react";
 import logoIcon from "../assets/logo-icon.png";
 
@@ -18,3 +19,4 @@ export default function Logo({ className = "transition-transform hover:scale-105
     />
   );
 }
+

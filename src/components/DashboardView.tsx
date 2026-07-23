@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   Building2, 
@@ -803,28 +804,29 @@ export default function DashboardView({
     ];
     const maintenanceToShow = realMaintenance.length > 0 ? realMaintenance : defaultMaintenance;
 
-    // Months list for Rents Spreadsheet
-    const monthsList = [
-      { name: "Gennaio 2026", num: 1, dueDate: "2026-01-05" },
-      { name: "Febbraio 2026", num: 2, dueDate: "2026-02-05" },
-      { name: "Marzo 2026", num: 3, dueDate: "2026-03-05" },
-      { name: "Aprile 2026", num: 4, dueDate: "2026-04-05" },
-      { name: "Maggio 2026", num: 5, dueDate: "2026-05-05" },
-      { name: "Giugno 2026", num: 6, dueDate: "2026-06-05" },
-      { name: "Luglio 2026", num: 7, dueDate: "2026-07-05" },
-      { name: "Agosto 2026", num: 8, dueDate: "2026-08-05" },
-      { name: "Settembre 2026", num: 9, dueDate: "2026-09-05" },
-      { name: "Ottobre 2026", num: 10, dueDate: "2026-10-05" },
-      { name: "Novembre 2026", num: 11, dueDate: "2026-11-05" },
-      { name: "Dicembre 2026", num: 12, dueDate: "2026-12-05" },
+    // Months list for Rents Spreadsheet — derivato dinamicamente dall'anno corrente,
+    // mai da un anno scritto fisso (vedi REGOLE_PROGETTO sez. 4/13.5)
+    const currentYearForMonths = new Date().getFullYear();
+    const italianMonthNames = [
+      "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+      "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
     ];
+    const monthsList = italianMonthNames.map((name, idx) => {
+      const num = idx + 1;
+      const monthStr = String(num).padStart(2, "0");
+      return {
+        name: `${name} ${currentYearForMonths}`,
+        num,
+        dueDate: `${currentYearForMonths}-${monthStr}-05`
+      };
+    });
 
     // Rents spreadsheet calculation
     const generatedRents = monthsList.map(m => {
       const key = `${p.id}-rent-${m.num}`;
       let defaultStatus: "Paid" | "Pending" | "Overdue" = "Paid";
       const mDate = new Date(m.dueDate);
-      const now = new Date("2026-07-08"); // Current UTC date reference
+      const now = new Date(); // Data corrente reale, mai una stringa fissa
       
       if (mDate > now) {
         defaultStatus = "Pending";
@@ -867,7 +869,7 @@ export default function DashboardView({
 
       let defaultStatus: "Paid" | "Pending" | "Overdue" = "Paid";
       const rDate = new Date(rate.dueDate);
-      const now = new Date("2026-07-08");
+      const now = new Date(); // Data corrente reale, mai una stringa fissa
       if (rDate > now) {
         defaultStatus = "Pending";
       }
@@ -893,14 +895,15 @@ export default function DashboardView({
     const condoRatesToShow = condoConstituted ? condoRatesList : defaultCondoRates;
 
     // Helper for contract registration anniversary
+    const fallbackYearBase = new Date().getFullYear();
     const getAnniversaryDate = (startDateStr: string, yearsToAdd: number) => {
-      if (!startDateStr) return "2026-01-01";
+      if (!startDateStr) return `${fallbackYearBase}-01-01`;
       try {
         const d = new Date(startDateStr);
         d.setFullYear(d.getFullYear() + yearsToAdd);
         return d.toISOString().split("T")[0];
       } catch (e) {
-        return "2026-01-01";
+        return `${fallbackYearBase}-01-01`;
       }
     };
 
@@ -909,10 +912,10 @@ export default function DashboardView({
     const yearlyTaxAmount = baseRentAmount > 0 ? Math.max(67, Math.round(baseRentAmount * 12 * 0.02)) : 0;
     
     const registrationYears = [
-      { year: "1° Anno (Registrazione Iniziale)", dueDate: activeContract ? activeContract.startDate : "2024-01-01", amount: yearlyTaxAmount, f24Code: "1500", key: `${p.id}-reg-1`, defaultStatus: "Paid" },
-      { year: "2° Anno (Annualità successiva)", dueDate: activeContract ? getAnniversaryDate(activeContract.startDate, 1) : "2025-01-01", amount: yearlyTaxAmount, f24Code: "1501", key: `${p.id}-reg-2`, defaultStatus: "Paid" },
-      { year: "3° Anno (Annualità successiva)", dueDate: activeContract ? getAnniversaryDate(activeContract.startDate, 2) : "2026-01-01", amount: yearlyTaxAmount, f24Code: "1501", key: `${p.id}-reg-3`, defaultStatus: "Overdue" },
-      { year: "4° Anno (Annualità successiva)", dueDate: activeContract ? getAnniversaryDate(activeContract.startDate, 3) : "2027-01-01", amount: yearlyTaxAmount, f24Code: "1501", key: `${p.id}-reg-4`, defaultStatus: "Pending" },
+      { year: "1° Anno (Registrazione Iniziale)", dueDate: activeContract ? activeContract.startDate : `${fallbackYearBase - 2}-01-01`, amount: yearlyTaxAmount, f24Code: "1500", key: `${p.id}-reg-1`, defaultStatus: "Paid" },
+      { year: "2° Anno (Annualità successiva)", dueDate: activeContract ? getAnniversaryDate(activeContract.startDate, 1) : `${fallbackYearBase - 1}-01-01`, amount: yearlyTaxAmount, f24Code: "1501", key: `${p.id}-reg-2`, defaultStatus: "Paid" },
+      { year: "3° Anno (Annualità successiva)", dueDate: activeContract ? getAnniversaryDate(activeContract.startDate, 2) : `${fallbackYearBase}-01-01`, amount: yearlyTaxAmount, f24Code: "1501", key: `${p.id}-reg-3`, defaultStatus: "Overdue" },
+      { year: "4° Anno (Annualità successiva)", dueDate: activeContract ? getAnniversaryDate(activeContract.startDate, 3) : `${fallbackYearBase + 1}-01-01`, amount: yearlyTaxAmount, f24Code: "1501", key: `${p.id}-reg-4`, defaultStatus: "Pending" },
     ];
 
     const generatedRegistration = registrationYears.map(r => {
@@ -1460,7 +1463,7 @@ export default function DashboardView({
               </div>
               <div className="mt-4 space-y-3">
                 {activeRemindersForProperty.map(r => {
-                  const delayDays = r.dueDate ? Math.max(15, Math.ceil((new Date("2026-07-08").getTime() - new Date(r.dueDate).getTime()) / (1000 * 60 * 60 * 24))) : 15;
+                  const delayDays = r.dueDate ? Math.max(15, Math.ceil((new Date().getTime() - new Date(r.dueDate).getTime()) / (1000 * 60 * 60 * 24))) : 15;
                   return (
                     <div key={r.id} className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div>
@@ -2815,3 +2818,4 @@ export default function DashboardView({
     </div>
   );
 }
+

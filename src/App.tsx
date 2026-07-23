@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { 
   onAuthStateChanged, 
@@ -21,22 +22,23 @@ import {
   setDoc
 } from "firebase/firestore";
 import { auth, googleProvider, db } from "./firebase";
-import { 
-  AppSection, 
-  Property, 
-  Tenant, 
-  Contract, 
-  Condominium, 
-  BankMovement, 
-  Reminder, 
-  FastClosingItem, 
-  Maintenance, 
+import {
+  AppSection,
+  Property,
+  Tenant,
+  Contract,
+  Condominium,
+  BankMovement,
+  Reminder,
+  FastClosingItem,
+  Maintenance,
   LegalCase,
   Communication,
   Lawyer,
   CreditInstitution,
   BankAccount,
   OwnerProfile,
+  Owner,
   InsurancePolicy,
   DeliveryReport
 } from "./types";
@@ -58,6 +60,8 @@ import AIAreaView from "./components/AIAreaView";
 import OwnersView from "./components/OwnersView";
 import OwnerOnboarding from "./components/OwnerOnboarding";
 import SettingsView from "./components/SettingsView";
+import MasterDataWizard from "./components/MasterDataWizard";
+import UniversalAddButton from "./components/UniversalAddButton";
 
 // Lucide Icons for Landing Page and Alerts
 import { Sparkles, CheckCircle2, ShieldCheck, Database, FileText, Menu, Building2, AlertCircle } from "lucide-react";
@@ -139,6 +143,7 @@ export default function App() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [condominiums, setCondominiums] = useState<Condominium[]>([]);
+  const [owners, setOwners] = useState<Owner[]>([]);
   const [movements, setMovements] = useState<BankMovement[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [fastClosing, setFastClosing] = useState<FastClosingItem[]>([]);
@@ -155,6 +160,9 @@ export default function App() {
   // Owner profile for onboarding flow
   const [ownerProfile, setOwnerProfile] = useState<OwnerProfile | null>(null);
   const [ownerProfileLoading, setOwnerProfileLoading] = useState(true);
+
+  // Master Data Wizard — global state
+  const [masterWizardOpen, setMasterWizardOpen] = useState(false);
 
   // 1. Firebase Authentication State Listener
   useEffect(() => {
@@ -254,6 +262,7 @@ export default function App() {
     const unsubTenants = listenToCollection("tenants", setTenants, "createdAt");
     const unsubContracts = listenToCollection("contracts", setContracts, "createdAt");
     const unsubCondominiums = listenToCollection("condominiums", setCondominiums, "createdAt");
+    const unsubOwners = listenToCollection("owners", setOwners, "createdAt");
     const unsubMovements = listenToCollection("movements", setMovements, "createdAt");
     const unsubReminders = listenToCollection("reminders", setReminders, "createdAt");
     const unsubFastClosing = listenToCollection("fastClosing", setFastClosing, "dueDate");
@@ -272,6 +281,7 @@ export default function App() {
       unsubTenants();
       unsubContracts();
       unsubCondominiums();
+      unsubOwners();
       unsubMovements();
       unsubReminders();
       unsubFastClosing();
@@ -442,15 +452,22 @@ export default function App() {
         createdAt: serverTimestamp()
       });
 
-      // 3. Create Contract
+      // 3. Create Contract — date calcolate dinamicamente da oggi, mai fisse
+      const simStartDate = new Date();
+      simStartDate.setDate(1);
+      const simEndDate = new Date(simStartDate);
+      simEndDate.setFullYear(simEndDate.getFullYear() + 4);
+      const simStartDateStr = simStartDate.toISOString().split("T")[0];
+      const simEndDateStr = simEndDate.toISOString().split("T")[0];
+
       const contractDoc = await addDoc(collection(db, "contracts"), {
         userId: user.uid,
         propertyId: propDoc.id,
         propertyName: "🏢 Attico Bifamiliare Centro (Simulazione)",
         tenantId: tenantDoc.id,
         tenantName: "Giorgia Meloni",
-        startDate: "2026-07-01",
-        endDate: "2030-06-30",
+        startDate: simStartDateStr,
+        endDate: simEndDateStr,
         rentAmount: 800,
         paymentFrequency: "Mensile",
         status: "Active",
@@ -460,8 +477,8 @@ export default function App() {
 
       // 4. Generate 6 rent installments in fastClosing
       const rentAmount = 800;
-      let currentDueDate = new Date("2026-07-01");
-      const end = new Date("2030-06-30");
+      let currentDueDate = new Date(simStartDate);
+      const end = new Date(simEndDate);
       let monthIndex = 1;
 
       while (currentDueDate <= end && monthIndex <= 6) {
@@ -979,6 +996,74 @@ export default function App() {
     }
   };
 
+  // ── CORREZIONE B — Owners CRUD (anagrafica proprietari reale) ──
+  // Stesso pattern di tenants: create/update/delete sulla collezione "owners".
+  // La logica anti-duplicato (riuso se nome matcha) è in handleAddOwner.
+  const handleAddOwner = async (data: Omit<Owner, "id" | "userId" | "createdAt">): Promise<string | null> => {
+    if (!user) return null;
+    try {
+      // Anti-duplicato: se esiste già un Owner con lo stesso nome (case-insensitive, trim)
+      // per questo utente, riusa quel record invece di crearne uno nuovo.
+      const existingByName = owners.find((o) => {
+        const a = (o.name || "").toLowerCase().trim();
+        const b = (data.name || "").toLowerCase().trim();
+        return a.length > 0 && a === b;
+      });
+      if (existingByName) {
+        showSuccess(`Proprietario "${existingByName.name}" già esistente — riuso del record.`);
+        return existingByName.id;
+      }
+
+      const cleanData: any = {};
+      Object.keys(data).forEach((key) => {
+        if ((data as any)[key] !== undefined) {
+          cleanData[key] = (data as any)[key];
+        }
+      });
+
+      const docRef = await addDoc(collection(db, "owners"), {
+        ...cleanData,
+        userId: user.uid,
+        createdAt: serverTimestamp(),
+      });
+      showSuccess(`Proprietario "${data.name}" creato con successo!`);
+      return docRef.id;
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.CREATE, "owners");
+      showError("Impossibile salvare il proprietario: " + errInfo.error);
+      return null;
+    }
+  };
+
+  const handleEditOwner = async (id: string, data: Partial<Owner>) => {
+    try {
+      const cleanData: any = {};
+      Object.keys(data).forEach((key) => {
+        if ((data as any)[key] !== undefined) {
+          cleanData[key] = (data as any)[key];
+        }
+      });
+      await updateDoc(doc(db, "owners", id), {
+        ...cleanData,
+        updatedAt: serverTimestamp(),
+      });
+      showSuccess("Proprietario aggiornato con successo!");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `owners/${id}`);
+      showError("Impossibile aggiornare il proprietario: " + errInfo.error);
+    }
+  };
+
+  const handleDeleteOwner = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "owners", id));
+      showSuccess("Proprietario eliminato con successo!");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.DELETE, `owners/${id}`);
+      showError("Impossibile eliminare il proprietario: " + errInfo.error);
+    }
+  };
+
   // Contracts CRUD & Rent Dues Auto Generation!
   const handleAddContract = async (data: any) => {
     if (!user) return;
@@ -1136,6 +1221,164 @@ export default function App() {
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.DELETE, `condominiums/${id}`);
       showError("Impossibile eliminare il condominio: " + errInfo.error);
+    }
+  };
+
+  // ──────────────────────────────────────────────────────────────────────
+  // MASTER DATA WIZARD — Inserimento guidato unico
+  // Crea property + condominio + tenant + contract in un batch con link reciproci
+  // ──────────────────────────────────────────────────────────────────────
+  const handleMasterDataSave = async (payload: any) => {
+    if (!user) return;
+    try {
+      const p = payload.property || {};
+      const c = payload.condominium;
+      const t = payload.tenant;
+      const ct = payload.contract;
+      const o = payload.owner; // CORREZIONE B: nuovo record Owner da creare
+
+      // 1. Crea condominio se nuovo
+      let condominiumId: string | undefined = p.condominiumId;
+      if (c) {
+        const condoDoc = await addDoc(collection(db, "condominiums"), {
+          ...c,
+          userId: user.uid,
+          createdAt: serverTimestamp(),
+        });
+        condominiumId = condoDoc.id;
+      }
+
+      // 1b. CORREZIONE B — Crea Owner in Firestore se nuovo (anti-duplicato in handleAddOwner)
+      let ownerId: string | undefined = p.ownerId;
+      let ownerString: string | undefined = p.owner;
+      if (o) {
+        const createdId = await handleAddOwner({
+          name: o.name,
+          fiscalCode: o.fiscalCode,
+          email: o.email,
+          phone: o.phone,
+          address: o.address,
+          iban: o.iban,
+          isCompany: o.isCompany,
+          notes: o.notes,
+        });
+        if (createdId) {
+          ownerId = createdId;
+          // Aggiorna ownerString con il nome canonical del record appena creato/riusato
+          const createdOwner = owners.find((x) => x.id === createdId);
+          if (createdOwner) ownerString = createdOwner.name;
+        }
+      }
+
+      // 2. Crea immobile
+      const propDoc = await addDoc(collection(db, "properties"), {
+        name: p.name,
+        address: p.address,
+        type: p.type || "Appartamento",
+        status: p.status || "Available",
+        notes: p.notes || "",
+        owner: ownerString || "",
+        ownerId: ownerId || "",
+        isBareOwnership: !!p.isBareOwnership,
+        isCondoConstituted: !!p.isCondoConstituted,
+        condominiumId: condominiumId || "",
+        millesimi: Number(p.millesimi) || 0,
+        userId: user.uid,
+        createdAt: serverTimestamp(),
+      });
+
+      // 3. Crea inquilino se nuovo
+      let tenantId: string | undefined;
+      let tenantName: string | undefined;
+      if (t) {
+        const tenantDoc = await addDoc(collection(db, "tenants"), {
+          name: t.name,
+          email: t.email || "",
+          phone: t.phone || "",
+          fiscalCode: t.fiscalCode || "",
+          notes: t.notes || "",
+          isCompany: !!t.isCompany,
+          companyName: t.companyName || "",
+          vatNumber: t.vatNumber || "",
+          propertyId: propDoc.id,
+          userId: user.uid,
+          createdAt: serverTimestamp(),
+        });
+        tenantId = tenantDoc.id;
+        tenantName = t.name;
+      } else if (payload.selectedTenantId) {
+        tenantId = payload.selectedTenantId;
+        const existingT = tenants.find((x: any) => x.id === payload.selectedTenantId);
+        if (existingT) {
+          tenantName = existingT.name;
+          await updateDoc(doc(db, "tenants", tenantId), {
+            propertyId: propDoc.id,
+          });
+        }
+      }
+
+      // 4. Crea contratto se richiesto
+      if (ct && tenantId) {
+        const contractDoc = await addDoc(collection(db, "contracts"), {
+          propertyId: propDoc.id,
+          propertyName: p.name,
+          tenantId,
+          tenantName: tenantName || "",
+          startDate: ct.startDate,
+          endDate: ct.endDate,
+          rentAmount: Number(ct.rentAmount) || 0,
+          frequency: ct.frequency || "Mensile",
+          status: ct.status || "Active",
+          notes: ct.notes || "",
+          ownerName: p.owner || "",
+          isBareOwnership: !!p.isBareOwnership,
+          userId: user.uid,
+          createdAt: serverTimestamp(),
+        });
+
+        // Auto-genera 6 rate mensili in Fast Closing
+        const rentAmount = Number(ct.rentAmount);
+        if (rentAmount > 0 && ct.startDate) {
+          const start = new Date(ct.startDate);
+          let currentDueDate = new Date(start);
+          let monthIndex = 1;
+          while (currentDueDate <= new Date(ct.endDate || start) && monthIndex <= 6) {
+            await addDoc(collection(db, "fastClosing"), {
+              userId: user.uid,
+              title: `Canone Affitto Mese ${monthIndex} - ${tenantName}`,
+              description: `Riferimento Contratto Locazione su ${p.name}`,
+              amount: rentAmount,
+              dueDate: currentDueDate.toISOString().split("T")[0],
+              source: "contract",
+              sourceId: contractDoc.id,
+              status: "Pending",
+              createdAt: serverTimestamp(),
+            });
+            currentDueDate.setMonth(currentDueDate.getMonth() + 1);
+            monthIndex++;
+          }
+        }
+
+        // Link tenant.contractId
+        if (tenantId) {
+          await updateDoc(doc(db, "tenants", tenantId), {
+            contractId: contractDoc.id,
+          });
+        }
+      }
+
+      const parts: string[] = ["Immobile creato"];
+      if (o) parts.push("proprietario creato");
+      if (c) parts.push("condominio creato");
+      if (t) parts.push("inquilino creato");
+      if (ct) parts.push("contratto creato");
+      if (ct) parts.push("6 rate canoni generate");
+      showSuccess(parts.join(", ") + "!");
+    } catch (error: any) {
+      console.error("MasterDataWizard save error:", error);
+      const errInfo = handleFirestoreError(error, OperationType.CREATE, "properties");
+      showError("Errore nel salvataggio: " + errInfo.error);
+      throw error;
     }
   };
 
@@ -1349,13 +1592,142 @@ export default function App() {
 
   const handleUpdateClosingItemStatus = async (id: string, status: "Pending" | "Paid" | "Overdue" | "Cancelled") => {
     try {
+      // Aggiorna lo stato della scadenza
       await updateDoc(doc(db, "fastClosing", id), { status });
-      showSuccess("Stato scadenza aggiornato!");
+
+      // ── CORREZIONE A — Sollecito immediato quando un affitto viene marcato Insoluto ──
+      // Quando una voce con source "contract" (canone d'affitto) viene marcata "Overdue"
+      // tramite il pulsante Insoluto, creiamo SUBITO un Sollecito raggruppato per debitore
+      // (stessa logica della chiusura mensile: associatedItemsIds + status "Pending" + step 1).
+      // Se il debitore ha già un Sollecito attivo, aggiungiamo questa voce al gruppo esistente.
+      if (status === "Overdue") {
+        const rentItem = fastClosing.find((item) => item.id === id);
+        const titleLower = (rentItem?.title || "").toLowerCase();
+        const descLower = (rentItem?.description || "").toLowerCase();
+        const isRent = !!rentItem && (
+          rentItem.source === "contract" ||
+          titleLower.includes("canone") ||
+          titleLower.includes("affitto") ||
+          descLower.includes("canone") ||
+          descLower.includes("affitto")
+        );
+
+        if (isRent && rentItem) {
+          // Determina il debtor name (stessa logica di getDebtorName in FastClosingView)
+          let debtorName = "Spese Generali / Condomini";
+          // 1) Match maintenance "Quota X - Manutenzione:"
+          const matchQuota = rentItem.title.match(/Quota\s+([^-]+?)\s*-\s*Manutenzione:/i);
+          if (matchQuota) debtorName = matchQuota[1].trim();
+          else {
+            const matchQuotaProp = rentItem.title.match(/Quota\s+Proprietari\s*\(([^)]+)\)/i);
+            if (matchQuotaProp) debtorName = matchQuotaProp[1].trim();
+            else {
+              const matchQuotaInq = rentItem.title.match(/Quota\s+Inquilina\s*\(([^)]+)\)/i);
+              if (matchQuotaInq) debtorName = matchQuotaInq[1].trim();
+              else {
+                // 2) Match per nome tenant
+                const matchingTenant = tenants.find((t) => {
+                  const nameClean = (t.name || "").replace(/[^a-zA-Z0-9 ]/g, "").toLowerCase().trim();
+                  return nameClean && (
+                    titleLower.includes(nameClean) || descLower.includes(nameClean)
+                  );
+                });
+                if (matchingTenant) debtorName = matchingTenant.name;
+                else {
+                  // 3) Match per cognome tenant
+                  const matchingBySurname = tenants.find((t) => {
+                    const lastSpace = t.name.lastIndexOf(" ");
+                    if (lastSpace === -1) return false;
+                    const surname = t.name.substring(lastSpace + 1).toLowerCase().trim();
+                    return surname.length > 2 && (
+                      titleLower.includes(surname) || descLower.includes(surname)
+                    );
+                  });
+                  if (matchingBySurname) debtorName = matchingBySurname.name;
+                }
+              }
+            }
+          }
+
+          // Salta se debtor generico (non ha senso creare sollecito per "Spese Generali")
+          if (debtorName !== "Spese Generali / Condomini") {
+            const matchingTenant = tenants.find((t) => t.name === debtorName) || null;
+            const todayStr = new Date().toISOString().split("T")[0];
+
+            // Cerca sollecito attivo esistente per questo debtor
+            // (status non "Closed" e non "Cancelled", sequenza non conclusa)
+            const existingActiveReminder = reminders.find((r) =>
+              r.tenantName === debtorName &&
+              r.status !== "Closed" &&
+              r.status !== "Cancelled" &&
+              r.status !== "Paid"
+            );
+
+            if (existingActiveReminder) {
+              // Aggiungi questa voce al gruppo esistente
+              const currentAssociated = existingActiveReminder.associatedItemsIds || [];
+              if (!currentAssociated.includes(id)) {
+                const newAssociated = [...currentAssociated, id];
+                const newAmount = (existingActiveReminder.amount || 0) + (Number(rentItem.amount) || 0);
+                const newReason = existingActiveReminder.reason
+                  ? `${existingActiveReminder.reason} + ${rentItem.title} (€${(Number(rentItem.amount) || 0).toFixed(2)})`
+                  : `Sollecito automatico: ${rentItem.title} (€${(Number(rentItem.amount) || 0).toFixed(2)})`;
+
+                await updateDoc(doc(db, "reminders", existingActiveReminder.id), {
+                  associatedItemsIds: newAssociated,
+                  amount: newAmount,
+                  reason: newReason,
+                  updatedAt: serverTimestamp(),
+                });
+
+                showSuccess(
+                  `Affitto marcato come insoluto e AGGIUNTO al sollecito attivo di ${debtorName} (totale gruppo: €${newAmount.toFixed(2)}).`
+                );
+              } else {
+                showSuccess("Affitto marcato come insoluto (già presente nel sollecito attivo).");
+              }
+            } else {
+              // Crea nuovo sollecito con associatedItemsIds
+              const reminderData: any = {
+                userId: user!.uid,
+                tenantId: matchingTenant?.id || "",
+                tenantName: debtorName,
+                amount: Number(rentItem.amount) || 0,
+                reason: `Sollecito automatico Insoluto: ${rentItem.title} (€${(Number(rentItem.amount) || 0).toFixed(2)})`,
+                dueDate: rentItem.dueDate || todayStr,
+                status: "Pending",
+                isSequence: true,
+                step: 1,
+                associatedItemsIds: [id],
+                fastClosingItemId: id,
+                propertyId: rentItem.propertyId || "",
+                notes: `Sollecito generato automaticamente da pulsante Insoluto in Fast Closing in data ${new Date().toLocaleDateString("it-IT")}. Importo canone: €${(Number(rentItem.amount) || 0).toFixed(2)}.`,
+                createdAt: serverTimestamp(),
+              };
+              await addDoc(collection(db, "reminders"), reminderData);
+              showSuccess(
+                `Affitto marcato come insoluto e nuovo sollecito creato per ${debtorName}.`
+              );
+            }
+          } else {
+            showSuccess("Stato scadenza aggiornato (debitore generico, nessun sollecito creato).");
+          }
+        } else {
+          showSuccess("Stato scadenza aggiornato!");
+        }
+      } else {
+        showSuccess("Stato scadenza aggiornato!");
+      }
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.UPDATE, `fastClosing/${id}`);
       showError("Impossibile aggiornare la scadenza: " + errInfo.error);
     }
   };
+
+  // NOTA: L'auto-rinvio delle spese accessorie NON è più gestito lato client.
+  // Correzione D: spostato su cron job server-side in api/cron-postpone-accessories.ts
+  // (chiamato da Vercel Cron il giorno 1 di ogni mese alle 3:00).
+  // Vedi vercel.json per la configurazione del cron.
 
   const handleDeleteClosingItem = async (id: string) => {
     try {
@@ -1888,6 +2260,7 @@ export default function App() {
             onAddProperty={handleAddProperty}
             onEditProperty={handleEditProperty}
             onDeleteProperty={handleDeleteProperty}
+            onOpenMasterWizard={() => setMasterWizardOpen(true)}
             maintenance={maintenance}
           />
         )}
@@ -1973,6 +2346,7 @@ export default function App() {
             onDeleteClosingItem={handleDeleteClosingItem}
             onAddMovement={handleAddMovement}
             onAddReminder={handleAddReminder}
+            onUpdateReminderStatus={handleUpdateReminderStatus}
           />
         )}
 
@@ -2061,6 +2435,19 @@ export default function App() {
 
       </main>
       </div>
+
+      {/* ── Master Data Wizard + Universal Add Button ── */}
+      <UniversalAddButton onClick={() => setMasterWizardOpen(true)} />
+      <MasterDataWizard
+        isOpen={masterWizardOpen}
+        onClose={() => setMasterWizardOpen(false)}
+        onPersist={handleMasterDataSave}
+        existingOwners={owners}
+        existingCondominiums={condominiums}
+        existingTenants={tenants}
+        onCreateOwner={handleAddOwner}
+      />
     </div>
   );
 }
+

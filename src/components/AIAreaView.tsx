@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { 
   Sparkles, 
@@ -622,3 +623,4 @@ export default function AIAreaView({
     </div>
   );
 }
+

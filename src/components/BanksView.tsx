@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { 
   Plus, 
@@ -391,11 +392,26 @@ export default function BanksView({
 
       const result = await response.json();
       if (result.success && result.data && Array.isArray(result.data.movements)) {
-        setExtractedMovements(result.data.movements.map((m: any) => ({
+        // SECURITY FILTER: keep only positive movements (entrate).
+        // Even if Gemini occasionally extracts a negative movement by mistake,
+        // we discard it here. User asked for "solo bonifici ricevuti, depositi
+        // assegni, contanti" — never withdrawals or payments.
+        const rawMovements = result.data.movements;
+        const positiveMovements = rawMovements.filter((m: any) => {
+          const amt = Number(m.amount) || 0;
+          return amt > 0;
+        });
+        const discardedCount = rawMovements.length - positiveMovements.length;
+        setExtractedMovements(positiveMovements.map((m: any) => ({
           date: m.date || new Date().toISOString().split("T")[0],
           description: m.description || "Transazione bancaria",
           amount: Number(m.amount) || 0
         })));
+        if (discardedCount > 0) {
+          setImportError(`⚠️ ${discardedCount} movimento/i di uscita (importo negativo) scartato/i automaticamente. Vengono importate solo le entrate.`);
+        } else if (positiveMovements.length === 0) {
+          setImportError("ℹ️ Nessun movimento di entrata trovato. L'AI estrae solo bonifici ricevuti, depositi assegni e versamenti contanti.");
+        }
       } else {
         setImportError(result.error || "Formato estratto non supportato o errore AI.");
       }
@@ -1418,3 +1434,4 @@ export default function BanksView({
     </div>
   );
 }
+

@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { 
   Plus, 
@@ -47,6 +48,8 @@ interface PropertiesViewProps {
   onEditProperty: (id: string, property: Partial<Property>) => Promise<void>;
   onDeleteProperty: (id: string) => Promise<void>;
   maintenance?: Maintenance[];
+  // CORREZIONE C — callback per aprire il Wizard unico globale invece del form interno
+  onOpenMasterWizard?: () => void;
 }
 
 export default function PropertiesView({
@@ -70,6 +73,7 @@ export default function PropertiesView({
   onAddProperty,
   onEditProperty,
   onDeleteProperty,
+  onOpenMasterWizard, // CORREZIONE C — apre wizard unico
   maintenance = []
 }: PropertiesViewProps) {
   const [showModal, setShowModal] = useState(false);
@@ -207,6 +211,14 @@ export default function PropertiesView({
   };
 
   const openAddModal = () => {
+    // CORREZIONE C — Se è disponibile il callback per il Wizard unico globale,
+    // lo usiamo invece del form interno di PropertiesView. Il form interno resta
+    // disponibile solo come fallback per retrocompatibilità (mai invocato in produzione).
+    if (onOpenMasterWizard) {
+      onOpenMasterWizard();
+      return;
+    }
+
     setEditingProperty(null);
     setName("");
     setAddress("");
@@ -2358,3 +2370,4 @@ export default function PropertiesView({
     </div>
   );
 }
+

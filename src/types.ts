@@ -1,3 +1,4 @@
+
 export interface UserProfile {
   uid: string;
   email: string;
@@ -21,7 +22,8 @@ export interface Property {
   type: string; // e.g. "Appartamento", "Ufficio", "Negozio", "Villa", "Garage"
   status: "Available" | "Rented" | "Maintenance" | "Archived";
   notes?: string;
-  owner?: string;
+  owner?: string; // stringa libera (retrocompatibilità — per immobili creati prima di Correzione B)
+  ownerId?: string; // ID del record Owner in collezione "owners" (Correzione B)
   isBareOwnership?: boolean; // if true, it's "Nuda Proprietà"
   isCondoConstituted?: boolean; // if true, "Condominio Costituito"
   condominiumId?: string; // Associated Condominium ID
@@ -76,6 +78,25 @@ export interface OwnerProfile {
   emailServiceId?: string;
   emailTemplateId?: string;
   emailPublicKey?: string;
+}
+
+// ── CORREZIONE B — Anagrafica Proprietari reale ──
+// Record di un proprietario (persona fisica o giuridica) collegato a uno o più immobili.
+// Sostituisce la pratica precedente di salvare solo la stringa p.owner.
+// La stringa p.owner resta per retrocompatibilità, ma viene affiancata da p.ownerId.
+export interface Owner {
+  id: string;
+  userId: string;
+  name: string;            // Nome e cognome (persona fisica) o Ragione Sociale (società)
+  fiscalCode: string;      // Codice Fiscale (persona) o P.IVA (società)
+  email: string;
+  phone: string;
+  address?: string;        // Residenza / Sede legale (facoltativo)
+  iban?: string;           // IBAN del proprietario per accrediti (facoltativo)
+  isCompany?: boolean;     // true se persona giuridica
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Contract {
@@ -184,7 +205,7 @@ export interface Reminder {
   amount: number;
   reason: string;
   dueDate: string; // YYYY-MM-DD
-  status: "Pending" | "Sent" | "Paid" | "Cancelled" | "MessaInMora";
+  status: "Pending" | "Sent" | "Paid" | "Cancelled" | "MessaInMora" | "Closed";
   sentDate?: string;
   suggestedLetterBody?: string; // AI generated letter
   followUpNotes?: string;
@@ -199,6 +220,10 @@ export interface Reminder {
   thirdRequestDate?: string;
   receiptDownloaded?: boolean;
   associatedItemsIds?: string[];
+  // Link alla scadenza in Fast Closing che ha originato questo sollecito
+  // (es. affitto non esitato → sollecito automatico)
+  fastClosingItemId?: string;
+  notes?: string;
 }
 
 export interface Maintenance {
@@ -329,4 +354,5 @@ export interface DeliveryReport {
   documentName?: string; // Completed PDF/report name
   createdAt: string;
 }
+
 

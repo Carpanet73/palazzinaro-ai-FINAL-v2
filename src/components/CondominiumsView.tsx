@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from "react";
 import { 
   Plus, Edit3, Trash2, Building, Calendar, UserCheck, 
@@ -1241,3 +1242,4 @@ export default function CondominiumsView({
     </div>
   );
 }
+

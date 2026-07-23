@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Plus, Scale, FolderOpen, AlertCircle, CheckCircle, X, Trash2, UserCheck, Briefcase, Download, FileText, Check, ShieldAlert } from "lucide-react";
 import { LegalCase, Property, Lawyer } from "../types";
@@ -786,3 +787,4 @@ Le somme sopra indicate costituiscono credito liquido ed esigibile ai fini del r
     </div>
   );
 }
+

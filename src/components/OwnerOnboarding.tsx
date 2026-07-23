@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { User, Shield, Mail, Phone, MapPin, CreditCard, Percent, ArrowRight, Bell, Clock, Coffee } from "lucide-react";
 import Logo from "./Logo";
@@ -462,3 +463,4 @@ export default function OwnerOnboarding({ userEmail, onSave, onLogout }: OwnerOn
     </div>
   );
 }
+

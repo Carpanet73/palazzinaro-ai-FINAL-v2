@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   Plus, 
@@ -38,6 +39,7 @@ interface FastClosingViewProps {
   onDeleteClosingItem: (id: string) => Promise<void>;
   onAddMovement?: (movement: Omit<BankMovement, "id" | "userId" | "createdAt">) => Promise<void>;
   onAddReminder?: (reminder: Omit<Reminder, "id" | "userId" | "createdAt">) => Promise<void>;
+  onUpdateReminderStatus?: (id: string, status: string, notes?: string, extraFields?: any) => Promise<void>;
 }
 
 export default function FastClosingView({
@@ -53,7 +55,8 @@ export default function FastClosingView({
   onReconcileMovement,
   onDeleteClosingItem,
   onAddMovement,
-  onAddReminder
+  onAddReminder,
+  onUpdateReminderStatus
 }: FastClosingViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -483,6 +486,53 @@ export default function FastClosingView({
   const handleStatusChange = async (id: string, nextStatus: "Pending" | "Paid" | "Overdue" | "Cancelled") => {
     try {
       await onUpdateClosingItemStatus(id, nextStatus);
+
+      // CORREZIONE A — Se si tratta di un canone d'affitto marcato Insoluto (Overdue) tramite
+      // questo pulsante (non tramite la chiusura mensile), crea SUBITO il Sollecito, con la
+      // stessa logica di raggruppamento per debitore già usata in chiusura. Se il debitore ha
+      // già un Sollecito attivo in corso, la voce si aggiunge a quello invece di duplicarlo.
+      if (nextStatus === "Overdue" && onAddReminder) {
+        const item = fastClosing.find(f => f.id === id);
+        const isRigid = !!item && (item.source === "contract" || (item.title || "").toLowerCase().includes("canone"));
+        if (item && isRigid) {
+          const debtorName = getDebtorName(item);
+          if (debtorName && debtorName !== "Spese Generali / Condomini") {
+            const matchingTenant = tenants.find(t => t.name === debtorName) || null;
+
+            // Cerca un Sollecito già attivo (non concluso/pagato) per questo debitore
+            const activeReminder = (reminders || []).find(r =>
+              r.tenantName === debtorName &&
+              r.status !== "Paid" &&
+              r.status !== "Cancelled"
+            );
+
+            if (activeReminder) {
+              // Aggiunge la voce al gruppo esistente invece di creare un nuovo Sollecito
+              const updatedIds = Array.from(new Set([...(activeReminder.associatedItemsIds || []), item.id]));
+              const updatedAmount = (activeReminder.amount || 0) + item.amount;
+              if (onUpdateReminderStatus) {
+                await onUpdateReminderStatus(activeReminder.id, activeReminder.status as any, activeReminder.followUpNotes, {
+                  associatedItemsIds: updatedIds,
+                  amount: updatedAmount
+                });
+              }
+            } else {
+              const itemLabel = item.title.split(" - ")[1] || item.title;
+              await onAddReminder({
+                tenantId: matchingTenant?.id || "",
+                tenantName: debtorName,
+                amount: item.amount,
+                reason: `Sollecito automatico: ${itemLabel} (€${item.amount.toFixed(2)})`,
+                dueDate: new Date().toISOString().split("T")[0],
+                status: "Pending",
+                isSequence: true,
+                step: 1,
+                associatedItemsIds: [item.id]
+              });
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error("Error updating status", err);
     }
@@ -1319,34 +1369,38 @@ export default function FastClosingView({
                                         Salda
                                       </button>
                                       
-                                      {/* Custom Insoluto Toggles for Accessory Items */}
-                                      {!isRigidItem && (
-                                        item.status === "Overdue" ? (
-                                          <button
-                                            onClick={() => handleStatusChange(item.id, "Pending")}
-                                            className="px-2 py-1 bg-slate-500 hover:bg-slate-400 text-white rounded-sm text-[9px] font-black tracking-wide cursor-pointer"
-                                            title="Segna come in attesa"
-                                          >
-                                            In Attesa
-                                          </button>
-                                        ) : (
-                                          <button
-                                            onClick={() => handleStatusChange(item.id, "Overdue")}
-                                            className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-sm text-[9px] font-black tracking-wide cursor-pointer"
-                                            title="Segna come insoluto"
-                                          >
-                                            Insoluto
-                                          </button>
-                                        )
+                                      {/* Insoluto Toggle — available for both rents and accessory items.
+                                          For rents (isRigidItem) this triggers automatic reminder creation in Solleciti.
+                                          For accessory items it's just a status flag. */}
+                                      {item.status === "Overdue" ? (
+                                        <button
+                                          onClick={() => handleStatusChange(item.id, "Pending")}
+                                          className="px-2 py-1 bg-slate-500 hover:bg-slate-400 text-white rounded-sm text-[9px] font-black tracking-wide cursor-pointer"
+                                          title="Segna come in attesa"
+                                        >
+                                          In Attesa
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleStatusChange(item.id, "Overdue")}
+                                          className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-sm text-[9px] font-black tracking-wide cursor-pointer"
+                                          title={isRigidItem ? "Segna come insoluto (crea sollecito automatico)" : "Segna come insoluto"}
+                                        >
+                                          Insoluto
+                                        </button>
                                       )}
 
-                                      <button
-                                        onClick={() => handleOpenPostpone(item)}
-                                        className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-sm text-[9px] font-black tracking-wide cursor-pointer"
-                                        title="Rinvia scadenza"
-                                      >
-                                        Rinvia
-                                      </button>
+                                      {/* Rinvia scadenza — SOLO per spese accessorie.
+                                          Gli affitti NON possono essere rinviati, devono essere esitati. */}
+                                      {!isRigidItem && (
+                                        <button
+                                          onClick={() => handleOpenPostpone(item)}
+                                          className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-sm text-[9px] font-black tracking-wide cursor-pointer"
+                                          title="Rinvia scadenza"
+                                        >
+                                          Rinvia
+                                        </button>
+                                      )}
                                     </>
                                   ) : (
                                     <button
@@ -2184,3 +2238,4 @@ export default function FastClosingView({
     </div>
   );
 }
+

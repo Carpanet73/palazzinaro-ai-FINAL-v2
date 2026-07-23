@@ -1,3 +1,4 @@
+
 import { jsPDF } from "jspdf";
 
 /**
@@ -87,3 +88,4 @@ La presente costituisce atto formale di costituzione in mora e vale ad ogni effe
   // Trigger file download
   doc.save(`Diffida_Messa_In_Mora_${tenantName.replace(/\s+/g, "_")}.pdf`);
 }
+

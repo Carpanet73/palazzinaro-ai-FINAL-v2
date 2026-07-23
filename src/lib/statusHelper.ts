@@ -1,3 +1,4 @@
+
 import { Tenant, Property, Contract, FastClosingItem, LegalCase, Reminder } from "../types";
 
 export interface TenantClassification {
@@ -218,3 +219,4 @@ export function getTenantClassification(
     reason: "ok"
   };
 }
+
