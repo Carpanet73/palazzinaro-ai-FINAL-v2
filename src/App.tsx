@@ -1144,7 +1144,7 @@ export default function App() {
             source: "contract",
             sourceId: contractDoc.id,
             status: "Pending",
-            debtorId: finalTenantId || undefined, // CORREZIONE D
+            debtorId: finalTenantId || null, // CORREZIONE H — Firestore rifiuta "undefined": mai più di null
             debtorType: "tenant",
             createdAt: serverTimestamp()
           });
@@ -1384,7 +1384,7 @@ export default function App() {
               source: "contract",
               sourceId: contractDoc.id,
               status: "Pending",
-              debtorId: tenantId || undefined, // CORREZIONE D
+              debtorId: tenantId || null, // CORREZIONE H — Firestore rifiuta "undefined": mai più di null
               debtorType: "tenant",
               createdAt: serverTimestamp(),
             });
@@ -1803,8 +1803,14 @@ export default function App() {
         }
       });
 
+      // CORREZIONE H — Firestore rifiuta "undefined" anche dentro agli array annidati
+      // (non solo nei campi di primo livello): senza questa bonifica, un debtorId non
+      // risolto (undefined) bloccava il salvataggio dell'INTERO ticket di manutenzione.
       if (data.splits) {
-        cleanData.splits = data.splits;
+        cleanData.splits = data.splits.map((s: any) => ({
+          ...s,
+          debtorId: s.debtorId || null
+        }));
       }
 
       const maintDoc = await addDoc(collection(db, "maintenance"), {
@@ -1833,7 +1839,7 @@ export default function App() {
               sourceId: maintDoc.id,
               status: "Pending",
               // CORREZIONE D — collegamento diretto e sicuro al debitore reale, quando risolto
-              debtorId: split.debtorId || undefined,
+              debtorId: split.debtorId || null, // CORREZIONE H — Firestore rifiuta "undefined": mai più di null
               debtorType: split.type,
               createdAt: serverTimestamp()
             });
