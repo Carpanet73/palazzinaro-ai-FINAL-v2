@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { 
   Plus, Edit3, Trash2, Building, Calendar, UserCheck, 
   Sparkles, X, AlertCircle, Eye, Info, MapPin, User, 
@@ -19,6 +19,8 @@ interface CondominiumsViewProps {
   onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">) => Promise<void>;
   setCurrentSection?: (section: any) => void;
   setSelectedTenantIdForLedger?: (id: string | null) => void;
+  // CORREZIONE E — consente al tasto flottante globale di aprire QUESTA stessa procedura
+  registerAddHandler?: (fn: () => void) => void;
 }
 
 export default function CondominiumsView({
@@ -31,7 +33,8 @@ export default function CondominiumsView({
   onDeleteCondominium,
   onAddClosingItem,
   setCurrentSection,
-  setSelectedTenantIdForLedger
+  setSelectedTenantIdForLedger,
+  registerAddHandler
 }: CondominiumsViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingCondo, setEditingCondo] = useState<Condominium | null>(null);
@@ -195,6 +198,11 @@ export default function CondominiumsView({
     setShowAiAssist(false);
     setShowModal(true);
   };
+
+  // CORREZIONE E — espone questa stessa funzione al tasto flottante globale
+  useEffect(() => {
+    registerAddHandler?.(handleOpenAddModal);
+  });
 
   // Handle open edit condo modal
   const handleOpenEditModal = (condo: Condominium) => {

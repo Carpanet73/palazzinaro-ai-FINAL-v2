@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { 
   Plus, 
   Edit3, 
@@ -41,6 +41,8 @@ interface TenantsViewProps {
   onAddTenant: (tenant: Omit<Tenant, "id" | "userId" | "createdAt">) => Promise<void>;
   onEditTenant: (id: string, tenant: Partial<Tenant>) => Promise<void>;
   onDeleteTenant: (id: string) => Promise<void>;
+  // CORREZIONE E — consente al tasto flottante globale di aprire QUESTA stessa procedura
+  registerAddHandler?: (fn: () => void) => void;
 }
 
 export default function TenantsView({
@@ -55,7 +57,8 @@ export default function TenantsView({
   onClearInitialSelectedTenantId,
   onAddTenant,
   onEditTenant,
-  onDeleteTenant
+  onDeleteTenant,
+  registerAddHandler
 }: TenantsViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
@@ -125,6 +128,11 @@ export default function TenantsView({
     setCoTenants([]);
     setShowModal(true);
   };
+
+  // CORREZIONE E — espone questa stessa funzione al tasto flottante globale
+  useEffect(() => {
+    registerAddHandler?.(handleOpenAddModal);
+  });
 
   const handleOpenEditModal = (tenant: Tenant) => {
     setEditingTenant(tenant);

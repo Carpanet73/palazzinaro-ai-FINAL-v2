@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
@@ -163,6 +163,14 @@ export default function App() {
 
   // Master Data Wizard — global state
   const [masterWizardOpen, setMasterWizardOpen] = useState(false);
+  // CORREZIONE E — quando valorizzato, il wizard si apre in modalità isolata
+  // (solo Proprietario / Inquilino / Condominio, senza creare un immobile)
+  const [wizardStandaloneEntity, setWizardStandaloneEntity] = useState<"owner" | "tenant" | "condominium" | undefined>(undefined);
+  // Riferimenti alle procedure di aggiunta già esistenti in Inquilini/Condomini/Manutenzioni,
+  // "prestate" al tasto flottante globale per evitare un secondo flusso duplicato
+  const tenantsAddHandlerRef = useRef<(() => void) | null>(null);
+  const condominiumsAddHandlerRef = useRef<(() => void) | null>(null);
+  const maintenanceAddHandlerRef = useRef<(() => void) | null>(null);
 
   // 1. Firebase Authentication State Listener
   useEffect(() => {
@@ -1233,6 +1241,28 @@ export default function App() {
   const handleMasterDataSave = async (payload: any) => {
     if (!user) return;
     try {
+      // CORREZIONE E — Inserimento isolato: crea SOLO l'entità richiesta, mai un immobile.
+      // Usato dal tasto flottante quando ci si trova nelle pagine Proprietari/Inquilini/Condomini.
+      if (payload.standaloneOnly) {
+        if (payload.standaloneOnly === "owner" && payload.owner) {
+          await handleAddOwner(payload.owner);
+        } else if (payload.standaloneOnly === "tenant" && payload.tenant) {
+          await handleAddTenant({
+            name: payload.tenant.name,
+            email: payload.tenant.email || "",
+            phone: payload.tenant.phone || "",
+            fiscalCode: payload.tenant.fiscalCode || "",
+            notes: payload.tenant.notes || "",
+            isCompany: !!payload.tenant.isCompany,
+            companyName: payload.tenant.companyName || "",
+            vatNumber: payload.tenant.vatNumber || "",
+          });
+        } else if (payload.standaloneOnly === "condominium" && payload.condominium) {
+          await handleAddCondominium(payload.condominium);
+        }
+        return;
+      }
+
       const p = payload.property || {};
       const c = payload.condominium;
       const t = payload.tenant;
@@ -2292,6 +2322,7 @@ export default function App() {
             onAddTenant={handleAddTenant}
             onEditTenant={handleEditTenant}
             onDeleteTenant={handleDeleteTenant}
+            registerAddHandler={(fn) => { tenantsAddHandlerRef.current = fn; }}
           />
         )}
 
@@ -2327,6 +2358,7 @@ export default function App() {
             onAddClosingItem={handleAddClosingItem}
             setCurrentSection={setCurrentSection}
             setSelectedTenantIdForLedger={setSelectedTenantIdForLedger}
+            registerAddHandler={(fn) => { condominiumsAddHandlerRef.current = fn; }}
           />
         )}
 
@@ -2393,6 +2425,7 @@ export default function App() {
             onAddMaintenance={handleAddMaintenance}
             onUpdateMaintenanceStatus={handleUpdateMaintenanceStatus}
             onDeleteMaintenance={handleDeleteMaintenance}
+            registerAddHandler={(fn) => { maintenanceAddHandlerRef.current = fn; }}
           />
         )}
 
@@ -2452,15 +2485,49 @@ export default function App() {
       </div>
 
       {/* ── Master Data Wizard + Universal Add Button ── */}
-      <UniversalAddButton onClick={() => setMasterWizardOpen(true)} />
+      {/* CORREZIONE E — Il tasto flottante ora è consapevole della pagina in cui ci si trova:
+          - Immobili → procedura guidata completa (invariato, hub-e-raggi)
+          - Proprietari/Inquilini/Condomini → wizard in modalità isolata (salta subito al passo giusto)
+          - Manutenzioni → richiama l'UNICA procedura già esistente in quella pagina
+          - Altre pagine → fallback sulla procedura guidata completa (comportamento precedente) */}
+      <UniversalAddButton
+        label={
+          currentSection === "properties" ? "Aggiungi Immobile" :
+          currentSection === "owners" ? "Aggiungi Proprietario" :
+          currentSection === "tenants" ? "Aggiungi Inquilino" :
+          currentSection === "condominiums" ? "Aggiungi Condominio" :
+          currentSection === "maintenance" ? "Nuova Manutenzione" :
+          "Aggiungi"
+        }
+        onClick={() => {
+          if (currentSection === "owners") {
+            setWizardStandaloneEntity("owner");
+            setMasterWizardOpen(true);
+          } else if (currentSection === "tenants" && tenantsAddHandlerRef.current) {
+            tenantsAddHandlerRef.current();
+          } else if (currentSection === "condominiums" && condominiumsAddHandlerRef.current) {
+            condominiumsAddHandlerRef.current();
+          } else if (currentSection === "maintenance" && maintenanceAddHandlerRef.current) {
+            maintenanceAddHandlerRef.current();
+          } else {
+            // Immobili e fallback per tutte le altre pagine: procedura guidata completa
+            setWizardStandaloneEntity(undefined);
+            setMasterWizardOpen(true);
+          }
+        }}
+      />
       <MasterDataWizard
         isOpen={masterWizardOpen}
-        onClose={() => setMasterWizardOpen(false)}
+        onClose={() => {
+          setMasterWizardOpen(false);
+          setWizardStandaloneEntity(undefined);
+        }}
         onPersist={handleMasterDataSave}
         existingOwners={owners}
         existingCondominiums={condominiums}
         existingTenants={tenants}
         onCreateOwner={handleAddOwner}
+        standaloneEntity={wizardStandaloneEntity}
       />
     </div>
   );

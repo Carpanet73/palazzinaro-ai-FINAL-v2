@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { 
   Plus, Wrench, Calendar, Hammer, CheckCircle2, X, AlertCircle, 
   Trash2, ArrowRight, ArrowLeft, Coins, Percent, Users, User, 
@@ -17,6 +17,9 @@ interface MaintenanceViewProps {
   onAddMaintenance: (ticket: any) => Promise<void>;
   onUpdateMaintenanceStatus: (id: string, status: "New" | "In Progress" | "Completed" | "Cancelled") => Promise<void>;
   onDeleteMaintenance: (id: string) => Promise<void>;
+  // CORREZIONE E — consente al tasto flottante globale di aprire QUESTA stessa procedura
+  // (unico flusso), invece di duplicarne una seconda.
+  registerAddHandler?: (fn: () => void) => void;
 }
 
 export default function MaintenanceView({
@@ -28,7 +31,8 @@ export default function MaintenanceView({
   owners = [],
   onAddMaintenance,
   onUpdateMaintenanceStatus,
-  onDeleteMaintenance
+  onDeleteMaintenance,
+  registerAddHandler
 }: MaintenanceViewProps) {
   // Wizard Modal state
   const [showWizard, setShowWizard] = useState(false);
@@ -105,6 +109,12 @@ export default function MaintenanceView({
     setWizardStep(1);
     setShowWizard(true);
   };
+
+  // CORREZIONE E — espone questa stessa funzione al tasto flottante globale, così
+  // in questa pagina si apre SEMPRE e SOLO questo modulo (nessun secondo flusso parallelo)
+  useEffect(() => {
+    registerAddHandler?.(handleOpenWizard);
+  });
 
   // Adjust custom splits on selection or total cost update
   const handleSplitTypeChange = (type: "owner" | "tenant" | "custom") => {

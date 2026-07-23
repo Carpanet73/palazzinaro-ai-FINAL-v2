@@ -21,7 +21,7 @@
  */
 
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   X,
   ChevronRight,
@@ -57,10 +57,17 @@ export interface MasterDataWizardProps {
   existingCondominiums: Condominium[];
   existingTenants: Tenant[];
   onCreateOwner?: (data: Omit<Owner, "id" | "userId" | "createdAt">) => Promise<string | null>; // ritorna id del proprietario creato/riusato
+  // CORREZIONE E — inserimento isolato: quando valorizzato, il wizard mostra SOLO il passo
+  // di questa entità (senza forzare la creazione di un Immobile), per rispettare la regola
+  // "un solo flusso di creazione per ciascuna entità" anche per gli inserimenti da pagina dedicata.
+  standaloneEntity?: "owner" | "tenant" | "condominium";
 }
 
 export interface MasterDataPayload {
-  property: {
+  // CORREZIONE E — quando valorizzato, App.tsx deve SOLO creare questa entità
+  // (nessun immobile, nessun contratto): usato dagli inserimenti isolati da pagina dedicata.
+  standaloneOnly?: "owner" | "tenant" | "condominium";
+  property?: {
     name: string;
     address: string;
     type: string;
@@ -154,6 +161,7 @@ export default function MasterDataWizard({
   existingCondominiums,
   existingTenants,
   onCreateOwner,
+  standaloneEntity,
 }: MasterDataWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [maxStepReached, setMaxStepReached] = useState(1);
@@ -266,6 +274,82 @@ export default function MasterDataWizard({
   const handleClose = () => {
     resetAll();
     onClose();
+  };
+
+  // ============================================================================
+  // CORREZIONE E — Modalità inserimento isolato (standaloneEntity)
+  // ============================================================================
+  // Quando il wizard viene aperto per aggiungere SOLO un Proprietario, un Inquilino
+  // o un Condominio (dal tasto flottante di quella pagina dedicata), si salta
+  // direttamente al passo giusto senza obbligare la creazione di un Immobile.
+  useEffect(() => {
+    if (isOpen && standaloneEntity) {
+      if (standaloneEntity === "condominium") {
+        setCurrentStep(2);
+        setIsCondominium(true);
+        setCondoMode("new");
+      } else if (standaloneEntity === "owner") {
+        setCurrentStep(3);
+        setOwnerMode("new");
+      } else if (standaloneEntity === "tenant") {
+        setCurrentStep(4);
+        setIsRented(true);
+        setTenantMode("new");
+      }
+    }
+  }, [isOpen, standaloneEntity]);
+
+  const handleStandaloneSubmit = async () => {
+    if (!standaloneEntity || !isStepValid(currentStep)) {
+      setError("Completa i campi obbligatori prima di salvare.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: MasterDataPayload = { standaloneOnly: standaloneEntity };
+
+      if (standaloneEntity === "condominium" && condoMode === "new") {
+        payload.condominium = {
+          name: condoName.trim(),
+          administrator: condoAdmin.trim() || undefined,
+          phone: condoPhone.trim() || undefined,
+          email: condoEmail.trim() || undefined,
+          notes: condoNotes.trim() || undefined,
+        };
+      } else if (standaloneEntity === "owner" && ownerMode === "new") {
+        payload.owner = {
+          name: newOwnerName.trim(),
+          fiscalCode: newOwnerFiscalCode.trim(),
+          email: newOwnerEmail.trim(),
+          phone: newOwnerPhone.trim(),
+          address: newOwnerAddress.trim() || undefined,
+          iban: newOwnerIban.trim() || undefined,
+          isCompany: newOwnerIsCompany,
+          notes: undefined,
+        };
+      } else if (standaloneEntity === "tenant" && tenantMode === "new") {
+        payload.tenant = {
+          name: tName.trim(),
+          email: tEmail.trim() || undefined,
+          phone: tPhone.trim() || undefined,
+          fiscalCode: tFiscalCode.trim() || undefined,
+          notes: tNotes.trim() || undefined,
+          isCompany: tIsCompany,
+          companyName: tIsCompany ? tCompanyName.trim() : undefined,
+          vatNumber: tIsCompany ? tVatNumber.trim() : undefined,
+        };
+      }
+
+      await onPersist(payload);
+      resetAll();
+      onClose();
+    } catch (err: any) {
+      console.error("Wizard standalone save error:", err);
+      setError(err?.message || "Errore durante il salvataggio. Riprova o controlla la console.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ============================================================================
@@ -476,11 +560,15 @@ export default function MasterDataWizard({
             </div>
             <div>
               <h2 className="text-base font-semibold leading-tight">
-                Nuovo Inserimento Guidato
+                {standaloneEntity === "owner" && "Nuovo Proprietario"}
+                {standaloneEntity === "tenant" && "Nuovo Inquilino"}
+                {standaloneEntity === "condominium" && "Nuovo Condominio"}
+                {!standaloneEntity && "Nuovo Inserimento Guidato"}
               </h2>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Aggiungi immobili, condomini, proprietari, inquilini e contratti
-                in un'unica procedura
+                {standaloneEntity
+                  ? "Inserimento isolato, senza creare un immobile"
+                  : "Aggiungi immobili, condomini, proprietari, inquilini e contratti in un'unica procedura"}
               </p>
             </div>
           </div>
@@ -493,7 +581,8 @@ export default function MasterDataWizard({
           </button>
         </div>
 
-        {/* ── Progress Stepper ─────────────────────────────────────── */}
+        {/* ── Progress Stepper (nascosto negli inserimenti isolati) ──── */}
+        {!standaloneEntity && (
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
           <div className="flex items-center justify-between">
             {STEPS.map((step, idx) => {
@@ -549,6 +638,7 @@ export default function MasterDataWizard({
             })}
           </div>
         </div>
+        )}
 
         {/* ── Body (scrollable) ────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -1222,42 +1312,26 @@ export default function MasterDataWizard({
         {/* ── Footer ──────────────────────────────────────────────── */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
           <div className="text-[11px] text-slate-500">
-            Step <strong className="text-slate-700">{currentStep}</strong> di 5
-            {currentStep === 5 && !isStepValid(5) && (
-              <span className="ml-2 text-amber-600">
-                · Passi opzionali possono essere saltati
-              </span>
+            {standaloneEntity ? (
+              <span>Inserimento isolato — nessun immobile verrà creato</span>
+            ) : (
+              <>
+                Step <strong className="text-slate-700">{currentStep}</strong> di 5
+                {currentStep === 5 && !isStepValid(5) && (
+                  <span className="ml-2 text-amber-600">
+                    · Passi opzionali possono essere saltati
+                  </span>
+                )}
+              </>
             )}
           </div>
 
           <div className="flex items-center gap-2">
-            {currentStep > 1 && (
+            {standaloneEntity ? (
               <button
                 type="button"
-                onClick={goBack}
-                disabled={saving}
-                className="px-4 py-2 text-[12px] font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1.5"
-              >
-                <ChevronLeft size={14} />
-                Indietro
-              </button>
-            )}
-
-            {currentStep < 5 ? (
-              <button
-                type="button"
-                onClick={goNext}
+                onClick={handleStandaloneSubmit}
                 disabled={!isStepValid(currentStep) || saving}
-                className="px-5 py-2 text-[12px] font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-1.5"
-              >
-                Avanti
-                <ChevronRight size={14} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={saving}
                 className="px-5 py-2 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 rounded-lg transition-colors flex items-center gap-1.5"
               >
                 {saving ? (
@@ -1268,10 +1342,55 @@ export default function MasterDataWizard({
                 ) : (
                   <>
                     <CheckCircle2 size={14} />
-                    Salva tutto
+                    Salva
                   </>
                 )}
               </button>
+            ) : (
+              <>
+                {currentStep > 1 && (
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    disabled={saving}
+                    className="px-4 py-2 text-[12px] font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1.5"
+                  >
+                    <ChevronLeft size={14} />
+                    Indietro
+                  </button>
+                )}
+
+                {currentStep < 5 ? (
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    disabled={!isStepValid(currentStep) || saving}
+                    className="px-5 py-2 text-[12px] font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-1.5"
+                  >
+                    Avanti
+                    <ChevronRight size={14} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={saving}
+                    className="px-5 py-2 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 rounded-lg transition-colors flex items-center gap-1.5"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        Salvataggio…
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={14} />
+                        Salva tutto
+                      </>
+                    )}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
