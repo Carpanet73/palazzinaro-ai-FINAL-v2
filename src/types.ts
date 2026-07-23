@@ -55,6 +55,16 @@ export interface Tenant {
   legalRepresentativeName?: string;
   legalRepresentativeFiscalCode?: string;
   visuraCameraleFileName?: string;
+  // Altri cointestatari dello stesso contratto (obbligazione solidale):
+  // NON generano un secondo conto/debitore — il conto e i Solleciti restano unici su
+  // questo Tenant. Servono però dati fiscali e di contatto reali, perché i messaggi
+  // WhatsApp/Email dei Solleciti devono raggiungere anche loro, non solo l'intestatario principale.
+  coTenants?: Array<{
+    name: string;
+    fiscalCode?: string;
+    phone?: string; // per includerlo nell'invio WhatsApp del sollecito
+    email?: string; // per includerlo nell'invio Email del sollecito
+  }>;
 }
 
 export interface OwnerProfile {
@@ -193,6 +203,12 @@ export interface FastClosingItem {
   status: "Pending" | "Paid" | "Overdue" | "Cancelled";
   reconciledWithMovementId?: string; // linked bank movement ID when cleared
   createdAt: string;
+  // ── CORREZIONE D — identificazione robusta del debitore ──
+  // Collegamento diretto e sicuro (ID reale) alla persona a cui è imputata la voce.
+  // Sostituisce il riconoscimento "a indovinare" dal testo del titolo, che restava
+  // come unico metodo prima di questa correzione (fragile e rischioso con nomi comuni).
+  debtorId?: string;   // Tenant.id oppure Owner.id
+  debtorType?: "owner" | "tenant";
 }
 
 export interface Reminder {
@@ -224,6 +240,10 @@ export interface Reminder {
   // (es. affitto non esitato → sollecito automatico)
   fastClosingItemId?: string;
   notes?: string;
+  // CORREZIONE D — il debitore non è sempre un inquilino: può essere anche un
+  // comproprietario (es. quota manutenzione non versata all'altro proprietario).
+  // tenantId/tenantName restano valorizzati in entrambi i casi per compatibilità.
+  debtorType?: "owner" | "tenant";
 }
 
 export interface Maintenance {
@@ -245,6 +265,7 @@ export interface Maintenance {
     debtorName: string;
     type: "owner" | "tenant";
     amount: number;
+    debtorId?: string; // CORREZIONE D — Owner.id o Tenant.id reale, quando risolvibile
   }>;
 }
 

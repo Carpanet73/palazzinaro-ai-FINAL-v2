@@ -102,6 +102,8 @@ export default function TenantsView({
   const [fiscalCode, setFiscalCode] = useState("");
   const [propertyId, setPropertyId] = useState("");
   const [notes, setNotes] = useState("");
+  const [coTenants, setCoTenants] = useState<Array<{ name: string; fiscalCode?: string; phone?: string; email?: string }>>([]);
+  const [coTenantsInput, setCoTenantsInput] = useState(""); // CORREZIONE — altri nominativi cointestatari (testo, separati da virgola)
 
   const handleOpenAddModal = () => {
     setEditingTenant(null);
@@ -120,6 +122,7 @@ export default function TenantsView({
     setFiscalCode("");
     setPropertyId(properties[0]?.id || "");
     setNotes("");
+    setCoTenants([]);
     setShowModal(true);
   };
 
@@ -140,6 +143,7 @@ export default function TenantsView({
     setFiscalCode(tenant.fiscalCode || "");
     setPropertyId(tenant.propertyId || "");
     setNotes(tenant.notes || "");
+    setCoTenants(tenant.coTenants || []);
     setShowModal(true);
   };
 
@@ -166,7 +170,16 @@ export default function TenantsView({
       registeredOffice: isCompany ? registeredOffice.trim() : "",
       legalRepresentativeName: isCompany ? legalRepresentativeName.trim() : "",
       legalRepresentativeFiscalCode: isCompany ? legalRepresentativeFiscalCode.trim().toUpperCase() : "",
-      visuraCameraleFileName: isCompany ? visuraCameraleFileName : ""
+      visuraCameraleFileName: isCompany ? visuraCameraleFileName : "",
+      // CORREZIONE D — cointestatari: stesso conto/debitore, ma con dati veri per WhatsApp/Email
+      coTenants: coTenants
+        .filter(ct => ct.name.trim().length > 0)
+        .map(ct => ({
+          name: ct.name.trim(),
+          fiscalCode: (ct.fiscalCode || "").trim().toUpperCase(),
+          phone: (ct.phone || "").trim(),
+          email: (ct.email || "").trim()
+        }))
     } as any;
 
     try {
@@ -1316,6 +1329,65 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                       onChange={(e) => setName(e.target.value)}
                       className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
                     />
+                  </div>
+
+                  <div className="space-y-2 border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Altri Cointestatari (facoltativo)
+                    </label>
+                    <p className="text-[10px] text-slate-400">
+                      Il conto/contratto resta unico (obbligazione solidale): questi nominativi non creano un secondo debitore, ma ricevono anche loro i messaggi WhatsApp/Email dei Solleciti — servono quindi telefono e/o email reali.
+                    </p>
+
+                    {coTenants.map((ct, idx) => (
+                      <div key={idx} className="grid grid-cols-2 gap-2 bg-white border border-slate-200 rounded-lg p-2.5 relative">
+                        <button
+                          type="button"
+                          onClick={() => setCoTenants(prev => prev.filter((_, i) => i !== idx))}
+                          className="absolute top-1.5 right-1.5 text-slate-400 hover:text-rose-500"
+                          title="Rimuovi cointestatario"
+                        >
+                          <X size={14} />
+                        </button>
+                        <input
+                          type="text"
+                          placeholder="Nome e Cognome"
+                          value={ct.name}
+                          onChange={(e) => setCoTenants(prev => prev.map((c, i) => i === idx ? { ...c, name: e.target.value } : c))}
+                          className="col-span-2 text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Codice Fiscale"
+                          value={ct.fiscalCode || ""}
+                          onChange={(e) => setCoTenants(prev => prev.map((c, i) => i === idx ? { ...c, fiscalCode: e.target.value.toUpperCase() } : c))}
+                          className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500 uppercase font-mono"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Cellulare (per WhatsApp)"
+                          value={ct.phone || ""}
+                          onChange={(e) => setCoTenants(prev => prev.map((c, i) => i === idx ? { ...c, phone: e.target.value } : c))}
+                          className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                        />
+                        <input
+                          type="email"
+                          placeholder="Email (facoltativa)"
+                          value={ct.email || ""}
+                          onChange={(e) => setCoTenants(prev => prev.map((c, i) => i === idx ? { ...c, email: e.target.value } : c))}
+                          className="col-span-2 text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                        />
+                      </div>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => setCoTenants(prev => [...prev, { name: "", fiscalCode: "", phone: "", email: "" }])}
+                      className="w-full text-xs font-semibold text-indigo-600 hover:text-indigo-700 border border-dashed border-indigo-300 rounded-lg py-2 flex items-center justify-center gap-1.5"
+                    >
+                      <Plus size={13} />
+                      <span>Aggiungi cointestatario</span>
+                    </button>
                   </div>
 
                   <div>

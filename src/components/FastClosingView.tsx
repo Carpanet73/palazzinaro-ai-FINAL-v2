@@ -23,12 +23,13 @@ import {
   Image as ImageIcon,
   Sparkles
 } from "lucide-react";
-import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder } from "../types";
+import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner } from "../types";
 
 interface FastClosingViewProps {
   fastClosing: FastClosingItem[];
   movements: BankMovement[];
   tenants: Tenant[];
+  owners?: Owner[]; // CORREZIONE D — per risolvere il debitore reale delle voci a carico proprietario
   properties: Property[];
   legalCases?: LegalCase[];
   reminders?: Reminder[];
@@ -46,6 +47,7 @@ export default function FastClosingView({
   fastClosing,
   movements,
   tenants,
+  owners = [],
   properties,
   legalCases = [],
   reminders = [],
@@ -306,31 +308,47 @@ export default function FastClosingView({
   };
 
   const getDebtorName = (item: FastClosingItem) => {
+    // ── CORREZIONE D — Collegamento diretto e sicuro (ID reale), sempre verificato per primo ──
+    // Le voci create dopo questa correzione portano con sé debtorId + debtorType: qui si
+    // risolve il nome attuale della persona direttamente dal suo record reale (Tenant/Owner),
+    // così il nome resta sempre corretto anche se la persona viene rinominata in seguito.
+    if (item.debtorId && item.debtorType === "tenant") {
+      const t = tenants.find((tt) => tt.id === item.debtorId);
+      if (t) return t.name;
+    }
+    if (item.debtorId && item.debtorType === "owner") {
+      const o = owners.find((oo) => oo.id === item.debtorId);
+      if (o) return o.name;
+    }
+
+    // ── Fallback legacy — solo per voci create PRIMA della CORREZIONE D, senza debtorId ──
+    // Riconoscimento a partire dal testo del titolo. Nessun nome scritto fisso: se non si
+    // trova corrispondenza reale, la voce resta genericamente "Spese Generali / Condomini"
+    // (che nel resto dell'app significa esplicitamente "nessun sollecito da generare").
     if (item.source === "maintenance") {
-      // 1) Custom splits saved as: "Quota Bobo Vieri - Manutenzione: ...", "Quota Massimo Laucci - ...", etc.
       const matchQuota = item.title.match(/Quota\s+([^-]+?)\s*-\s*Manutenzione:/i);
       if (matchQuota) {
         return matchQuota[1].trim();
       }
-      
+
       const matchQuotaProp = item.title.match(/Quota\s+Proprietari\s*\(([^)]+)\)/i);
       if (matchQuotaProp) {
         return matchQuotaProp[1].trim();
       }
-      
+
       const matchQuotaInq = item.title.match(/Quota\s+Inquilina\s*\(([^)]+)\)/i);
       if (matchQuotaInq) {
         return matchQuotaInq[1].trim();
       }
     }
-    
-    // 2) Try to find matches in tenant list
+
+    // Prova a trovare corrispondenze reali nella lista inquilini
     for (const t of tenants) {
       const nameClean = (t.name || "").replace(/[^a-zA-Z0-9 ]/g, "").toLowerCase().trim();
-      if (item.title.toLowerCase().includes(nameClean) || (item.description || "").toLowerCase().includes(nameClean)) {
+      if (nameClean && (item.title.toLowerCase().includes(nameClean) || (item.description || "").toLowerCase().includes(nameClean))) {
         return t.name;
       }
-      
+
       const lastSpaceIdx = t.name.lastIndexOf(" ");
       if (lastSpaceIdx !== -1) {
         const surname = t.name.substring(lastSpaceIdx + 1).toLowerCase().trim();
@@ -339,13 +357,15 @@ export default function FastClosingView({
         }
       }
     }
-    
-    // 3) Hardcoded common names
-    if (item.title.includes("Meloni") || item.description?.includes("Meloni")) return "Giorgia Meloni";
-    if (item.title.includes("Vieri") || item.description?.includes("Vieri")) return "Bobo Vieri";
-    if (item.title.includes("Laucci") || item.description?.includes("Laucci")) return "Massimo Laucci";
-    if (item.title.includes("Rossi") || item.description?.includes("Rossi")) return "Rossi";
-    
+
+    // Prova a trovare corrispondenze reali nella lista proprietari
+    for (const o of owners) {
+      const nameClean = (o.name || "").replace(/[^a-zA-Z0-9 ]/g, "").toLowerCase().trim();
+      if (nameClean && (item.title.toLowerCase().includes(nameClean) || (item.description || "").toLowerCase().includes(nameClean))) {
+        return o.name;
+      }
+    }
+
     return "Spese Generali / Condomini";
   };
 

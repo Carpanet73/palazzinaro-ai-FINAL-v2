@@ -1136,6 +1136,8 @@ export default function App() {
             source: "contract",
             sourceId: contractDoc.id,
             status: "Pending",
+            debtorId: finalTenantId || undefined, // CORREZIONE D
+            debtorType: "tenant",
             createdAt: serverTimestamp()
           });
 
@@ -1352,6 +1354,8 @@ export default function App() {
               source: "contract",
               sourceId: contractDoc.id,
               status: "Pending",
+              debtorId: tenantId || undefined, // CORREZIONE D
+              debtorType: "tenant",
               createdAt: serverTimestamp(),
             });
             currentDueDate.setMonth(currentDueDate.getMonth() + 1);
@@ -1595,67 +1599,71 @@ export default function App() {
       // Aggiorna lo stato della scadenza
       await updateDoc(doc(db, "fastClosing", id), { status });
 
-      // ── CORREZIONE A — Sollecito immediato quando un affitto viene marcato Insoluto ──
-      // Quando una voce con source "contract" (canone d'affitto) viene marcata "Overdue"
-      // tramite il pulsante Insoluto, creiamo SUBITO un Sollecito raggruppato per debitore
-      // (stessa logica della chiusura mensile: associatedItemsIds + status "Pending" + step 1).
-      // Se il debitore ha già un Sollecito attivo, aggiungiamo questa voce al gruppo esistente.
+      // ── CORREZIONE A + D — Sollecito immediato quando QUALSIASI voce viene marcata Insoluto ──
+      // Le regole di progetto distinguono canoni e spese accessorie SOLO per cosa succede se
+      // NON vengono marcate (i canoni vanno comunque in Solleciti alla chiusura mensile, le
+      // accessorie vengono solo rinviate al mese successivo). Ma quando l'utente marca
+      // ESPLICITAMENTE una voce come Insoluta con questo pulsante — sia essa un canone o una
+      // spesa accessoria (manutenzione, condominio, registrazione) — il Sollecito va creato
+      // subito in entrambi i casi. Prima di questa correzione, questo succedeva solo per i
+      // canoni: le spese accessorie marcate Insolute aggiornavano solo lo stato, senza mai
+      // generare il Sollecito corrispondente.
       if (status === "Overdue") {
-        const rentItem = fastClosing.find((item) => item.id === id);
-        const titleLower = (rentItem?.title || "").toLowerCase();
-        const descLower = (rentItem?.description || "").toLowerCase();
-        const isRent = !!rentItem && (
-          rentItem.source === "contract" ||
-          titleLower.includes("canone") ||
-          titleLower.includes("affitto") ||
-          descLower.includes("canone") ||
-          descLower.includes("affitto")
-        );
+        const closingItem = fastClosing.find((item) => item.id === id);
 
-        if (isRent && rentItem) {
-          // Determina il debtor name (stessa logica di getDebtorName in FastClosingView)
-          let debtorName = "Spese Generali / Condomini";
-          // 1) Match maintenance "Quota X - Manutenzione:"
-          const matchQuota = rentItem.title.match(/Quota\s+([^-]+?)\s*-\s*Manutenzione:/i);
-          if (matchQuota) debtorName = matchQuota[1].trim();
-          else {
-            const matchQuotaProp = rentItem.title.match(/Quota\s+Proprietari\s*\(([^)]+)\)/i);
-            if (matchQuotaProp) debtorName = matchQuotaProp[1].trim();
-            else {
-              const matchQuotaInq = rentItem.title.match(/Quota\s+Inquilina\s*\(([^)]+)\)/i);
-              if (matchQuotaInq) debtorName = matchQuotaInq[1].trim();
-              else {
-                // 2) Match per nome tenant
-                const matchingTenant = tenants.find((t) => {
-                  const nameClean = (t.name || "").replace(/[^a-zA-Z0-9 ]/g, "").toLowerCase().trim();
-                  return nameClean && (
-                    titleLower.includes(nameClean) || descLower.includes(nameClean)
-                  );
+        if (closingItem) {
+          // Determina il debitore. CORREZIONE D: usa prima il collegamento diretto e sicuro
+          // (debtorId + debtorType), introdotto per le voci create dopo questa correzione.
+          // Il riconoscimento "a indovinare" dal testo resta solo come fallback per le voci
+          // storiche create prima (nessun nome finto hardcoded: se non si trova nulla, la voce
+          // resta genericamente "Spese Generali / Condomini" e non genera un Sollecito).
+          let debtorName: string | null = null;
+          let debtorId: string | undefined = closingItem.debtorId;
+          let debtorType: "owner" | "tenant" | undefined = closingItem.debtorType;
+
+          if (debtorId && debtorType === "tenant") {
+            debtorName = tenants.find((t) => t.id === debtorId)?.name || null;
+          } else if (debtorId && debtorType === "owner") {
+            debtorName = owners.find((o) => o.id === debtorId)?.name || null;
+          }
+
+          if (!debtorName) {
+            // Fallback legacy per voci create prima della CORREZIONE D (solo testo, nessun ID)
+            const titleLower = (closingItem.title || "").toLowerCase();
+            const descLower = (closingItem.description || "").toLowerCase();
+            const matchQuota = closingItem.title.match(/Quota\s+([^-]+?)\s*-\s*Manutenzione:/i);
+            if (matchQuota) {
+              debtorName = matchQuota[1].trim();
+            } else {
+              const matchingTenant = tenants.find((t) => {
+                const nameClean = (t.name || "").replace(/[^a-zA-Z0-9 ]/g, "").toLowerCase().trim();
+                return nameClean && (titleLower.includes(nameClean) || descLower.includes(nameClean));
+              });
+              if (matchingTenant) {
+                debtorName = matchingTenant.name;
+                debtorId = matchingTenant.id;
+                debtorType = "tenant";
+              } else {
+                const matchingBySurname = tenants.find((t) => {
+                  const lastSpace = t.name.lastIndexOf(" ");
+                  if (lastSpace === -1) return false;
+                  const surname = t.name.substring(lastSpace + 1).toLowerCase().trim();
+                  return surname.length > 2 && (titleLower.includes(surname) || descLower.includes(surname));
                 });
-                if (matchingTenant) debtorName = matchingTenant.name;
-                else {
-                  // 3) Match per cognome tenant
-                  const matchingBySurname = tenants.find((t) => {
-                    const lastSpace = t.name.lastIndexOf(" ");
-                    if (lastSpace === -1) return false;
-                    const surname = t.name.substring(lastSpace + 1).toLowerCase().trim();
-                    return surname.length > 2 && (
-                      titleLower.includes(surname) || descLower.includes(surname)
-                    );
-                  });
-                  if (matchingBySurname) debtorName = matchingBySurname.name;
+                if (matchingBySurname) {
+                  debtorName = matchingBySurname.name;
+                  debtorId = matchingBySurname.id;
+                  debtorType = "tenant";
                 }
               }
             }
           }
 
-          // Salta se debtor generico (non ha senso creare sollecito per "Spese Generali")
-          if (debtorName !== "Spese Generali / Condomini") {
-            const matchingTenant = tenants.find((t) => t.name === debtorName) || null;
+          // Salta se debitore non identificato (non ha senso creare un sollecito senza destinatario)
+          if (debtorName) {
             const todayStr = new Date().toISOString().split("T")[0];
 
-            // Cerca sollecito attivo esistente per questo debtor
-            // (status non "Closed" e non "Cancelled", sequenza non conclusa)
+            // Cerca sollecito attivo esistente per questo debitore (stesso nome, sequenza non conclusa)
             const existingActiveReminder = reminders.find((r) =>
               r.tenantName === debtorName &&
               r.status !== "Closed" &&
@@ -1668,10 +1676,10 @@ export default function App() {
               const currentAssociated = existingActiveReminder.associatedItemsIds || [];
               if (!currentAssociated.includes(id)) {
                 const newAssociated = [...currentAssociated, id];
-                const newAmount = (existingActiveReminder.amount || 0) + (Number(rentItem.amount) || 0);
+                const newAmount = (existingActiveReminder.amount || 0) + (Number(closingItem.amount) || 0);
                 const newReason = existingActiveReminder.reason
-                  ? `${existingActiveReminder.reason} + ${rentItem.title} (€${(Number(rentItem.amount) || 0).toFixed(2)})`
-                  : `Sollecito automatico: ${rentItem.title} (€${(Number(rentItem.amount) || 0).toFixed(2)})`;
+                  ? `${existingActiveReminder.reason} + ${closingItem.title} (€${(Number(closingItem.amount) || 0).toFixed(2)})`
+                  : `Sollecito automatico: ${closingItem.title} (€${(Number(closingItem.amount) || 0).toFixed(2)})`;
 
                 await updateDoc(doc(db, "reminders", existingActiveReminder.id), {
                   associatedItemsIds: newAssociated,
@@ -1681,36 +1689,37 @@ export default function App() {
                 });
 
                 showSuccess(
-                  `Affitto marcato come insoluto e AGGIUNTO al sollecito attivo di ${debtorName} (totale gruppo: €${newAmount.toFixed(2)}).`
+                  `Voce marcata come insoluta e AGGIUNTA al sollecito attivo di ${debtorName} (totale gruppo: €${newAmount.toFixed(2)}).`
                 );
               } else {
-                showSuccess("Affitto marcato come insoluto (già presente nel sollecito attivo).");
+                showSuccess("Voce marcata come insoluta (già presente nel sollecito attivo).");
               }
             } else {
               // Crea nuovo sollecito con associatedItemsIds
               const reminderData: any = {
                 userId: user!.uid,
-                tenantId: matchingTenant?.id || "",
+                tenantId: debtorId || "",
                 tenantName: debtorName,
-                amount: Number(rentItem.amount) || 0,
-                reason: `Sollecito automatico Insoluto: ${rentItem.title} (€${(Number(rentItem.amount) || 0).toFixed(2)})`,
-                dueDate: rentItem.dueDate || todayStr,
+                debtorType: debtorType || "tenant",
+                amount: Number(closingItem.amount) || 0,
+                reason: `Sollecito automatico Insoluto: ${closingItem.title} (€${(Number(closingItem.amount) || 0).toFixed(2)})`,
+                dueDate: closingItem.dueDate || todayStr,
                 status: "Pending",
                 isSequence: true,
                 step: 1,
                 associatedItemsIds: [id],
                 fastClosingItemId: id,
-                propertyId: rentItem.propertyId || "",
-                notes: `Sollecito generato automaticamente da pulsante Insoluto in Fast Closing in data ${new Date().toLocaleDateString("it-IT")}. Importo canone: €${(Number(rentItem.amount) || 0).toFixed(2)}.`,
+                propertyId: closingItem.propertyId || "",
+                notes: `Sollecito generato automaticamente da pulsante Insoluto in Fast Closing in data ${new Date().toLocaleDateString("it-IT")}. Importo: €${(Number(closingItem.amount) || 0).toFixed(2)}.`,
                 createdAt: serverTimestamp(),
               };
               await addDoc(collection(db, "reminders"), reminderData);
               showSuccess(
-                `Affitto marcato come insoluto e nuovo sollecito creato per ${debtorName}.`
+                `Voce marcata come insoluta e nuovo sollecito creato per ${debtorName}.`
               );
             }
           } else {
-            showSuccess("Stato scadenza aggiornato (debitore generico, nessun sollecito creato).");
+            showSuccess("Stato scadenza aggiornato (debitore non identificato, nessun sollecito creato).");
           }
         } else {
           showSuccess("Stato scadenza aggiornato!");
@@ -1793,6 +1802,9 @@ export default function App() {
               source: "maintenance",
               sourceId: maintDoc.id,
               status: "Pending",
+              // CORREZIONE D — collegamento diretto e sicuro al debitore reale, quando risolto
+              debtorId: split.debtorId || undefined,
+              debtorType: split.type,
               createdAt: serverTimestamp()
             });
           }
@@ -1813,6 +1825,7 @@ export default function App() {
           source: "maintenance",
           sourceId: maintDoc.id,
           status: "Pending",
+          debtorType: data.chargedTo === "tenant" ? "tenant" : "owner", // CORREZIONE D (percorso legacy, senza id specifico)
           createdAt: serverTimestamp()
         });
       }
@@ -2336,6 +2349,7 @@ export default function App() {
             fastClosing={fastClosing}
             movements={movements}
             tenants={tenants}
+            owners={owners}
             properties={properties}
             legalCases={legalCases}
             reminders={reminders}
@@ -2375,6 +2389,7 @@ export default function App() {
             fastClosing={fastClosing}
             contracts={contracts}
             tenants={tenants}
+            owners={owners}
             onAddMaintenance={handleAddMaintenance}
             onUpdateMaintenanceStatus={handleUpdateMaintenanceStatus}
             onDeleteMaintenance={handleDeleteMaintenance}

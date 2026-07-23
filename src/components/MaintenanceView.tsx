@@ -5,7 +5,7 @@ import {
   Trash2, ArrowRight, ArrowLeft, Coins, Percent, Users, User, 
   Building, Clock, CheckCircle, Search, TrendingUp, DollarSign
 } from "lucide-react";
-import { Maintenance, Property, FastClosingItem } from "../types";
+import { Maintenance, Property, FastClosingItem, Owner } from "../types";
 
 interface MaintenanceViewProps {
   maintenance: Maintenance[];
@@ -13,6 +13,7 @@ interface MaintenanceViewProps {
   fastClosing: FastClosingItem[];
   contracts: any[];
   tenants: any[];
+  owners?: Owner[]; // CORREZIONE D — per risolvere un debtorId reale sulle quote proprietario
   onAddMaintenance: (ticket: any) => Promise<void>;
   onUpdateMaintenanceStatus: (id: string, status: "New" | "In Progress" | "Completed" | "Cancelled") => Promise<void>;
   onDeleteMaintenance: (id: string) => Promise<void>;
@@ -24,6 +25,7 @@ export default function MaintenanceView({
   fastClosing,
   contracts,
   tenants,
+  owners = [],
   onAddMaintenance,
   onUpdateMaintenanceStatus,
   onDeleteMaintenance
@@ -69,9 +71,20 @@ export default function MaintenanceView({
       property: prop,
       ownerName: prop.owner || "Proprietario sconosciuto",
       tenantName: activeContract ? activeContract.tenantName : null,
+      tenantId: activeContract ? activeContract.tenantId : null, // CORREZIONE D
       isRented: prop.status === "Rented" && !!activeContract
     };
   }, [propertyId, properties, contracts]);
+
+  // CORREZIONE D — prova a risolvere il nome di un comproprietario a un record Owner reale
+  // (case-insensitive, spazi ignorati). Se non trovato, resta senza debtorId (nessun crash,
+  // solo un fallback meno preciso più avanti nel riconoscimento del debitore).
+  const resolveOwnerIdByName = (name: string): string | undefined => {
+    const clean = (name || "").toLowerCase().trim();
+    if (!clean) return undefined;
+    const match = owners.find(o => (o.name || "").toLowerCase().trim() === clean);
+    return match?.id;
+  };
 
   // Open the wizard modal
   const handleOpenWizard = () => {
@@ -242,14 +255,17 @@ export default function MaintenanceView({
           splits.push({
             debtorName: owner,
             type: "owner",
-            amount: splitAmount
+            amount: splitAmount,
+            debtorId: resolveOwnerIdByName(owner) // CORREZIONE D
           });
         });
       } else {
+        const singleOwnerName = activePropertyData?.ownerName || "Proprietario";
         splits.push({
-          debtorName: activePropertyData?.ownerName || "Proprietario",
+          debtorName: singleOwnerName,
           type: "owner",
-          amount: calculatedSplits.ownerAmt
+          amount: calculatedSplits.ownerAmt,
+          debtorId: resolveOwnerIdByName(singleOwnerName) // CORREZIONE D
         });
       }
     }
@@ -257,7 +273,8 @@ export default function MaintenanceView({
       splits.push({
         debtorName: activePropertyData.tenantName,
         type: "tenant",
-        amount: calculatedSplits.tenantAmt
+        amount: calculatedSplits.tenantAmt,
+        debtorId: activePropertyData.tenantId || undefined // CORREZIONE D — Tenant.id reale dal contratto attivo
       });
     }
 

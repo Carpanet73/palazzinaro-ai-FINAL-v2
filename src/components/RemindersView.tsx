@@ -306,46 +306,62 @@ export default function RemindersView({
     const templateId = ownerProfile?.emailTemplateId || "";
     const publicKey = ownerProfile?.emailPublicKey || "";
 
+    // CORREZIONE D — Se il contratto è cointestato (obbligazione solidale), il sollecito
+    // deve raggiungere anche gli altri cointestatari, non solo l'intestatario principale.
+    // Restano un unico debitore/conto: qui cambiano solo i destinatari dell'invio.
+    const allRecipients = [
+      { name: tenant.name, email: tenant.email, phone: tenant.phone },
+      ...((tenant.coTenants || []).map(ct => ({ name: ct.name, email: ct.email, phone: ct.phone })))
+    ];
+
+    const sendEmailTo = async (recipientName: string, recipientEmail?: string) => {
+      if (!serviceId || !templateId || !publicKey) {
+        return; // avviso già mostrato una volta sotto, non ripeterlo per ogni destinatario
+      }
+      if (!recipientEmail || !recipientEmail.includes("@")) {
+        alert(`⚠️ EMAIL ASSENTE:\n"${recipientName}" non ha un indirizzo email valido impostato in anagrafica. Invio email saltato per questo destinatario.`);
+        return;
+      }
+      try {
+        const templateParams = {
+          to_email: recipientEmail,
+          tenant_name: recipientName,
+          subject: `${stepLabel} - Posizione Debitoria Contabile`,
+          message: messageBody,
+          message_content: messageBody,
+          total_amount: `€${total.toLocaleString("it-IT", { minimumFractionDigits: 2 })}`,
+          items_list: listText
+        };
+        await emailjs.send(serviceId, templateId, templateParams, publicKey);
+        alert(`📧 E-mail inviata con successo tramite EmailJS all'indirizzo: ${recipientEmail}`);
+      } catch (err: any) {
+        console.error("Errore EmailJS:", err);
+        alert(`❌ Errore durante l'invio dell'e-mail a ${recipientName} tramite EmailJS:\n${err?.text || err?.message || JSON.stringify(err)}`);
+      }
+    };
+
+    const openWhatsAppFor = (recipientName: string, recipientPhone?: string) => {
+      if (!recipientPhone || !recipientPhone.trim()) {
+        alert(`⚠️ TELEFONO ASSENTE:\n"${recipientName}" non ha un numero di telefono WhatsApp salvato in anagrafica.\nImpossibile inviare il messaggio tramite WhatsApp a questo destinatario.`);
+        return;
+      }
+      const phoneClean = recipientPhone.replace(/[^0-9+]/g, "");
+      const waUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(messageBody)}`;
+      window.open(waUrl, "_blank");
+      alert(`💬 Apertura della chat di WhatsApp per ${recipientName} (${recipientPhone}) in corso in una nuova scheda... Premere "Invia" manualmente per spedire il testo precompilato.`);
+    };
+
     if (!serviceId || !templateId || !publicKey) {
       alert("⚠️ CONFIGURAZIONE EMAILJS MANCANTE:\nLe credenziali EmailJS non sono ancora configurate nel tuo profilo.\nVai nelle Impostazioni per inserire Service ID, Template ID e Public Key.\n\nL'invio dell'e-mail reale è stato saltato, ma procederemo con l'apertura di WhatsApp.");
     } else {
-      try {
-        if (!tenant.email || !tenant.email.includes("@")) {
-          alert(`⚠️ EMAIL INQUILINO ASSENTE:\nL'inquilino "${tenant.name}" non ha un indirizzo email valido impostato in anagrafica. Invio email saltato.`);
-        } else {
-          // Send real email using emailjs.send
-          const templateParams = {
-            to_email: tenant.email,
-            tenant_name: tenant.name,
-            subject: `${stepLabel} - Posizione Debitoria Contabile`,
-            message: messageBody,
-            message_content: messageBody, // supporting common template parameter names
-            total_amount: `€${total.toLocaleString("it-IT", { minimumFractionDigits: 2 })}`,
-            items_list: listText
-          };
-
-          await emailjs.send(
-            serviceId,
-            templateId,
-            templateParams,
-            publicKey
-          );
-          alert(`📧 E-mail inviata con successo tramite EmailJS all'indirizzo: ${tenant.email}`);
-        }
-      } catch (err: any) {
-        console.error("Errore EmailJS:", err);
-        alert(`❌ Errore durante l'invio dell'e-mail tramite EmailJS:\n${err?.text || err?.message || JSON.stringify(err)}\n\nL'azione continuerà comunque con WhatsApp.`);
+      for (const recipient of allRecipients) {
+        await sendEmailTo(recipient.name, recipient.email);
       }
     }
 
-    // 3. WHATSAPP
-    if (!tenant.phone || !tenant.phone.trim()) {
-      alert(`⚠️ TELEFONO INQUILINO ASSENTE:\nL'inquilino "${tenant.name}" non ha un numero di telefono WhatsApp salvato in anagrafica.\nImpossibile inviare il messaggio tramite WhatsApp.`);
-    } else {
-      const phoneClean = tenant.phone.replace(/[^0-9+]/g, "");
-      const waUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(messageBody)}`;
-      window.open(waUrl, "_blank");
-      alert(`💬 Apertura della chat di WhatsApp per ${tenant.name} (${tenant.phone}) in corso in una nuova scheda... Premere "Invia" manualmente per spedire il testo precompilato.`);
+    // 3. WHATSAPP — un tab per ciascun destinatario (intestatario principale + cointestatari)
+    for (const recipient of allRecipients) {
+      openWhatsAppFor(recipient.name, recipient.phone);
     }
 
     return true;
