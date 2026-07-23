@@ -2433,6 +2433,7 @@ export default function App() {
           <LegalView 
             legalCases={legalCases}
             properties={properties}
+            tenants={tenants}
             lawyers={lawyers}
             onAddLegalCase={handleAddLegalCase}
             onUpdateLegalCaseStatus={handleUpdateLegalCaseStatus}

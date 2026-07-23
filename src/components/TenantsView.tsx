@@ -106,6 +106,15 @@ export default function TenantsView({
   const [propertyId, setPropertyId] = useState("");
   const [notes, setNotes] = useState("");
   const [coTenants, setCoTenants] = useState<Array<{ name: string; fiscalCode?: string; phone?: string; email?: string }>>([]);
+  // CORREZIONE G — Garante strutturato: dati fiscali/contatto reali + documenti allegati
+  const [guarantorName, setGuarantorName] = useState("");
+  const [guarantorFiscalCode, setGuarantorFiscalCode] = useState("");
+  const [guarantorPhone, setGuarantorPhone] = useState("");
+  const [guarantorEmail, setGuarantorEmail] = useState("");
+  const [guarantorNotes, setGuarantorNotes] = useState("");
+  const [guarantorDocuments, setGuarantorDocuments] = useState<Array<{ id: string; name: string; type: string; uploadedAt: string }>>([]);
+  const [newGuarantorDocName, setNewGuarantorDocName] = useState("");
+  const [newGuarantorDocType, setNewGuarantorDocType] = useState("Busta Paga");
   const [coTenantsInput, setCoTenantsInput] = useState(""); // CORREZIONE — altri nominativi cointestatari (testo, separati da virgola)
 
   const handleOpenAddModal = () => {
@@ -129,6 +138,14 @@ export default function TenantsView({
     setPropertyId("");
     setNotes("");
     setCoTenants([]);
+    setGuarantorName("");
+    setGuarantorFiscalCode("");
+    setGuarantorPhone("");
+    setGuarantorEmail("");
+    setGuarantorNotes("");
+    setGuarantorDocuments([]);
+    setNewGuarantorDocName("");
+    setNewGuarantorDocType("Busta Paga");
     setShowModal(true);
   };
 
@@ -155,7 +172,37 @@ export default function TenantsView({
     setPropertyId(tenant.propertyId || "");
     setNotes(tenant.notes || "");
     setCoTenants(tenant.coTenants || []);
+    setGuarantorName(tenant.guarantor?.name || "");
+    setGuarantorFiscalCode(tenant.guarantor?.fiscalCode || "");
+    setGuarantorPhone(tenant.guarantor?.phone || "");
+    setGuarantorEmail(tenant.guarantor?.email || "");
+    setGuarantorNotes(tenant.guarantor?.notes || "");
+    setGuarantorDocuments(tenant.guarantor?.documents || []);
+    setNewGuarantorDocName("");
+    setNewGuarantorDocType("Busta Paga");
     setShowModal(true);
+  };
+
+  // CORREZIONE G — Allega un documento (metadati) al fascicolo del garante
+  const handleAddGuarantorDocument = () => {
+    if (!newGuarantorDocName.trim()) {
+      alert("Inserisci un nome per il documento.");
+      return;
+    }
+    setGuarantorDocuments(prev => [
+      ...prev,
+      {
+        id: `gdoc-${Date.now()}`,
+        name: newGuarantorDocName.trim(),
+        type: newGuarantorDocType,
+        uploadedAt: new Date().toISOString().split("T")[0]
+      }
+    ]);
+    setNewGuarantorDocName("");
+  };
+
+  const handleRemoveGuarantorDocument = (id: string) => {
+    setGuarantorDocuments(prev => prev.filter(d => d.id !== id));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -200,7 +247,17 @@ export default function TenantsView({
           fiscalCode: (ct.fiscalCode || "").trim().toUpperCase(),
           phone: (ct.phone || "").trim(),
           email: (ct.email || "").trim()
-        }))
+        })),
+      // CORREZIONE G — Garante strutturato (facoltativo): se non è stato inserito un nome,
+      // non salviamo nessun oggetto guarantor (evita di creare un garante "vuoto")
+      guarantor: guarantorName.trim().length > 0 ? {
+        name: guarantorName.trim(),
+        fiscalCode: guarantorFiscalCode.trim().toUpperCase(),
+        phone: guarantorPhone.trim(),
+        email: guarantorEmail.trim(),
+        notes: guarantorNotes.trim(),
+        documents: guarantorDocuments
+      } : null
     } as any;
 
     try {
@@ -1609,12 +1666,110 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                 </select>
               </div>
 
+              <div className="space-y-2 border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Garante (facoltativo)
+                </label>
+                <p className="text-[10px] text-slate-400">
+                  Se inserito, riceverà anche lui i Solleciti (WhatsApp/Email) e sarà citato nella Messa in Mora. In caso di passaggio all'Area Legale, i suoi dati e documenti entrano a far parte del fascicolo inviato allo studio legale.
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nome e Cognome Garante"
+                    value={guarantorName}
+                    onChange={(e) => setGuarantorName(e.target.value)}
+                    className="col-span-2 text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Codice Fiscale"
+                    value={guarantorFiscalCode}
+                    onChange={(e) => setGuarantorFiscalCode(e.target.value.toUpperCase())}
+                    className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500 uppercase font-mono"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Cellulare (per WhatsApp)"
+                    value={guarantorPhone}
+                    onChange={(e) => setGuarantorPhone(e.target.value)}
+                    className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={guarantorEmail}
+                    onChange={(e) => setGuarantorEmail(e.target.value)}
+                    className="col-span-2 text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                  />
+                  <textarea
+                    placeholder="Note sul garante (facoltativo)"
+                    value={guarantorNotes}
+                    onChange={(e) => setGuarantorNotes(e.target.value)}
+                    rows={2}
+                    className="col-span-2 text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* Documenti del garante (buste paga, dichiarazione dei redditi, ecc.) */}
+                <div className="pt-2 border-t border-slate-200 space-y-2">
+                  <label className="block text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
+                    Documenti Allegati (buste paga, dichiarazione redditi, ecc.)
+                  </label>
+
+                  {guarantorDocuments.map(doc => (
+                    <div key={doc.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs">
+                      <span className="truncate">
+                        📄 {doc.name} <span className="text-slate-400">({doc.type})</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveGuarantorDocument(doc.id)}
+                        className="text-slate-400 hover:text-rose-500 shrink-0 ml-2"
+                        title="Rimuovi documento"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <div className="flex gap-2">
+                    <select
+                      value={newGuarantorDocType}
+                      onChange={(e) => setNewGuarantorDocType(e.target.value)}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-2 outline-hidden focus:border-indigo-500 bg-white"
+                    >
+                      <option value="Busta Paga">Busta Paga</option>
+                      <option value="Dichiarazione dei Redditi">Dichiarazione dei Redditi</option>
+                      <option value="Documento d'Identità">Documento d'Identità</option>
+                      <option value="Altro">Altro</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Nome file/documento"
+                      value={newGuarantorDocName}
+                      onChange={(e) => setNewGuarantorDocName(e.target.value)}
+                      className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddGuarantorDocument}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 border border-dashed border-indigo-300 rounded-lg px-3 flex items-center gap-1 shrink-0"
+                    >
+                      <Plus size={13} />
+                      Allega
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Note Co-inquilini / Garanti
+                  Note Generali
                 </label>
                 <textarea
-                  placeholder="Garante: papà Rossi Giuseppe, referenziato, contrattualizzato a tempo indeterminato..."
+                  placeholder="Eventuali note aggiuntive..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}

@@ -306,12 +306,13 @@ export default function RemindersView({
     const templateId = ownerProfile?.emailTemplateId || "";
     const publicKey = ownerProfile?.emailPublicKey || "";
 
-    // CORREZIONE D — Se il contratto è cointestato (obbligazione solidale), il sollecito
-    // deve raggiungere anche gli altri cointestatari, non solo l'intestatario principale.
-    // Restano un unico debitore/conto: qui cambiano solo i destinatari dell'invio.
+    // CORREZIONE D+G — Se il contratto è cointestato (obbligazione solidale) e/o è presente
+    // un Garante, il sollecito deve raggiungere anche loro, non solo l'intestatario principale.
+    // Resta un unico debitore/conto: qui cambiano solo i destinatari dell'invio.
     const allRecipients = [
       { name: tenant.name, email: tenant.email, phone: tenant.phone },
-      ...((tenant.coTenants || []).map(ct => ({ name: ct.name, email: ct.email, phone: ct.phone })))
+      ...((tenant.coTenants || []).map(ct => ({ name: ct.name, email: ct.email, phone: ct.phone }))),
+      ...(tenant.guarantor?.name ? [{ name: `${tenant.guarantor.name} (Garante)`, email: tenant.guarantor.email, phone: tenant.guarantor.phone }] : [])
     ];
 
     const sendEmailTo = async (recipientName: string, recipientEmail?: string) => {
@@ -415,12 +416,19 @@ export default function RemindersView({
 
   const handleExecuteThirdStepPrint = () => {
     if (!activeStepReminder) return;
+    const tenant = tenants.find(t => t.id === activeStepReminder.tenantId) ||
+                   tenants.find(t => t.name.toLowerCase().trim() === activeStepReminder.tenantName.toLowerCase().trim());
     generateMessaInMoraPDF(
       activeStepReminder.tenantName,
       activeStepReminder.amount,
-      activeStepReminder.dueDate
+      activeStepReminder.dueDate,
+      tenant?.guarantor?.name ? { name: tenant.guarantor.name, fiscalCode: tenant.guarantor.fiscalCode } : undefined
     );
-    alert("Lettera di Diffida e Messa in Mora generata in formato PDF e avviata alla stampa per spedizione cartacea Raccomandata A/R!");
+    alert(
+      tenant?.guarantor?.name
+        ? `Lettera di Diffida e Messa in Mora generata in formato PDF (con il Garante ${tenant.guarantor.name} citato per conoscenza) e avviata alla stampa per spedizione cartacea Raccomandata A/R a entrambi!`
+        : "Lettera di Diffida e Messa in Mora generata in formato PDF e avviata alla stampa per spedizione cartacea Raccomandata A/R!"
+    );
   };
 
   const handleExecuteThirdStepMailOwners = () => {

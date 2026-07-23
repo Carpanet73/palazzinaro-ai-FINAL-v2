@@ -1,12 +1,13 @@
 
 import React, { useState } from "react";
 import { Plus, Scale, FolderOpen, AlertCircle, CheckCircle, X, Trash2, UserCheck, Briefcase, Download, FileText, Check, ShieldAlert } from "lucide-react";
-import { LegalCase, Property, Lawyer } from "../types";
+import { LegalCase, Property, Lawyer, Tenant } from "../types";
 import JSZip from "jszip";
 
 interface LegalViewProps {
   legalCases: LegalCase[];
   properties: Property[];
+  tenants?: Tenant[]; // CORREZIONE G — per includere i dati del Garante nel fascicolo ZIP
   lawyers?: Lawyer[];
   onAddLegalCase: (caseData: Omit<LegalCase, "id" | "userId" | "createdAt">) => Promise<void>;
   onUpdateLegalCaseStatus: (id: string, status: "Active" | "Pending" | "Closed") => Promise<void>;
@@ -18,6 +19,7 @@ interface LegalViewProps {
 export default function LegalView({
   legalCases,
   properties,
+  tenants = [],
   lawyers = [],
   onAddLegalCase,
   onUpdateLegalCaseStatus,
@@ -215,6 +217,33 @@ Elenco Voci Contabili Insolute Raggruppate:
 Le somme sopra indicate costituiscono credito liquido ed esigibile ai fini del ricorso per decreto ingiuntivo ex art. 633 c.p.c. unitamente alla richiesta di convalida di sfratto.
 `;
       zip.file("7_mastrino_saldo_inquilino_ripartito.txt", balanceText);
+
+      // 8. CORREZIONE G — Dati del Garante (se presente), con dati fiscali reali e documenti allegati
+      const relatedTenant = tenants.find(t => t.name.toLowerCase().trim() === (lawsuit.tenantName || "").toLowerCase().trim());
+      if (relatedTenant?.guarantor?.name) {
+        const g = relatedTenant.guarantor;
+        const docsList = (g.documents && g.documents.length > 0)
+          ? g.documents.map(d => `- ${d.name} (${d.type}), allegato il ${d.uploadedAt}`).join("\n")
+          : "Nessun documento allegato in anagrafica.";
+
+        const guarantorText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - DATI DEL GARANTE\n${divider}
+Data Generazione: ${timestamp}
+Inquilino Garantito: ${lawsuit.tenantName || "Non Specificato"}
+
+DATI ANAGRAFICI E FISCALI DEL GARANTE:
+Nome e Cognome: ${g.name}
+Codice Fiscale: ${g.fiscalCode || "Non specificato"}
+Telefono: ${g.phone || "Non specificato"}
+Email: ${g.email || "Non specificato"}
+Note: ${g.notes || "Nessuna"}
+
+DOCUMENTI ALLEGATI IN ANAGRAFICA (a supporto della garanzia):
+${docsList}
+
+Il presente garante è stato inserito in anagrafica a supporto del rapporto di locazione e viene incluso nel presente fascicolo per consentire allo studio legale incaricato di procedere, ove necessario, anche nei suoi confronti per il recupero coattivo delle somme dovute.
+`;
+        zip.file("8_dati_garante.txt", guarantorText);
+      }
 
       const content = await zip.generateAsync({ type: "blob" });
       

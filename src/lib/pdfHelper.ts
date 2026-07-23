@@ -4,7 +4,12 @@ import { jsPDF } from "jspdf";
 /**
  * Generates a professional PDF document for the "Diffida e Messa in Mora" letter.
  */
-export function generateMessaInMoraPDF(tenantName: string, amount: number, dueDate: string) {
+export function generateMessaInMoraPDF(
+  tenantName: string,
+  amount: number,
+  dueDate: string,
+  guarantor?: { name: string; fiscalCode?: string }
+) {
   const doc = new jsPDF();
   
   // Border decoration
@@ -42,6 +47,19 @@ export function generateMessaInMoraPDF(tenantName: string, amount: number, dueDa
   doc.text("DESTINATARIO (Inquilino Moroso):", 115, 48);
   doc.setFont("Helvetica", "normal");
   doc.text(`Spett.le ${tenantName}\nPresso l'immobile in locazione\nCodice Pratica: PM-${Math.floor(100000 + Math.random() * 900000)}`, 115, 53);
+
+  // CORREZIONE G — Se è presente un Garante, viene citato come destinatario "per conoscenza",
+  // così la lettera va spedita/notificata anche a lui, non solo all'inquilino.
+  let bodyStartY = 88;
+  if (guarantor?.name) {
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    const guarantorLine = `E, PER CONOSCENZA (Garante): ${guarantor.name}${guarantor.fiscalCode ? " — C.F. " + guarantor.fiscalCode : ""}`;
+    doc.text(guarantorLine, 15, 73);
+    doc.setTextColor(15, 23, 42);
+    bodyStartY = 92;
+  }
   
   // Subject Block
   doc.setFont("Helvetica", "bold");
@@ -72,7 +90,7 @@ La avvertiamo che, decorso inutilmente tale termine di 15 giorni senza che si si
 La presente costituisce atto formale di costituzione in mora e vale ad ogni effetto di legge, in particolare ai fini dell'interruzione dei termini di prescrizione e del computo degli interessi legali e di mora dovuti.`;
 
   const splitText = doc.splitTextToSize(bodyText, 180);
-  doc.text(splitText, 15, 88);
+  doc.text(splitText, 15, bodyStartY);
   
   // Footnote and Signature
   doc.line(15, 235, 195, 235);

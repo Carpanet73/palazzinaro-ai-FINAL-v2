@@ -65,6 +65,24 @@ export interface Tenant {
     phone?: string; // per includerlo nell'invio WhatsApp del sollecito
     email?: string; // per includerlo nell'invio Email del sollecito
   }>;
+  // ── CORREZIONE G — Garante strutturato ──
+  // Prima era solo un campo di testo libero dentro le note. Ora ha dati fiscali e di
+  // contatto reali (per essere raggiunto da solleciti/messa in mora) e un elenco di
+  // documenti allegati (es. buste paga, dichiarazione dei redditi) usati per costituire
+  // il fascicolo in caso di passaggio all'Area Legale.
+  guarantor?: {
+    name: string;
+    fiscalCode?: string;
+    phone?: string;
+    email?: string;
+    notes?: string;
+    documents?: Array<{
+      id: string;
+      name: string;
+      type: string; // es. "Busta Paga", "Dichiarazione dei Redditi", "Altro"
+      uploadedAt: string; // YYYY-MM-DD
+    }>;
+  };
 }
 
 export interface OwnerProfile {
