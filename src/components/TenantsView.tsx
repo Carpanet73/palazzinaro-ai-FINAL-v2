@@ -123,7 +123,10 @@ export default function TenantsView({
     setEmail("");
     setPhone("");
     setFiscalCode("");
-    setPropertyId(properties[0]?.id || "");
+    // CORREZIONE F — il campo Immobile deve partire VUOTO ("Nessuno / Libero"), mai
+    // precompilato con il primo immobile della lista: il collegamento è facoltativo
+    // e la scelta di lasciarlo vuoto deve essere sempre disponibile e visibile di default.
+    setPropertyId("");
     setNotes("");
     setCoTenants([]);
     setShowModal(true);
