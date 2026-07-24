@@ -1345,12 +1345,12 @@ export default function FastClosingView({
                         return (
                           <tr 
                             key={item.id} 
-                            className={`hover:bg-slate-50 transition-colors ${
+                            className={`group hover:bg-slate-50 transition-colors ${
                               isCriticalTenantItem ? "bg-rose-50/20" : ""
                             }`}
                           >
                             {/* Stato Cell */}
-                            <td className="p-2.5 border border-slate-300 text-center font-bold">
+                            <td className={`p-2.5 border border-slate-300 text-center font-bold transition-opacity ${isPaid ? "opacity-40 group-hover:opacity-90 group-active:opacity-90" : ""}`}>
                               <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-wider block text-center ${
                                 isPaid 
                                   ? "bg-emerald-100 text-emerald-800" 
@@ -1365,19 +1365,20 @@ export default function FastClosingView({
                             </td>
 
                             {/* Scadenza Cell */}
-                            <td className="p-2.5 border border-slate-300 text-center font-bold text-slate-700">
+                            <td className={`p-2.5 border border-slate-300 text-center font-bold text-slate-700 transition-opacity ${isPaid ? "opacity-40 group-hover:opacity-90 group-active:opacity-90" : ""}`}>
                               {new Date(item.dueDate).toLocaleDateString("it-IT")}
                             </td>
 
                             {/* Origine Cell */}
-                            <td className="p-2.5 border border-slate-300 text-center">
+                            <td className={`p-2.5 border border-slate-300 text-center transition-opacity ${isPaid ? "opacity-40 group-hover:opacity-90 group-active:opacity-90" : ""}`}>
                               <span className="bg-slate-100 px-1.5 py-0.5 rounded font-extrabold text-slate-500 uppercase text-[9px]">
                                 {item.source}
                               </span>
                             </td>
 
-                            {/* Titolo Cell */}
-                            <td className="p-2.5 border border-slate-300 font-sans">
+                            {/* Titolo Cell — compatta e in trasparenza quando saldata; la descrizione
+                                si rivela solo passando il mouse (o tenendo premuto da cellulare) */}
+                            <td className={`p-2.5 border border-slate-300 font-sans transition-opacity ${isPaid ? "opacity-40 group-hover:opacity-90 group-active:opacity-90" : ""}`}>
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <span className={`font-bold text-xs ${
                                   isCriticalTenantItem ? "text-rose-600 font-black flex items-center gap-1" : "text-slate-950"
@@ -1392,18 +1393,24 @@ export default function FastClosingView({
                                 )}
                               </div>
                               {item.description && (
-                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
-                                  {item.description}
-                                </p>
+                                isPaid ? (
+                                  <p className="text-[10px] text-slate-500 mt-0.5 leading-tight max-h-0 overflow-hidden group-hover:max-h-20 group-active:max-h-20 transition-all duration-200">
+                                    {item.description}
+                                  </p>
+                                ) : (
+                                  <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                                    {item.description}
+                                  </p>
+                                )
                               )}
                             </td>
 
-                            {/* Importo Cell */}
-                            <td className="p-2.5 border border-slate-300 text-right font-black text-slate-900">
+                            {/* Importo Cell — anch'essa in trasparenza quando la riga è gestita */}
+                            <td className={`p-2.5 border border-slate-300 text-right font-black text-slate-900 transition-opacity ${isPaid ? "opacity-40 group-hover:opacity-90 group-active:opacity-90" : ""}`}>
                               €{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
                             </td>
 
-                            {/* Azioni Cell */}
+                            {/* Azioni Cell — SEMPRE a piena visibilità, anche a riga gestita */}
                             <td className="p-2.5 border border-slate-300 text-center no-print">
                               {selectedMonthYear === "current" ? (
                                 <div className="flex justify-center items-center gap-1">
@@ -1459,8 +1466,13 @@ export default function FastClosingView({
                                     </>
                                   ) : (
                                     <button
-                                      onClick={() => handleStatusChange(item.id, "Pending")}
-                                      className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-sm text-[9px] font-black tracking-wide cursor-pointer"
+                                      onClick={() => {
+                                        // CORREZIONE T — riapertura: richiede almeno due conferme esplicite in sequenza
+                                        if (!confirm(`Vuoi riaprire "${item.title}"? Tornerà in stato "In attesa".`)) return;
+                                        if (!confirm("Confermi definitivamente la riapertura di questa voce?")) return;
+                                        handleStatusChange(item.id, "Pending");
+                                      }}
+                                      className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-sm text-[9px] font-black tracking-wide cursor-pointer opacity-100"
                                       title="Riapri scadenza"
                                     >
                                       Riapri
