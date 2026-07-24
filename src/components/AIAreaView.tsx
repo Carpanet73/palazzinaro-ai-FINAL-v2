@@ -8,7 +8,7 @@ import {
   Users, 
   Home, 
   AlertTriangle, 
-  CalendarClock, 
+  CalendarClock,
   ArrowRight, 
   Check, 
   AlertCircle,
@@ -33,7 +33,7 @@ interface AIAreaViewProps {
   setCurrentSection: (section: AppSection) => void;
 }
 
-type AiContextType = "contracts" | "condominiums" | "banks" | "tenants" | "properties" | "reminders" | "fast_closing";
+type AiContextType = "contracts" | "condominiums" | "banks" | "tenants" | "properties" | "reminders";
 
 export default function AIAreaView({
   onAddProperty,
@@ -145,7 +145,6 @@ export default function AIAreaView({
     { id: "tenants", label: "Inquilini", icon: Users, color: "text-blue-600 bg-blue-50 border-blue-200" },
     { id: "properties", label: "Immobili", icon: Home, color: "text-purple-600 bg-purple-50 border-purple-200" },
     { id: "reminders", label: "Solleciti", icon: AlertTriangle, color: "text-rose-600 bg-rose-50 border-rose-200" },
-    { id: "fast_closing", label: "Fast Closing", icon: CalendarClock, color: "text-teal-600 bg-teal-50 border-teal-200" },
   ] as const;
 
   const handleProcessAi = async () => {
@@ -277,18 +276,6 @@ export default function AIAreaView({
             suggestedLetterBody: parsedResult.suggestedLetterBody || ""
           });
           targetSection = "reminders";
-          break;
-
-        case "fast_closing":
-          await onAddClosingItem({
-            title: parsedResult.title || "Scadenza Estratta AI",
-            description: parsedResult.description || "",
-            amount: Number(parsedResult.amount || parsedResult.estimatedAmount) || 0,
-            dueDate: parsedResult.dueDate || new Date().toISOString().split("T")[0],
-            source: "manual",
-            status: "Pending"
-          });
-          targetSection = "fast_closing";
           break;
       }
 
