@@ -515,6 +515,8 @@ export default function App() {
       }
 
       // 5. Create Maintenance Ticket for simulation property
+      // CORREZIONE H — mai date fisse: calcolata da oggi, non scritta a mano
+      const maintDateStr = new Date().toISOString().split("T")[0];
       const maintDoc = await addDoc(collection(db, "maintenance"), {
         userId: user.uid,
         propertyId: propDoc.id,
@@ -524,7 +526,7 @@ export default function App() {
         status: "Completed",
         cost: 300,
         contractor: "Termoidraulica Roma S.r.l.",
-        date: "2026-07-05",
+        date: maintDateStr,
         splits: [
           { debtorName: "Bobo Vieri, Massimo Laucci", type: "owner", amount: 150 },
           { debtorName: "Giorgia Meloni", type: "tenant", amount: 150 }
@@ -539,10 +541,11 @@ export default function App() {
         title: `Quota Proprietari (Bobo Vieri, Massimo Laucci) - Manutenzione: 🛠️ Manutenzione Straordinaria Caldaia`,
         description: `Quota a carico dei proprietari (50%). Intervento ditta Termoidraulica Roma S.r.l.`,
         amount: 150,
-        dueDate: "2026-07-05",
+        dueDate: maintDateStr,
         source: "maintenance",
         sourceId: maintDoc.id,
         status: "Pending",
+        debtorType: "owner",
         createdAt: serverTimestamp()
       });
 
@@ -552,14 +555,65 @@ export default function App() {
         title: `Quota Inquilina (Giorgia Meloni) - Manutenzione: 🛠️ Manutenzione Straordinaria Caldaia`,
         description: `Quota a carico del conduttore (50%). Intervento ditta Termoidraulica Roma S.r.l.`,
         amount: 150,
-        dueDate: "2026-07-05",
+        dueDate: maintDateStr,
         source: "maintenance",
         sourceId: maintDoc.id,
         status: "Pending",
+        debtorType: "tenant",
         createdAt: serverTimestamp()
       });
 
-      showSuccess("Simulazione creata con successo! Creato immobile, inquilina (Giorgia Meloni), contratto (800€/mese), 6 scadenze di canone e manutenzione caldaia con ripartizione quote (150€ Proprietari, 150€ Inquilino).");
+      // 7. CORREZIONE L — Amministratori di prova + Condominio collegato all'immobile simulato
+      const admin1Doc = await addDoc(collection(db, "administrators"), {
+        userId: user.uid,
+        name: "Studio Amministrativo Bianchi",
+        phone: "06 5551234",
+        email: "info.studiobianchi.sim@example.com",
+        notes: "Amministratore di prova — gestisce il condominio dell'immobile simulato.",
+        createdAt: serverTimestamp()
+      });
+
+      const admin2Doc = await addDoc(collection(db, "administrators"), {
+        userId: user.uid,
+        name: "Geom. Paola Ferri",
+        phone: "06 5559876",
+        email: "paola.ferri.sim@example.com",
+        notes: "Amministratore di prova — non gestisce ancora nessun condominio.",
+        createdAt: serverTimestamp()
+      });
+
+      const condoSimDoc = await addDoc(collection(db, "condominiums"), {
+        userId: user.uid,
+        name: "🏢 Condominio Via del Corso (Simulazione)",
+        administrator: "Studio Amministrativo Bianchi",
+        administratorId: admin1Doc.id,
+        phone: "06 5551234",
+        email: "info.studiobianchi.sim@example.com",
+        notes: "Condominio di prova, collegato all'immobile simulato e allo Studio Amministrativo Bianchi.",
+        createdAt: serverTimestamp()
+      });
+
+      // Collega l'immobile simulato al condominio appena creato
+      await updateDoc(doc(db, "properties", propDoc.id), {
+        isCondoConstituted: true,
+        condominiumId: condoSimDoc.id
+      });
+
+      // Una spesa condominiale non pagata, per vedere il semaforo dell'amministratore colorarsi
+      await addDoc(collection(db, "fastClosing"), {
+        userId: user.uid,
+        propertyId: propDoc.id,
+        title: "Rata Condominiale IV Trimestre (Simulazione)",
+        description: "Spesa condominiale di prova, volutamente insoluta per testare il semaforo dell'amministratore.",
+        amount: 620,
+        dueDate: maintDateStr,
+        source: "condominium",
+        sourceId: condoSimDoc.id,
+        status: "Overdue",
+        createdAt: serverTimestamp()
+      });
+
+      showSuccess("Simulazione creata con successo! Creato immobile, inquilina (Giorgia Meloni), contratto (800€/mese), 6 scadenze di canone, manutenzione caldaia con ripartizione quote (150€ Proprietari, 150€ Inquilino), 2 amministratori di prova e un condominio collegato con una rata insoluta.");
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.CREATE, "properties");
       showError("Impossibile caricare la simulazione: " + errInfo.error);
