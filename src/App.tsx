@@ -2596,6 +2596,9 @@ export default function App() {
             legalCases={legalCases}
             movements={movements}
             maintenance={maintenance}
+            owners={owners}
+            onEditOwner={handleEditOwner}
+            onAddOwner={handleAddOwner}
             setCurrentSection={setCurrentSection}
             onViewTenantLedger={(tenantId) => {
               setSelectedTenantIdForLedger(tenantId);

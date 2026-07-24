@@ -21,7 +21,7 @@ import {
   AlertTriangle,
   Info
 } from "lucide-react";
-import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, AppSection, BankMovement, Maintenance } from "../types";
+import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, AppSection, BankMovement, Maintenance, Owner } from "../types";
 import { getTenantClassification } from "../lib/statusHelper";
 
 interface OwnersViewProps {
@@ -36,6 +36,11 @@ interface OwnersViewProps {
   maintenance?: Maintenance[];
   setCurrentSection: (section: AppSection) => void;
   onViewTenantLedger?: (tenantId: string) => void;
+  // CORREZIONE U — collega la pagina all'anagrafica REALE del proprietario (email, telefono,
+  // C.F., IBAN), che prima non era né mostrata né modificabile da nessuna parte
+  owners?: Owner[];
+  onEditOwner?: (id: string, data: Partial<Owner>) => Promise<void>;
+  onAddOwner?: (data: Omit<Owner, "id" | "userId" | "createdAt">) => Promise<string | null>;
 }
 
 interface OwnerInfo {
@@ -55,10 +60,59 @@ export default function OwnersView({
   movements = [],
   maintenance = [],
   setCurrentSection,
-  onViewTenantLedger
+  onViewTenantLedger,
+  owners = [],
+  onEditOwner,
+  onAddOwner
 }: OwnersViewProps) {
   const [selectedOwner, setSelectedOwner] = useState<OwnerInfo | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+
+  // CORREZIONE U — modulo di modifica dei dati anagrafici reali del proprietario
+  const [showOwnerEditModal, setShowOwnerEditModal] = useState(false);
+  const [editingRealOwnerName, setEditingRealOwnerName] = useState<string>("");
+  const [ownerFormName, setOwnerFormName] = useState("");
+  const [ownerFormFiscalCode, setOwnerFormFiscalCode] = useState("");
+  const [ownerFormEmail, setOwnerFormEmail] = useState("");
+  const [ownerFormPhone, setOwnerFormPhone] = useState("");
+  const [ownerFormAddress, setOwnerFormAddress] = useState("");
+  const [ownerFormIban, setOwnerFormIban] = useState("");
+  const [existingRealOwnerId, setExistingRealOwnerId] = useState<string | null>(null);
+
+  const handleOpenOwnerEdit = (name: string) => {
+    const cleanName = name.trim();
+    const match = owners.find(o => (o.name || "").toLowerCase().trim() === cleanName.toLowerCase());
+    setEditingRealOwnerName(cleanName);
+    setExistingRealOwnerId(match?.id || null);
+    setOwnerFormName(match?.name || cleanName);
+    setOwnerFormFiscalCode(match?.fiscalCode || "");
+    setOwnerFormEmail(match?.email || "");
+    setOwnerFormPhone(match?.phone || "");
+    setOwnerFormAddress(match?.address || "");
+    setOwnerFormIban(match?.iban || "");
+    setShowOwnerEditModal(true);
+  };
+
+  const handleSaveOwnerEdit = async () => {
+    if (!ownerFormName.trim() || !ownerFormFiscalCode.trim() || !ownerFormEmail.trim() || !ownerFormPhone.trim()) {
+      alert("Nome, Codice Fiscale/P.IVA, Email e Telefono sono obbligatori.");
+      return;
+    }
+    const payload = {
+      name: ownerFormName.trim(),
+      fiscalCode: ownerFormFiscalCode.trim().toUpperCase(),
+      email: ownerFormEmail.trim(),
+      phone: ownerFormPhone.trim(),
+      address: ownerFormAddress.trim(),
+      iban: ownerFormIban.trim()
+    };
+    if (existingRealOwnerId) {
+      await onEditOwner?.(existingRealOwnerId, payload);
+    } else {
+      await onAddOwner?.(payload as any);
+    }
+    setShowOwnerEditModal(false);
+  };
   const [activeLedgerTab, setActiveLedgerTab] = useState<"rent" | "condo" | "taxes" | "other" | "maintenance">("rent");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -561,6 +615,27 @@ export default function OwnersView({
                   <p className="text-[10px] text-slate-400 mt-1">
                     Composto da: {selectedOwner.individualNames.join(", ")}
                   </p>
+                )}
+                {/* CORREZIONE U — Modifica dati anagrafici reali (email, telefono, C.F., IBAN) */}
+                {selectedOwner.isCompound ? (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {selectedOwner.individualNames.map(n => (
+                      <button
+                        key={n}
+                        onClick={() => handleOpenOwnerEdit(n)}
+                        className="text-[9px] font-bold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-md transition-colors"
+                      >
+                        ✏️ Modifica dati di {n}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleOpenOwnerEdit(selectedOwner.name)}
+                    className="mt-2 text-[9px] font-bold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-md transition-colors"
+                  >
+                    ✏️ Modifica Dati Proprietario
+                  </button>
                 )}
               </div>
             </div>
@@ -1555,6 +1630,112 @@ export default function OwnersView({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* CORREZIONE U — Modulo Modifica/Crea Dati Anagrafici Reali del Proprietario */}
+      {showOwnerEditModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="font-sans font-bold text-base">
+                {existingRealOwnerId ? "Modifica Dati Proprietario" : "Completa Anagrafica Proprietario"}
+              </h3>
+              <button onClick={() => setShowOwnerEditModal(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {!existingRealOwnerId && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  ⚠️ "{editingRealOwnerName}" esiste finora solo come nome scritto sull'immobile, senza un'anagrafica reale collegata. Compilando e salvando qui, creerai il suo record reale (email, telefono, ecc.).
+                </p>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Nome / Ragione Sociale *
+                </label>
+                <input
+                  type="text"
+                  value={ownerFormName}
+                  onChange={(e) => setOwnerFormName(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 font-bold"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Codice Fiscale / P.IVA *
+                  </label>
+                  <input
+                    type="text"
+                    value={ownerFormFiscalCode}
+                    onChange={(e) => setOwnerFormFiscalCode(e.target.value.toUpperCase())}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 font-mono uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Telefono *
+                  </label>
+                  <input
+                    type="tel"
+                    value={ownerFormPhone}
+                    onChange={(e) => setOwnerFormPhone(e.target.value)}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={ownerFormEmail}
+                  onChange={(e) => setOwnerFormEmail(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Indirizzo (facoltativo)
+                </label>
+                <input
+                  type="text"
+                  value={ownerFormAddress}
+                  onChange={(e) => setOwnerFormAddress(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  IBAN (facoltativo)
+                </label>
+                <input
+                  type="text"
+                  value={ownerFormIban}
+                  onChange={(e) => setOwnerFormIban(e.target.value.toUpperCase())}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 font-mono uppercase"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setShowOwnerEditModal(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleSaveOwnerEdit}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-sm"
+                >
+                  Salva
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
