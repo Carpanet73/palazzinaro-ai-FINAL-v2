@@ -85,7 +85,7 @@ export default function AIAreaView({
       setCameraActive(true);
     } catch (err: any) {
       console.error("Camera access error:", err);
-      setError("Impossibile avviare la webcam: " + err.message + ". Puoi comunque scegliere o scattare una foto con la fotocamera del tuo cellulare cliccando su 'Scatta o Scegli Foto'.");
+      setError("Impossibile avviare la fotocamera: " + err.message + ". Puoi comunque scegliere o scattare una foto con la fotocamera del tuo cellulare cliccando su 'Scatta o Scegli Foto'.");
     }
   };
 
@@ -384,7 +384,7 @@ export default function AIAreaView({
                   className="flex items-center justify-center space-x-2 p-4 border border-dashed border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/20 rounded-xl transition-all text-slate-700 text-xs font-semibold group cursor-pointer"
                 >
                   <Camera size={16} className="text-slate-400 group-hover:text-indigo-600 transition-colors" />
-                  <span>Scatta con Webcam</span>
+                  <span>Scatta con Fotocamera</span>
                 </button>
 
                 {/* Input file and button styled together */}
