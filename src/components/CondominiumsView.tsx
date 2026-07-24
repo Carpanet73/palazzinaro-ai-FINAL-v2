@@ -27,6 +27,18 @@ interface CondominiumsViewProps {
   registerAddHandler?: (fn: () => void) => void;
 }
 
+// CORREZIONE L — Avatar "silhouette professionale" per gli Amministratori, in stile
+// segnaposto profilo classico ma disegnato con i colori del design system dell'app
+// (indigo/slate), non nero puro. Vettoriale (SVG): sempre nitido a ogni dimensione.
+function PersonAvatarIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} fill="currentColor" aria-hidden="true">
+      <circle cx="50" cy="36" r="19" />
+      <path d="M50 58c-21 0-36 14-36 34v3a2 2 0 0 0 2 2h68a2 2 0 0 0 2-2v-3c0-20-15-34-36-34z" />
+    </svg>
+  );
+}
+
 export default function CondominiumsView({
   condominiums,
   properties,
@@ -593,8 +605,8 @@ export default function CondominiumsView({
         <div className="space-y-4">
           {administrators.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto">
-              <div className="bg-slate-50 text-indigo-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-indigo-50/50">
-                <User size={28} />
+              <div className="bg-indigo-50 text-indigo-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-indigo-100 overflow-hidden">
+                <PersonAvatarIcon className="w-10 h-10" />
               </div>
               <h3 className="font-bold text-slate-800 mb-1.5">Nessun amministratore creato</h3>
               <p className="text-xs text-slate-500 mb-4">Crea il primo amministratore per iniziare a collegarlo ai condomini.</p>
@@ -616,8 +628,8 @@ export default function CondominiumsView({
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <span className="relative w-12 h-12 rounded-full bg-slate-100 text-indigo-600 flex items-center justify-center shrink-0 border border-slate-200">
-                        <User size={22} strokeWidth={2} />
+                      <span className="relative w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100 overflow-hidden">
+                        <PersonAvatarIcon className="w-9 h-9" />
                       </span>
                       <div>
                         <h4 className="font-black text-sm text-slate-900 leading-tight">{admin.name}</h4>
