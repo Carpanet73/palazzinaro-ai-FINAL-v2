@@ -111,7 +111,15 @@ export default function CondominiumsView({
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [expenseTitle, setExpenseTitle] = useState("");
   const [expenseAmount, setExpenseAmount] = useState<number>(0);
-  const [expenseDueDate, setExpenseDueDate] = useState("");
+  // CORREZIONE N — propone di default il mese/anno corrente, calcolato da new Date()
+  // (mai un valore fisso scritto), così l'utente vede subito un mese sensato precompilato
+  const getDefaultDueMonth = () => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    return `${yyyy}-${mm}-05`;
+  };
+  const [expenseDueDate, setExpenseDueDate] = useState(getDefaultDueMonth());
   const [expenseSplitTenant, setExpenseSplitTenant] = useState<number>(80); // Default 80% charged to tenant
   const [splitMethod, setSplitMethod] = useState<"percentage" | "nominal" | "millesimi">("percentage");
   const [fixedTenantAmount, setFixedTenantAmount] = useState<number>(0);
@@ -451,7 +459,7 @@ export default function CondominiumsView({
 
       setExpenseTitle("");
       setExpenseAmount(0);
-      setExpenseDueDate("");
+      setExpenseDueDate(getDefaultDueMonth());
       setFixedTenantAmount(0);
       setSplitMethod("percentage");
       setShowAddExpense(false);
