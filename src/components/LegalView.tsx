@@ -71,8 +71,7 @@ export default function LegalView({
   const [draggedCaseId, setDraggedCaseId] = useState<string | null>(null);
   const [dragOverLawyerId, setDragOverLawyerId] = useState<string | null>(null);
   const [mergingCaseId, setMergingCaseId] = useState<string | null>(null);
-  const [disconnectCaseTarget, setDisconnectCaseTarget] = useState<{ id: string; title: string } | null>(null);
-  const [disconnectConfirmText, setDisconnectConfirmText] = useState("");
+  const [disconnectCaseTarget, setDisconnectCaseTarget] = useState<{ id: string; title: string; lawyerName: string } | null>(null);
 
   const unassignedCases = legalCases.filter(c => !c.assignedLawyerId);
   const assignedCases = legalCases.filter(c => !!c.assignedLawyerId);
@@ -98,13 +97,8 @@ export default function LegalView({
 
   const handleConfirmCaseDisconnect = async () => {
     if (!disconnectCaseTarget) return;
-    if (disconnectConfirmText.trim().toLowerCase() !== disconnectCaseTarget.title.trim().toLowerCase()) {
-      alert("Il titolo scritto non corrisponde. Scioglimento annullato per sicurezza.");
-      return;
-    }
     await onUpdateLegalCase?.(disconnectCaseTarget.id, { assignedLawyerId: "", assignedLawyerName: "" });
     setDisconnectCaseTarget(null);
-    setDisconnectConfirmText("");
   };
 
   const handleOpenAddModal = () => {
@@ -555,8 +549,7 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
                         </div>
                         <button
                           onClick={() => {
-                            setDisconnectCaseTarget({ id: lawsuit.id, title: lawsuit.title });
-                            setDisconnectConfirmText("");
+                            setDisconnectCaseTarget({ id: lawsuit.id, title: lawsuit.title, lawyerName: lawsuit.assignedLawyerName || "questo studio" });
                           }}
                           className="text-[10px] text-rose-500 hover:text-rose-700 font-bold"
                         >
@@ -960,19 +953,11 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
             </div>
             <div className="p-6 space-y-4">
               <p className="text-xs text-slate-600 leading-relaxed">
-                Per confermare che vuoi davvero staccare questa pratica dallo studio legale assegnato, scrivi qui sotto il titolo esatto della pratica:
+                Stai per staccare la pratica <strong className="text-slate-900">"{disconnectCaseTarget.title}"</strong> da <strong className="text-slate-900">{disconnectCaseTarget.lawyerName}</strong>.
               </p>
-              <p className="text-sm font-black text-slate-900 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                {disconnectCaseTarget.title}
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Potrai sempre riassegnarla in seguito trascinandola di nuovo su uno studio legale. Confermi di voler procedere?
               </p>
-              <input
-                type="text"
-                autoFocus
-                value={disconnectConfirmText}
-                onChange={(e) => setDisconnectConfirmText(e.target.value)}
-                placeholder="Scrivi qui il titolo per confermare"
-                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-rose-500"
-              />
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   onClick={() => setDisconnectCaseTarget(null)}
@@ -982,10 +967,9 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
                 </button>
                 <button
                   onClick={handleConfirmCaseDisconnect}
-                  disabled={disconnectConfirmText.trim().toLowerCase() !== disconnectCaseTarget.title.trim().toLowerCase()}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black shadow-sm"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-sm"
                 >
-                  Sciogli Definitivamente
+                  Sì, Sciogli l'Assegnazione
                 </button>
               </div>
             </div>
