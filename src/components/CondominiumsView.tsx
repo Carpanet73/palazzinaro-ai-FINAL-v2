@@ -1059,15 +1059,18 @@ export default function CondominiumsView({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
-                            Data Scadenza Rata *
+                            Mese di Competenza (Fast Closing) *
                           </label>
                           <input
-                            type="date"
+                            type="month"
                             required
-                            value={expenseDueDate}
-                            onChange={(e) => setExpenseDueDate(e.target.value)}
+                            value={expenseDueDate ? expenseDueDate.slice(0, 7) : ""}
+                            onChange={(e) => setExpenseDueDate(e.target.value ? `${e.target.value}-05` : "")}
                             className="w-full text-xs border border-slate-200 bg-white rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500 font-mono"
                           />
+                          <p className="text-[9px] text-slate-400 mt-1">
+                            Scegli solo il mese: comparirà nel Fast Closing di quel mese, il giorno esatto non è rilevante.
+                          </p>
                         </div>
                         <div>
                           {/* Metodo di Ripartizione Toggles */}
