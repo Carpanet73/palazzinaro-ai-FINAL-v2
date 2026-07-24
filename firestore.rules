@@ -65,6 +65,23 @@ service cloud.firestore {
         && request.resource.data.userId == resource.data.userId;
     }
 
+    // CORREZIONE M — mancavano "owners" e "administrators": senza queste regole,
+    // Firestore rifiutava in silenzio ogni scrittura su queste due collezioni,
+    // anche se il codice dell'app era corretto.
+    match /owners/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /administrators/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update, delete: if isOwner()
+        && request.resource.data.userId == resource.data.userId;
+    }
+
     match /condominiums/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
