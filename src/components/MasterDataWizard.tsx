@@ -473,6 +473,7 @@ export default function MasterDataWizard({
     if (isCondominium && condoMode === "new") {
       payload.condominium = {
         name: condoName.trim(),
+        address: propAddress.trim(), // CORREZIONE P — sempre uguale all'indirizzo dell'immobile
         administrator: condoAdmin.trim() || undefined,
         phone: condoPhone.trim() || undefined,
         email: condoEmail.trim() || undefined,

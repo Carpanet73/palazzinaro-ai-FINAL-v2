@@ -174,6 +174,10 @@ export interface Condominium {
   id: string;
   userId: string;
   name: string;
+  // CORREZIONE P — un condominio è un'entità giuridica legata a un edificio fisico:
+  // il suo indirizzo deve coincidere con quello degli immobili che vi appartengono,
+  // non essere un dato scollegato inserito a mano.
+  address?: string;
   administrator?: string; // legacy: testo libero, mantenuto per i condomini creati prima della CORREZIONE L
   administratorId?: string; // CORREZIONE L — collegamento reale all'entità Administrator
   phone?: string;

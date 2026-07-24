@@ -1333,9 +1333,11 @@ export default function App() {
         }
       }
       showSuccess("Condominio aggiunto e rate sincronizzate!");
+      return condoDoc.id; // CORREZIONE P — serve per collegarlo subito all'immobile da cui è stato creato
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.CREATE, "condominiums");
       showError("Impossibile salvare il condominio: " + errInfo.error);
+      return null;
     }
   };
 
@@ -2435,6 +2437,7 @@ export default function App() {
             onEditProperty={handleEditProperty}
             onDeleteProperty={handleDeleteProperty}
             onOpenMasterWizard={() => setMasterWizardOpen(true)}
+            onAddCondominium={handleAddCondominium}
             maintenance={maintenance}
           />
         )}

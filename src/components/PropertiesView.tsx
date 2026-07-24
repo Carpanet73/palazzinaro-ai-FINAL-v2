@@ -50,6 +50,8 @@ interface PropertiesViewProps {
   maintenance?: Maintenance[];
   // CORREZIONE C — callback per aprire il Wizard unico globale invece del form interno
   onOpenMasterWizard?: () => void;
+  // CORREZIONE P — creare un condominio al volo, con indirizzo bloccato su quello dell'immobile
+  onAddCondominium?: (data: any) => Promise<string | null | void>;
 }
 
 export default function PropertiesView({
@@ -74,6 +76,7 @@ export default function PropertiesView({
   onEditProperty,
   onDeleteProperty,
   onOpenMasterWizard, // CORREZIONE C — apre wizard unico
+  onAddCondominium, // CORREZIONE P
   maintenance = []
 }: PropertiesViewProps) {
   const [showModal, setShowModal] = useState(false);
@@ -132,6 +135,10 @@ export default function PropertiesView({
   const [owner, setOwner] = useState("");
   const [isBareOwnership, setIsBareOwnership] = useState(false);
   const [isCondoConstituted, setIsCondoConstituted] = useState(false);
+  // CORREZIONE P — creazione condominio al volo, indirizzo sempre = indirizzo immobile
+  const [showInlineCondoCreate, setShowInlineCondoCreate] = useState(false);
+  const [inlineCondoName, setInlineCondoName] = useState("");
+  const [condoAddressMismatchWarning, setCondoAddressMismatchWarning] = useState<string | null>(null);
   const [condominiumId, setCondominiumId] = useState("");
 
   // Millesimi and utility meters state
@@ -2121,7 +2128,33 @@ export default function PropertiesView({
                   </label>
                   <select
                     value={condominiumId}
-                    onChange={(e) => setCondominiumId(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__new__") {
+                        setShowInlineCondoCreate(true);
+                        setInlineCondoName("");
+                        setCondoAddressMismatchWarning(null);
+                        return;
+                      }
+                      setCondominiumId(val);
+                      // CORREZIONE P — un condominio è legato a un edificio fisico: l'indirizzo
+                      // deve coincidere con quello dell'immobile. Se non coincide, avviso subito
+                      // (non blocco del tutto, per non impedire correzioni manuali di refusi minori).
+                      const selectedCondo = condominiums.find(c => c.id === val);
+                      if (selectedCondo?.address && address) {
+                        const a = selectedCondo.address.toLowerCase().trim();
+                        const b = address.toLowerCase().trim();
+                        if (a !== b && !a.includes(b) && !b.includes(a)) {
+                          setCondoAddressMismatchWarning(
+                            `⚠️ Attenzione: questo condominio risulta all'indirizzo "${selectedCondo.address}", diverso da quello di questo immobile ("${address}"). Un condominio corrisponde a un edificio fisico: verifica di aver selezionato quello giusto.`
+                          );
+                        } else {
+                          setCondoAddressMismatchWarning(null);
+                        }
+                      } else {
+                        setCondoAddressMismatchWarning(null);
+                      }
+                    }}
                     required={isCondoConstituted}
                     className="w-full text-sm border border-slate-200 bg-white rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 transition-all font-bold text-slate-800"
                   >
@@ -2131,10 +2164,66 @@ export default function PropertiesView({
                         {c.name} {c.administrator ? `(Amministratore: ${c.administrator})` : ""}
                       </option>
                     ))}
+                    <option value="__new__">➕ Crea nuovo condominio per questo immobile…</option>
                   </select>
-                  {condominiums.length === 0 && (
+
+                  {condoAddressMismatchWarning && (
+                    <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 mt-1.5 leading-relaxed">
+                      {condoAddressMismatchWarning}
+                    </p>
+                  )}
+
+                  {showInlineCondoCreate && (
+                    <div className="mt-2 p-3 bg-white border border-indigo-200 rounded-xl space-y-2">
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                        Nome Nuovo Condominio
+                      </label>
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Es: Condominio Via Roma 5"
+                        value={inlineCondoName}
+                        onChange={(e) => setInlineCondoName(e.target.value)}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-hidden focus:border-indigo-500"
+                      />
+                      <p className="text-[10px] text-slate-400">
+                        Indirizzo: <strong>{address || "(inserisci prima l'indirizzo dell'immobile qui sopra)"}</strong> — coincide sempre con quello dell'immobile, non modificabile qui.
+                      </p>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowInlineCondoCreate(false)}
+                          className="px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 rounded-lg border border-slate-200"
+                        >
+                          Annulla
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!inlineCondoName.trim() || !address.trim() || !onAddCondominium) {
+                              alert("Inserisci un nome per il condominio (e l'indirizzo dell'immobile qui sopra).");
+                              return;
+                            }
+                            const newId = await onAddCondominium({
+                              name: inlineCondoName.trim(),
+                              address: address.trim()
+                            });
+                            if (newId) {
+                              setCondominiumId(newId);
+                            }
+                            setShowInlineCondoCreate(false);
+                          }}
+                          className="px-3 py-1.5 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
+                        >
+                          Crea e Collega
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {condominiums.length === 0 && !showInlineCondoCreate && (
                     <p className="text-[10px] text-amber-600">
-                      Nessun condominio esistente nel sistema. Creane uno nella sezione Condomini prima di procedere.
+                      Nessun condominio esistente nel sistema. Usa "➕ Crea nuovo condominio" qui sopra.
                     </p>
                   )}
                 </div>

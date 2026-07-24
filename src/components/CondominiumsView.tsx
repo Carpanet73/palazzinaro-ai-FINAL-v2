@@ -64,6 +64,7 @@ export default function CondominiumsView({
 
   // Form Fields for Condominium
   const [name, setName] = useState("");
+  const [condoAddress, setCondoAddress] = useState(""); // CORREZIONE P
   const [administrator, setAdministrator] = useState("");
   const [administratorId, setAdministratorId] = useState(""); // CORREZIONE L
   const [phone, setPhone] = useState("");
@@ -229,6 +230,7 @@ export default function CondominiumsView({
   const handleOpenAddModal = () => {
     setEditingCondo(null);
     setName("");
+    setCondoAddress("");
     setAdministrator("");
     setAdministratorId("");
     setPhone("");
@@ -335,6 +337,7 @@ export default function CondominiumsView({
   const handleOpenEditModal = (condo: Condominium) => {
     setEditingCondo(condo);
     setName(condo.name);
+    setCondoAddress(condo.address || "");
     setAdministrator(condo.administrator || "");
     setAdministratorId(condo.administratorId || "");
     setPhone(condo.phone || "");
@@ -403,6 +406,7 @@ export default function CondominiumsView({
 
     const payload = {
       name,
+      address: condoAddress,
       administrator: linkedAdminName,
       administratorId: administratorId || null,
       phone,
@@ -1459,6 +1463,22 @@ export default function CondominiumsView({
                   onChange={(e) => setName(e.target.value)}
                   className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 font-bold"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Indirizzo Edificio
+                </label>
+                <input
+                  type="text"
+                  placeholder="Deve coincidere con l'indirizzo degli immobili che vi appartengono"
+                  value={condoAddress}
+                  onChange={(e) => setCondoAddress(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Un condominio corrisponde a un edificio fisico: l'indirizzo deve essere lo stesso di tutti gli immobili collegati.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
