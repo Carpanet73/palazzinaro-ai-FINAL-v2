@@ -366,6 +366,46 @@ export default function OwnersView({
     return deduplicated;
   };
 
+  // CORREZIONE V — Contatti reali (email/telefono) e semaforo di adempimento per ogni
+  // proprietario: stesso identico meccanismo già usato per gli Amministratori (soglie di
+  // spesa non pagata), applicato qui alle quote di manutenzione a carico del proprietario.
+  const OWNER_DEBT_WARNING_THRESHOLD = 500;
+  const OWNER_DEBT_CRITICAL_THRESHOLD = 1500;
+
+  const getOwnerContactAndStatus = (owner: OwnerInfo) => {
+    // Per una comproprietà, prova a risolvere i contatti del primo nominativo con
+    // un'anagrafica reale trovata (spesso i co-proprietari condividono la gestione).
+    const namesToCheck = owner.isCompound ? owner.individualNames : [owner.name];
+    let realOwner: Owner | undefined;
+    for (const n of namesToCheck) {
+      realOwner = owners.find(o => (o.name || "").toLowerCase().trim() === n.toLowerCase().trim());
+      if (realOwner) break;
+    }
+
+    const ownerProps = getPropertiesForOwner(owner);
+    const ownerPropIds = new Set(ownerProps.map(p => p.id));
+    const unpaidDebt = fastClosing
+      .filter(fc =>
+        fc.source === "maintenance" &&
+        fc.debtorType === "owner" &&
+        (fc.status === "Pending" || fc.status === "Overdue") &&
+        fc.propertyId && ownerPropIds.has(fc.propertyId)
+      )
+      .reduce((sum, fc) => sum + fc.amount, 0);
+
+    let semaforo: "green" | "yellow" | "red" = "green";
+    if (unpaidDebt >= OWNER_DEBT_CRITICAL_THRESHOLD) semaforo = "red";
+    else if (unpaidDebt >= OWNER_DEBT_WARNING_THRESHOLD) semaforo = "yellow";
+
+    return {
+      email: realOwner?.email || null,
+      phone: realOwner?.phone || null,
+      hasRealRecord: !!realOwner,
+      unpaidDebt,
+      semaforo
+    };
+  };
+
   // Properties belonging to the currently selected owner
   const ownerProperties = useMemo(() => {
     if (!selectedOwner) return [];
@@ -527,6 +567,7 @@ export default function OwnersView({
               {filteredOwners.map((owner, idx) => {
                 const ownerProps = getPropertiesForOwner(owner);
                 const rentedCount = ownerProps.filter(p => p.status === "Rented").length;
+                const contactStatus = getOwnerContactAndStatus(owner);
                 
                 // Calculate total owner monthly income
                 let ownerMonthlyIncome = 0;
@@ -553,18 +594,43 @@ export default function OwnersView({
                         }`}>
                           {owner.isCompound ? <Users size={20} /> : <User size={20} />}
                         </div>
-                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                          owner.isCompound 
-                            ? "bg-amber-100 text-amber-800" 
-                            : "bg-indigo-100 text-indigo-800"
-                        }`}>
-                          {owner.isCompound ? "👥 Comproprietà" : "👤 Proprietario Singolo"}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                            owner.isCompound 
+                              ? "bg-amber-100 text-amber-800" 
+                              : "bg-indigo-100 text-indigo-800"
+                          }`}>
+                            {owner.isCompound ? "👥 Comproprietà" : "👤 Proprietario Singolo"}
+                          </span>
+                          <span
+                            className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                              contactStatus.semaforo === "green" ? "bg-emerald-500" : contactStatus.semaforo === "yellow" ? "bg-amber-400" : "bg-rose-500 animate-pulse"
+                            }`}
+                            title={
+                              contactStatus.semaforo === "green"
+                                ? "Regolare con le spese a suo carico"
+                                : contactStatus.semaforo === "yellow"
+                                ? `Attenzione: €${contactStatus.unpaidDebt.toFixed(2)} di spese non pagate`
+                                : `Critico: €${contactStatus.unpaidDebt.toFixed(2)} di spese non pagate`
+                            }
+                          />
+                        </div>
                       </div>
 
                       <h3 className="font-sans font-black text-slate-900 text-sm group-hover:text-indigo-600 transition-colors">
                         {owner.name}
                       </h3>
+
+                      <div className="mt-1.5 space-y-0.5 text-[10px] text-slate-500">
+                        <div className="flex items-center gap-1">
+                          <span>📞</span>
+                          <span>{contactStatus.phone || "Nessun telefono in anagrafica"}</span>
+                        </div>
+                        <div className="flex items-center gap-1 truncate">
+                          <span>✉️</span>
+                          <span className="truncate">{contactStatus.email || "Nessuna email in anagrafica"}</span>
+                        </div>
+                      </div>
                       
                       <div className="mt-4 space-y-2 text-xs">
                         <div className="flex justify-between text-slate-500">
@@ -607,10 +673,38 @@ export default function OwnersView({
                 {selectedOwner.isCompound ? <Users size={28} /> : <User size={28} />}
               </div>
               <div>
-                <span className="text-[10px] uppercase font-black text-indigo-400 tracking-wider">
-                  {selectedOwner.isCompound ? "Comproprietà Selezionata" : "Proprietario Singolo"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase font-black text-indigo-400 tracking-wider">
+                    {selectedOwner.isCompound ? "Comproprietà Selezionata" : "Proprietario Singolo"}
+                  </span>
+                  {(() => {
+                    const cs = getOwnerContactAndStatus(selectedOwner);
+                    return (
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                          cs.semaforo === "green" ? "bg-emerald-500" : cs.semaforo === "yellow" ? "bg-amber-400" : "bg-rose-500 animate-pulse"
+                        }`}
+                        title={
+                          cs.semaforo === "green"
+                            ? "Regolare con le spese a suo carico"
+                            : cs.semaforo === "yellow"
+                            ? `Attenzione: €${cs.unpaidDebt.toFixed(2)} di spese non pagate`
+                            : `Critico: €${cs.unpaidDebt.toFixed(2)} di spese non pagate`
+                        }
+                      />
+                    );
+                  })()}
+                </div>
                 <h3 className="text-lg font-sans font-black mt-0.5">{selectedOwner.name}</h3>
+                {(() => {
+                  const cs = getOwnerContactAndStatus(selectedOwner);
+                  return (
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-slate-400 mt-1">
+                      <span>📞 {cs.phone || "Nessun telefono"}</span>
+                      <span>✉️ {cs.email || "Nessuna email"}</span>
+                    </div>
+                  );
+                })()}
                 {selectedOwner.isCompound && (
                   <p className="text-[10px] text-slate-400 mt-1">
                     Composto da: {selectedOwner.individualNames.join(", ")}
