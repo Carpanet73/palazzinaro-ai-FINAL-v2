@@ -144,7 +144,9 @@ export default function AIAreaView({
     { id: "banks", label: "Banche", icon: Landmark, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
     { id: "tenants", label: "Inquilini", icon: Users, color: "text-blue-600 bg-blue-50 border-blue-200" },
     { id: "properties", label: "Immobili", icon: Home, color: "text-purple-600 bg-purple-50 border-purple-200" },
-    { id: "reminders", label: "Solleciti", icon: AlertTriangle, color: "text-rose-600 bg-rose-50 border-rose-200" },
+    // CORREZIONE S — Rimossi "Solleciti" e "Fast Closing": nessuno dei due può mai essere
+    // creato manualmente/via AI. Sono registri rigidi che si popolano SOLO in automatico
+    // dalle azioni compiute nelle rispettive pagine (stessa regola vale per entrambi).
   ] as const;
 
   const handleProcessAi = async () => {
@@ -263,19 +265,6 @@ export default function AIAreaView({
             });
           }
           targetSection = "banks";
-          break;
-
-        case "reminders":
-          await onAddReminder({
-            tenantId: parsedResult.tenantId || "",
-            tenantName: parsedResult.tenantName || "Inquilino",
-            amount: Number(parsedResult.amount) || 0,
-            reason: parsedResult.reason || "Sollecito Canone",
-            dueDate: parsedResult.dueDate || new Date().toISOString().split("T")[0],
-            status: "Pending",
-            suggestedLetterBody: parsedResult.suggestedLetterBody || ""
-          });
-          targetSection = "reminders";
           break;
       }
 

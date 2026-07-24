@@ -64,6 +64,24 @@ export default function FastClosingView({
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>("current"); // "current", "2026-06", "2026-05"
 
+  // CORREZIONE S — etichetta SEMPRE calcolata da new Date(), mai un mese scritto fisso.
+  // Usata sia nell'intestazione ben visibile sia nel tasto di chiusura e nella stampa.
+  const italianMonthsFull = [
+    "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+    "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+  ];
+  const currentFastClosingLabel = useMemo(() => {
+    if (selectedMonthYear === "current") {
+      const now = new Date();
+      return `Fast Closing ${italianMonthsFull[now.getMonth()]} ${now.getFullYear()}`;
+    }
+    const [y, m] = selectedMonthYear.split("-").map(Number);
+    if (y && m) {
+      return `Fast Closing ${italianMonthsFull[m - 1]} ${y}`;
+    }
+    return `Fast Closing ${selectedMonthYear}`;
+  }, [selectedMonthYear]);
+
   // Statement Import PDF/Photo OCR states
   const [showImportModal, setShowImportModal] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -99,7 +117,7 @@ export default function FastClosingView({
   const [showClosingSummary, setShowClosingSummary] = useState(false);
   const [closedItemsCount, setClosedItemsCount] = useState(0);
   const [reproposedItemsList, setReproposedItemsList] = useState<string[]>([]);
-  const [forceUnlock, setForceUnlock] = useState(false);
+  // CORREZIONE S — rimosso "forceUnlock": il giorno 20 è un limite assoluto, mai bypassabile
 
   // Form fields for new item
   const [title, setTitle] = useState("");
@@ -890,9 +908,9 @@ export default function FastClosingView({
     window.print();
   };
 
-  // Check if today is before the 20th to disable the manual closing button (bypassable with admin override state)
+  // CORREZIONE S — limite assoluto: mai chiudibile manualmente prima del giorno 20, senza eccezioni
   const currentDayOfMonth = new Date().getDate();
-  const isClosingButtonDisabled = currentDayOfMonth < 20 && !forceUnlock;
+  const isClosingButtonDisabled = currentDayOfMonth < 20;
 
   return (
     <div className="space-y-6" id="fast-closing-view-container">
@@ -905,7 +923,7 @@ export default function FastClosingView({
             <p className="text-xs text-slate-500 mt-1">Generato il: {new Date().toLocaleDateString("it-IT")}</p>
           </div>
           <div className="text-right">
-            <span className="text-xs font-mono">Periodo: {selectedMonthYear === "current" ? "Luglio 2026" : selectedMonthYear}</span>
+            <span className="text-xs font-mono">Periodo: {currentFastClosingLabel}</span>
           </div>
         </div>
 
@@ -945,6 +963,15 @@ export default function FastClosingView({
         </div>
       </div>
 
+      {/* CORREZIONE S — Intestazione ben visibile: su quale Fast Closing si sta lavorando */}
+      <div className="no-print bg-slate-950 text-white rounded-2xl px-6 py-4 flex items-center gap-3 shadow-md">
+        <span className="text-2xl">📅</span>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Stai modificando</p>
+          <h1 className="text-lg font-black uppercase tracking-wide text-white">{currentFastClosingLabel}</h1>
+        </div>
+      </div>
+
       {/* Main View Screen Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 pb-5 no-print">
         <div>
@@ -960,15 +987,6 @@ export default function FastClosingView({
           >
             <Printer size={14} />
             <span>Stampa Registro</span>
-          </button>
-
-          <button
-            onClick={handleOpenAddModal}
-            id="add-deadline-btn"
-            className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs px-5 py-3 rounded-xl active:transition-all shadow-md active:shadow-xs"
-          >
-            <Plus size={15} />
-            <span>Nuova Scadenza Manuale</span>
           </button>
 
           <button
@@ -1041,22 +1059,8 @@ export default function FastClosingView({
               }`}
             >
               <span>{isClosingButtonDisabled ? "🔒" : "🔓"}</span>
-              <span>Chiudi Fast Closing Luglio</span>
+              <span>Chiudi {currentFastClosingLabel}</span>
             </button>
-            
-            {currentDayOfMonth < 20 && (
-              <label className="flex items-center space-x-2 cursor-pointer bg-slate-900 border border-slate-800 px-2.5 py-1.5 rounded-lg select-none hover:bg-slate-850 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={forceUnlock}
-                  onChange={(e) => setForceUnlock(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 bg-slate-950 border-slate-700 h-3.5 w-3.5"
-                />
-                <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
-                  Forza Sblocco Admin (Sperimentale)
-                </span>
-              </label>
-            )}
           </div>
         </div>
       )}

@@ -2635,7 +2635,7 @@ export default function App() {
           - Area Legale → crea un nuovo Studio Legale (CORREZIONE Q)
           - Dashboard/Area AI → nascosto: in queste pagine non si "aggiunge" nulla
           - Altre pagine → fallback sulla procedura guidata completa (comportamento precedente) */}
-      {currentSection !== "dashboard" && currentSection !== "ai_area" && (
+      {currentSection !== "dashboard" && currentSection !== "ai_area" && currentSection !== "fast_closing" && (
       <UniversalAddButton
         label={
           currentSection === "properties" ? "Aggiungi Immobile" :
