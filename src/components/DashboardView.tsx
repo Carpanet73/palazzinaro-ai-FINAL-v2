@@ -265,6 +265,60 @@ export default function DashboardView({
     return pendingFastClosing.reduce((sum, item) => sum + (item.amount || 0), 0);
   }, [pendingFastClosing]);
 
+  // ── CORREZIONE X — Due coefficienti di indebitamento del Proprietario ──
+  // 1) Soglia per singolo immobile: oltre questa cifra di spese non pagate (condominio +
+  //    manutenzioni a suo carico) su UN SOLO immobile, scatta comunque l'avviso.
+  // 2) Soglia complessiva: oltre (soglia singola × 80%) moltiplicato per il numero di
+  //    immobili posseduti, scatta l'avviso anche se nessun singolo immobile la supera da solo.
+  // Basta sforare UNA delle due per generare il promemoria — sono soglie indipendenti,
+  // non cumulative tra loro.
+  const OWNER_PROPERTY_DEBT_THRESHOLD = 1000;
+  const OWNER_AGGREGATE_COEFFICIENT = OWNER_PROPERTY_DEBT_THRESHOLD * 0.8; // 800
+
+  const ownerDebtAlerts = useMemo(() => {
+    const byOwner = new Map<string, { properties: Array<{ property: Property; debt: number }> }>();
+
+    properties.forEach(p => {
+      const ownerKey = (p.owner || "").trim();
+      if (!ownerKey) return;
+
+      const debt = fastClosing
+        .filter(fc =>
+          fc.propertyId === p.id &&
+          (fc.status === "Pending" || fc.status === "Overdue") &&
+          (fc.source === "condominium" || (fc.source === "maintenance" && fc.debtorType === "owner"))
+        )
+        .reduce((sum, fc) => sum + fc.amount, 0);
+
+      if (!byOwner.has(ownerKey)) byOwner.set(ownerKey, { properties: [] });
+      byOwner.get(ownerKey)!.properties.push({ property: p, debt });
+    });
+
+    const alerts: Array<{
+      ownerName: string;
+      totalDebt: number;
+      numProperties: number;
+      aggregateThreshold: number;
+      exceedsAggregate: boolean;
+      worstProperty: { property: Property; debt: number };
+    }> = [];
+
+    byOwner.forEach((entry, ownerName) => {
+      const numProperties = entry.properties.length;
+      const totalDebt = entry.properties.reduce((s, e) => s + e.debt, 0);
+      const aggregateThreshold = OWNER_AGGREGATE_COEFFICIENT * numProperties;
+      const exceedsAggregate = totalDebt >= aggregateThreshold;
+      const worstProperty = [...entry.properties].sort((a, b) => b.debt - a.debt)[0];
+      const exceedsSingle = worstProperty && worstProperty.debt >= OWNER_PROPERTY_DEBT_THRESHOLD;
+
+      if (exceedsAggregate || exceedsSingle) {
+        alerts.push({ ownerName, totalDebt, numProperties, aggregateThreshold, exceedsAggregate, worstProperty });
+      }
+    });
+
+    return alerts;
+  }, [properties, fastClosing]);
+
   const contractsCloseToExpiration = useMemo(() => {
     return contracts.filter(c => {
       if (c.status !== "Active") return false;
@@ -1779,7 +1833,45 @@ export default function DashboardView({
                 </div>
               ))}
 
-              {/* CORREZIONE Q — Promemoria: pratiche passate all'Area Legale ma non ancora affidate a uno studio */}
+              {/* CORREZIONE X — Promemoria: proprietario oltre le soglie di indebitamento (per immobile o complessivo) */}
+              {ownerDebtAlerts.map(alert => (
+                <div
+                  key={`owner-debt-alert-${alert.ownerName}`}
+                  className="p-4 rounded-xl border-2 border-rose-300 bg-rose-50/70 transition-all duration-300 shadow-2xs"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-2xl mt-0.5 shrink-0">💸❗</span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-extrabold text-xs text-rose-950 leading-snug">
+                            Verifica Posizione: {alert.ownerName}
+                          </h4>
+                          <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-900 uppercase">
+                            Spese Non Pagate
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-rose-900/80 mt-1 leading-relaxed">
+                          {alert.worstProperty.debt >= OWNER_PROPERTY_DEBT_THRESHOLD ? (
+                            <>Sull'immobile "{alert.worstProperty.property.name}" risultano €{alert.worstProperty.debt.toFixed(2)} tra condominio e manutenzioni non pagate (soglia: €{OWNER_PROPERTY_DEBT_THRESHOLD}).</>
+                          ) : (
+                            <>Indebitamento complessivo di €{alert.totalDebt.toFixed(2)} su {alert.numProperties} immobili (soglia: €{alert.aggregateThreshold.toFixed(2)}).</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="sm:text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center pt-3 sm:pt-0 border-t sm:border-t-0 border-rose-200">
+                      <button
+                        onClick={() => setCurrentSection("owners")}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] px-3.5 py-2 rounded-lg -2 border-indigo-800 active:-0 transition-all cursor-pointer"
+                      >
+                        Verifica Posizione
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
               {legalCases.filter(lc => !lc.assignedLawyerId && lc.status !== "Closed").map(lc => (
                 <div
                   key={`legal-case-unassigned-${lc.id}`}
