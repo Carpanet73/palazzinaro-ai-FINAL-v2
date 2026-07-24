@@ -174,6 +174,7 @@ export default function App() {
   const tenantsAddHandlerRef = useRef<(() => void) | null>(null);
   const condominiumsAddHandlerRef = useRef<(() => void) | null>(null);
   const maintenanceAddHandlerRef = useRef<(() => void) | null>(null);
+  const legalAddHandlerRef = useRef<(() => void) | null>(null); // CORREZIONE Q
 
   // 1. Firebase Authentication State Listener
   useEffect(() => {
@@ -2493,6 +2494,7 @@ export default function App() {
             onAddCondominium={handleAddCondominium}
             onEditCondominium={handleEditCondominium}
             onDeleteCondominium={handleDeleteCondominium}
+            onEditProperty={handleEditProperty}
             onAddClosingItem={handleAddClosingItem}
             setCurrentSection={setCurrentSection}
             setSelectedTenantIdForLedger={setSelectedTenantIdForLedger}
@@ -2578,6 +2580,7 @@ export default function App() {
             onUpdateLegalCase={handleUpdateLegalCase}
             onDeleteLegalCase={handleDeleteLegalCase}
             onAddLawyer={handleAddLawyer}
+            registerAddHandler={(fn) => { legalAddHandlerRef.current = fn; }}
           />
         )}
 
@@ -2628,7 +2631,10 @@ export default function App() {
           - Immobili → procedura guidata completa (invariato, hub-e-raggi)
           - Proprietari/Inquilini/Condomini → wizard in modalità isolata (salta subito al passo giusto)
           - Manutenzioni → richiama l'UNICA procedura già esistente in quella pagina
+          - Area Legale → crea un nuovo Studio Legale (CORREZIONE Q)
+          - Dashboard/Area AI → nascosto: in queste pagine non si "aggiunge" nulla
           - Altre pagine → fallback sulla procedura guidata completa (comportamento precedente) */}
+      {currentSection !== "dashboard" && currentSection !== "ai_area" && (
       <UniversalAddButton
         label={
           currentSection === "properties" ? "Aggiungi Immobile" :
@@ -2636,6 +2642,7 @@ export default function App() {
           currentSection === "tenants" ? "Aggiungi Inquilino" :
           currentSection === "condominiums" ? "Aggiungi Condominio" :
           currentSection === "maintenance" ? "Nuova Manutenzione" :
+          currentSection === "legal" ? "Aggiungi Studio Legale" :
           "Aggiungi"
         }
         onClick={() => {
@@ -2648,6 +2655,8 @@ export default function App() {
             condominiumsAddHandlerRef.current();
           } else if (currentSection === "maintenance" && maintenanceAddHandlerRef.current) {
             maintenanceAddHandlerRef.current();
+          } else if (currentSection === "legal" && legalAddHandlerRef.current) {
+            legalAddHandlerRef.current();
           } else {
             // Immobili e fallback per tutte le altre pagine: procedura guidata completa
             setWizardStandaloneEntity(undefined);
@@ -2655,6 +2664,7 @@ export default function App() {
           }
         }}
       />
+      )}
       <MasterDataWizard
         isOpen={masterWizardOpen}
         onClose={() => {

@@ -324,6 +324,9 @@ export interface LegalCase {
   contractDetails?: any;
   pastRequests?: any[];
   futureExpirations?: any[];
+  // CORREZIONE Q — traccia quando e a quale email è stato inviato il fascicolo allo studio legale
+  dossierSentAt?: string;
+  dossierSentToEmail?: string;
 }
 
 export interface Communication {

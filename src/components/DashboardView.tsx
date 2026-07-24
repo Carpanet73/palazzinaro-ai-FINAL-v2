@@ -1779,6 +1779,42 @@ export default function DashboardView({
                 </div>
               ))}
 
+              {/* CORREZIONE Q — Promemoria: pratiche passate all'Area Legale ma non ancora affidate a uno studio */}
+              {legalCases.filter(lc => !lc.assignedLawyerId && lc.status !== "Closed").map(lc => (
+                <div
+                  key={`legal-case-unassigned-${lc.id}`}
+                  className="p-4 rounded-xl border-2 border-rose-300 bg-rose-50/70 transition-all duration-300 shadow-2xs"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-2xl mt-0.5 shrink-0">⚖️❗</span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-extrabold text-xs text-rose-950 leading-snug">
+                            Pratica da Affidare: {lc.title}
+                          </h4>
+                          <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-900 uppercase">
+                            Recupero Legale
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-rose-900/80 mt-1 leading-relaxed">
+                          Questa pratica è passata all'Area Legale ma non è ancora stata affidata a nessuno studio legale. Trascinala su uno studio per assegnarla.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="sm:text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center pt-3 sm:pt-0 border-t sm:border-t-0 border-rose-200">
+                      <button
+                        onClick={() => setCurrentSection("legal")}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] px-3.5 py-2 rounded-lg -2 border-indigo-800 active:-0 transition-all cursor-pointer"
+                      >
+                        Assegna Ora
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
               {/* Multi-step Payment Request Sequence Alerts */}
               {sequenceAlerts.map((alert) => {
                 const getStepDescription = (step: number) => {

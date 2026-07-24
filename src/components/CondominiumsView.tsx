@@ -20,6 +20,7 @@ interface CondominiumsViewProps {
   onAddCondominium: (condo: Omit<Condominium, "id" | "userId" | "createdAt">) => Promise<void>;
   onEditCondominium: (id: string, condo: Partial<Condominium>) => Promise<void>;
   onDeleteCondominium: (id: string) => Promise<void>;
+  onEditProperty?: (id: string, data: any) => Promise<void>; // CORREZIONE Q — drag&drop Immobile→Condominio
   onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">) => Promise<void>;
   setCurrentSection?: (section: any) => void;
   setSelectedTenantIdForLedger?: (id: string | null) => void;
@@ -51,6 +52,7 @@ export default function CondominiumsView({
   onAddCondominium,
   onEditCondominium,
   onDeleteCondominium,
+  onEditProperty,
   onAddClosingItem,
   setCurrentSection,
   setSelectedTenantIdForLedger,
@@ -137,6 +139,78 @@ export default function CondominiumsView({
   const constitutedProperties = useMemo(() => {
     return properties.filter(p => !!p.isCondoConstituted && !!p.condominiumId);
   }, [properties]);
+
+  // CORREZIONE Q — Drag&Drop: immobili con "Condominio Costituito" attivato ma senza
+  // ancora un condominio specifico collegato. Sono le card che si trascinano.
+  const unassignedConstitutedProperties = useMemo(() => {
+    return properties.filter(p => !!p.isCondoConstituted && !p.condominiumId);
+  }, [properties]);
+
+  const unassignedCondominiums = useMemo(() => {
+    return condominiums.filter(c => !c.administratorId);
+  }, [condominiums]);
+
+  // ── CORREZIONE Q — Drag&Drop universale ──
+  // Stesso identico meccanismo per Immobile→Condominio e Condominio→Amministratore:
+  // trascina, conferma, breve animazione di unione, poi si crea davvero il collegamento.
+  const [draggedItem, setDraggedItem] = useState<{ type: "property" | "condo"; id: string; name: string } | null>(null);
+  const [dragOverTargetId, setDragOverTargetId] = useState<string | null>(null);
+  const [mergingIds, setMergingIds] = useState<{ from: string; to: string } | null>(null);
+  const [disconnectTarget, setDisconnectTarget] = useState<{ kind: "property-condo" | "condo-admin"; id: string; name: string } | null>(null);
+  const [disconnectConfirmText, setDisconnectConfirmText] = useState("");
+
+  const handleDragStartItem = (e: React.DragEvent, type: "property" | "condo", id: string, name: string) => {
+    setDraggedItem({ type, id, name });
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDropOnCondo = async (e: React.DragEvent, condo: Condominium) => {
+    e.preventDefault();
+    setDragOverTargetId(null);
+    if (!draggedItem || draggedItem.type !== "property") return;
+    const propId = draggedItem.id;
+    const propName = draggedItem.name;
+    setDraggedItem(null);
+
+    const confirmed = confirm(`Vuoi collegare l'immobile "${propName}" al condominio "${condo.name}"?`);
+    if (!confirmed) return;
+
+    setMergingIds({ from: propId, to: condo.id });
+    await onEditProperty?.(propId, { condominiumId: condo.id });
+    setTimeout(() => setMergingIds(null), 700);
+  };
+
+  const handleDropOnAdmin = async (e: React.DragEvent, admin: Administrator) => {
+    e.preventDefault();
+    setDragOverTargetId(null);
+    if (!draggedItem || draggedItem.type !== "condo") return;
+    const condoId = draggedItem.id;
+    const condoName = draggedItem.name;
+    setDraggedItem(null);
+
+    const confirmed = confirm(`Vuoi affidare il condominio "${condoName}" all'amministratore "${admin.name}"?`);
+    if (!confirmed) return;
+
+    setMergingIds({ from: condoId, to: admin.id });
+    setTimeout(() => setMergingIds(null), 700);
+    await onEditCondominium(condoId, { administratorId: admin.id, administrator: admin.name });
+  };
+
+  // Scioglimento relazione — conferma pesante: bisogna scrivere il nome per confermare
+  const handleConfirmDisconnect = async () => {
+    if (!disconnectTarget) return;
+    if (disconnectConfirmText.trim().toLowerCase() !== disconnectTarget.name.trim().toLowerCase()) {
+      alert("Il nome scritto non corrisponde. Scioglimento annullato per sicurezza.");
+      return;
+    }
+    if (disconnectTarget.kind === "condo-admin") {
+      await onEditCondominium(disconnectTarget.id, { administratorId: null });
+    } else if (disconnectTarget.kind === "property-condo") {
+      await onEditProperty?.(disconnectTarget.id, { condominiumId: null, isCondoConstituted: false });
+    }
+    setDisconnectTarget(null);
+    setDisconnectConfirmText("");
+  };
 
   // Selected relationship ID (defaults to first constituted property if present)
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
@@ -664,6 +738,28 @@ export default function CondominiumsView({
       {/* CORREZIONE L — Vista principale: griglia Amministratori */}
       {viewMode === "administrators" && (
         <div className="space-y-4">
+          {unassignedCondominiums.length > 0 && (
+            <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4">
+              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3">
+                🏢 Condomini da Assegnare — trascina su un Amministratore
+              </h3>
+              <div className="flex flex-wrap gap-2.5">
+                {unassignedCondominiums.map(c => (
+                  <div
+                    key={c.id}
+                    draggable
+                    onDragStart={(e) => handleDragStartItem(e, "condo", c.id, c.name)}
+                    className={`px-3.5 py-2.5 bg-white border-2 border-dashed border-amber-300 rounded-xl text-xs font-bold text-slate-700 cursor-grab active:cursor-grabbing hover:border-amber-500 hover:shadow-sm transition-all ${
+                      mergingIds?.from === c.id ? "animate-pulse scale-95 opacity-50" : ""
+                    }`}
+                  >
+                    🏢 {c.name}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {administrators.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto">
               <div className="bg-indigo-50 text-indigo-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-indigo-100 overflow-hidden">
@@ -684,8 +780,15 @@ export default function CondominiumsView({
               {adminCardsData.map(({ admin, managedCondos, managedProperties, unpaidDebt, semaforo }) => (
                 <div
                   key={admin.id}
-                  className="bg-white rounded-2xl border border-slate-100 p-5 space-y-3.5 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer"
+                  className={`bg-white rounded-2xl border p-5 space-y-3.5 hover:shadow-sm transition-all cursor-pointer ${
+                    dragOverTargetId === admin.id
+                      ? "border-indigo-500 ring-2 ring-indigo-200 scale-[1.02]"
+                      : "border-slate-100 hover:border-indigo-200"
+                  } ${mergingIds?.to === admin.id ? "animate-pulse ring-2 ring-emerald-300" : ""}`}
                   onClick={() => handleOpenEditAdminModal(admin)}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverTargetId(admin.id); }}
+                  onDragLeave={() => setDragOverTargetId(null)}
+                  onDrop={(e) => handleDropOnAdmin(e, admin)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -728,7 +831,20 @@ export default function CondominiumsView({
                     <div className="border-t border-slate-100 pt-3 space-y-1">
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Condomini Gestiti</span>
                       {managedCondos.slice(0, 3).map(c => (
-                        <div key={c.id} className="text-[10px] text-slate-700 truncate">🏢 {c.name}</div>
+                        <div key={c.id} className="flex items-center justify-between text-[10px] text-slate-700 group">
+                          <span className="truncate">🏢 {c.name}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDisconnectTarget({ kind: "condo-admin", id: c.id, name: c.name });
+                              setDisconnectConfirmText("");
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 shrink-0 ml-1.5 transition-opacity"
+                            title="Sciogli collegamento con questo amministratore"
+                          >
+                            <X size={11} />
+                          </button>
+                        </div>
                       ))}
                       {managedCondos.length > 3 && (
                         <div className="text-[10px] text-slate-400">+ altri {managedCondos.length - 3}</div>
@@ -750,7 +866,29 @@ export default function CondominiumsView({
 
       {/* Main split dashboard: Left relationship list, Right active relationship details */}
       {viewMode === "condominiums" && (
-      constitutedProperties.length === 0 ? (
+      <>
+      {unassignedConstitutedProperties.length > 0 && (
+        <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4 mb-4">
+          <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3">
+            🏠 Immobili da Collegare — trascina su un Condominio
+          </h3>
+          <div className="flex flex-wrap gap-2.5">
+            {unassignedConstitutedProperties.map(p => (
+              <div
+                key={p.id}
+                draggable
+                onDragStart={(e) => handleDragStartItem(e, "property", p.id, p.name)}
+                className={`px-3.5 py-2.5 bg-white border-2 border-dashed border-amber-300 rounded-xl text-xs font-bold text-slate-700 cursor-grab active:cursor-grabbing hover:border-amber-500 hover:shadow-sm transition-all ${
+                  mergingIds?.from === p.id ? "animate-pulse scale-95 opacity-50" : ""
+                }`}
+              >
+                🏠 {p.name}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {constitutedProperties.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto">
           <div className="bg-slate-50 text-indigo-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-indigo-50/50">
             <Building size={28} />
@@ -782,15 +920,26 @@ export default function CondominiumsView({
                   const balance = propertyBalances[prop.id] || { isRegular: true, tenantUnpaid: 0, ownerUnpaid: 0 };
 
                   return (
-                    <button
+                    <div
                       key={prop.id}
                       onClick={() => setSelectedPropertyId(prop.id)}
-                      className={`w-full p-4 rounded-xl border text-left flex flex-col space-y-2.5 transition-all outline-hidden ${
+                      className={`w-full p-4 rounded-xl border text-left flex flex-col space-y-2.5 transition-all outline-hidden cursor-pointer relative group ${
                         isSelected 
                           ? "bg-indigo-50/45 border-indigo-200 ring-1 ring-indigo-200/30 shadow-xs" 
                           : "bg-slate-50/30 border-slate-100 hover:border-slate-200 hover:bg-slate-50"
                       }`}
                     >
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDisconnectTarget({ kind: "property-condo", id: prop.id, name: prop.name });
+                          setDisconnectConfirmText("");
+                        }}
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-opacity p-1"
+                        title="Sciogli collegamento con questo condominio"
+                      >
+                        <X size={13} />
+                      </button>
                       <div className="flex justify-between items-start gap-1">
                         <div>
                           <h4 className="font-sans font-extrabold text-xs text-slate-900 truncate max-w-[180px]">
@@ -834,7 +983,7 @@ export default function CondominiumsView({
                           </span>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -901,7 +1050,17 @@ export default function CondominiumsView({
               </div>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {condominiums.map(c => (
-                  <div key={c.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-100/50 flex justify-between items-center text-xs">
+                  <div
+                    key={c.id}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverTargetId(c.id); }}
+                    onDragLeave={() => setDragOverTargetId(null)}
+                    onDrop={(e) => handleDropOnCondo(e, c)}
+                    className={`p-2.5 rounded-lg border flex justify-between items-center text-xs transition-all ${
+                      dragOverTargetId === c.id
+                        ? "bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200 scale-[1.02]"
+                        : "bg-slate-50 border-slate-100/50"
+                    } ${mergingIds?.to === c.id ? "animate-pulse ring-2 ring-emerald-300" : ""}`}
+                  >
                     <div>
                       <p className="font-bold text-slate-800">{c.name}</p>
                       <p className="text-[10px] text-slate-400">Amm: {c.administrator || "N/A"}</p>
@@ -1379,7 +1538,9 @@ export default function CondominiumsView({
           </div>
 
         </div>
-      ))}
+      )}
+      </>
+      )}
 
       {/* Condominium Creation/Editing Modal */}
       {showModal && (
@@ -1727,6 +1888,51 @@ export default function CondominiumsView({
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CORREZIONE Q — Conferma pesante per sciogliere una relazione (scrivere il nome) */}
+      {disconnectTarget && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-rose-100">
+            <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
+              <h3 className="font-sans font-bold text-base">Sciogliere la relazione?</h3>
+              <button onClick={() => setDisconnectTarget(null)} className="text-rose-100 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Questa relazione era stata creata deliberatamente e dovrebbe restare stabile. Per confermare che vuoi davvero scioglierla, scrivi qui sotto il nome esatto:
+              </p>
+              <p className="text-sm font-black text-slate-900 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                {disconnectTarget.name}
+              </p>
+              <input
+                type="text"
+                autoFocus
+                value={disconnectConfirmText}
+                onChange={(e) => setDisconnectConfirmText(e.target.value)}
+                placeholder="Scrivi qui il nome per confermare"
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-rose-500"
+              />
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={() => setDisconnectTarget(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleConfirmDisconnect}
+                  disabled={disconnectConfirmText.trim().toLowerCase() !== disconnectTarget.name.trim().toLowerCase()}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black shadow-sm"
+                >
+                  Sciogli Definitivamente
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

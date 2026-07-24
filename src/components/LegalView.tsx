@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Scale, FolderOpen, AlertCircle, CheckCircle, X, Trash2, UserCheck, Briefcase, Download, FileText, Check, ShieldAlert } from "lucide-react";
 import { LegalCase, Property, Lawyer, Tenant } from "../types";
 import JSZip from "jszip";
@@ -14,6 +14,19 @@ interface LegalViewProps {
   onUpdateLegalCase?: (id: string, updates: Partial<LegalCase>) => Promise<void>;
   onDeleteLegalCase: (id: string) => Promise<void>;
   onAddLawyer?: (lawyerData: Omit<Lawyer, "id" | "userId" | "createdAt">) => Promise<void>;
+  // CORREZIONE E/Q — consente al tasto flottante globale di aprire QUESTA stessa procedura
+  registerAddHandler?: (fn: () => void) => void;
+}
+
+// CORREZIONE Q — stessa silhouette professionale usata per gli Amministratori, per coerenza
+// visiva: gli Studi Legali sono un collaboratore esterno con la stessa logica di relazione.
+function LegalPersonAvatarIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} fill="currentColor" aria-hidden="true">
+      <circle cx="50" cy="36" r="19" />
+      <path d="M50 58c-21 0-36 14-36 34v3a2 2 0 0 0 2 2h68a2 2 0 0 0 2-2v-3c0-20-15-34-36-34z" />
+    </svg>
+  );
 }
 
 export default function LegalView({
@@ -25,10 +38,16 @@ export default function LegalView({
   onUpdateLegalCaseStatus,
   onUpdateLegalCase,
   onDeleteLegalCase,
-  onAddLawyer
+  onAddLawyer,
+  registerAddHandler
 }: LegalViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [showLawyerModal, setShowLawyerModal] = useState(false);
+
+  // CORREZIONE Q — espone l'apertura del modulo Studio Legale al tasto flottante globale
+  useEffect(() => {
+    registerAddHandler?.(() => setShowLawyerModal(true));
+  });
 
   // Studio Legale Form states
   const [lawyerName, setLawyerName] = useState("");
@@ -46,6 +65,47 @@ export default function LegalView({
   const [status, setStatus] = useState<"Active" | "Pending" | "Closed">("Active");
   const [notes, setNotes] = useState("");
   const [assignedLawyerId, setAssignedLawyerId] = useState("");
+
+  // ── CORREZIONE Q — Drag&Drop Pratica→Studio Legale (stesso meccanismo di Condomini) ──
+  const [selectedCaseDetailId, setSelectedCaseDetailId] = useState<string | null>(null);
+  const [draggedCaseId, setDraggedCaseId] = useState<string | null>(null);
+  const [dragOverLawyerId, setDragOverLawyerId] = useState<string | null>(null);
+  const [mergingCaseId, setMergingCaseId] = useState<string | null>(null);
+  const [disconnectCaseTarget, setDisconnectCaseTarget] = useState<{ id: string; title: string } | null>(null);
+  const [disconnectConfirmText, setDisconnectConfirmText] = useState("");
+
+  const unassignedCases = legalCases.filter(c => !c.assignedLawyerId);
+  const assignedCases = legalCases.filter(c => !!c.assignedLawyerId);
+
+  const handleDropCaseOnLawyer = async (e: React.DragEvent, lawyer: Lawyer) => {
+    e.preventDefault();
+    setDragOverLawyerId(null);
+    if (!draggedCaseId) return;
+    const lawsuit = legalCases.find(c => c.id === draggedCaseId);
+    setDraggedCaseId(null);
+    if (!lawsuit) return;
+
+    const confirmed = confirm(`Vuoi affidare la pratica "${lawsuit.title}" allo studio "${lawyer.studioName} (${lawyer.name})"?`);
+    if (!confirmed) return;
+
+    setMergingCaseId(lawsuit.id);
+    await onUpdateLegalCase?.(lawsuit.id, {
+      assignedLawyerId: lawyer.id,
+      assignedLawyerName: `${lawyer.studioName} - ${lawyer.name}`
+    });
+    setTimeout(() => setMergingCaseId(null), 700);
+  };
+
+  const handleConfirmCaseDisconnect = async () => {
+    if (!disconnectCaseTarget) return;
+    if (disconnectConfirmText.trim().toLowerCase() !== disconnectCaseTarget.title.trim().toLowerCase()) {
+      alert("Il titolo scritto non corrisponde. Scioglimento annullato per sicurezza.");
+      return;
+    }
+    await onUpdateLegalCase?.(disconnectCaseTarget.id, { assignedLawyerId: "", assignedLawyerName: "" });
+    setDisconnectCaseTarget(null);
+    setDisconnectConfirmText("");
+  };
 
   const handleOpenAddModal = () => {
     setPropertyId(properties[0]?.id || "");
@@ -290,14 +350,6 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
         </div>
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setShowLawyerModal(true)}
-            id="add-lawyer-btn"
-            className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors shadow-sm self-start sm:self-auto cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Aggiungi Studio Legale</span>
-          </button>
-          <button
             onClick={handleOpenAddModal}
             id="add-legal-case-btn"
             className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors shadow-sm self-start sm:self-auto cursor-pointer"
@@ -327,8 +379,113 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {legalCases.map((lawsuit) => {
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* CORREZIONE Q — Colonna 1: Fascicoli da Associare (trascinabili) */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2.5">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              📂 Fascicoli da Associare ({unassignedCases.length})
+            </h3>
+            {unassignedCases.length === 0 ? (
+              <p className="text-[11px] text-slate-400 italic">Nessuna pratica in attesa di assegnazione.</p>
+            ) : (
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                {unassignedCases.map(c => (
+                  <div
+                    key={c.id}
+                    draggable
+                    onDragStart={() => setDraggedCaseId(c.id)}
+                    onClick={() => setSelectedCaseDetailId(c.id)}
+                    className={`p-3 bg-amber-50/60 border-2 border-dashed border-amber-300 rounded-xl cursor-grab active:cursor-grabbing hover:border-amber-500 hover:shadow-sm transition-all ${
+                      mergingCaseId === c.id ? "animate-pulse scale-95 opacity-50" : ""
+                    }`}
+                  >
+                    <p className="text-xs font-bold text-slate-800 truncate">{c.title}</p>
+                    <p className="text-[10px] text-slate-500 truncate">{c.tenantName || "Senza inquilino"}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Colonna 2: Studi Legali (avatar, zone di rilascio) */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2.5">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              👤 Studi Legali ({lawyers.length})
+            </h3>
+            {lawyers.length === 0 ? (
+              <p className="text-[11px] text-slate-400 italic">Nessuno studio legale creato. Usa il tasto "+ Aggiungi" in basso a destra.</p>
+            ) : (
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                {lawyers.map(l => {
+                  const count = legalCases.filter(c => c.assignedLawyerId === l.id).length;
+                  return (
+                    <div
+                      key={l.id}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverLawyerId(l.id); }}
+                      onDragLeave={() => setDragOverLawyerId(null)}
+                      onDrop={(e) => handleDropCaseOnLawyer(e, l)}
+                      className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all ${
+                        dragOverLawyerId === l.id
+                          ? "border-indigo-500 ring-2 ring-indigo-200 scale-[1.02] bg-indigo-50/30"
+                          : "border-slate-100 bg-slate-50/40"
+                      }`}
+                    >
+                      <span className="relative w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100 overflow-hidden">
+                        <LegalPersonAvatarIcon className="w-7 h-7" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 truncate">{l.studioName}</p>
+                        <p className="text-[10px] text-slate-400 truncate">{l.name} · {count} pratiche</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Colonna 3: Pratiche Già Associate */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2.5">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              ✅ Pratiche Associate ({assignedCases.length})
+            </h3>
+            {assignedCases.length === 0 ? (
+              <p className="text-[11px] text-slate-400 italic">Nessuna pratica ancora assegnata a uno studio legale.</p>
+            ) : (
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                {assignedCases.map(c => (
+                  <div
+                    key={c.id}
+                    onClick={() => setSelectedCaseDetailId(c.id)}
+                    className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl cursor-pointer hover:shadow-sm transition-all"
+                  >
+                    <p className="text-xs font-bold text-slate-800 truncate">{c.title}</p>
+                    <p className="text-[10px] text-emerald-700 truncate">→ {c.assignedLawyerName}</p>
+                    {c.dossierSentAt && (
+                      <p className="text-[9px] text-slate-400 mt-0.5">
+                        📧 Inviato il {new Date(c.dossierSentAt).toLocaleDateString("it-IT")} a {c.dossierSentToEmail}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* CORREZIONE Q — Modulo di dettaglio pratica (card ricca esistente, ora in overlay) */}
+      {selectedCaseDetailId && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="max-w-lg w-full max-h-[92vh] overflow-y-auto rounded-2xl relative">
+            <button
+              onClick={() => setSelectedCaseDetailId(null)}
+              className="absolute top-3 right-3 z-10 bg-slate-900/70 hover:bg-slate-900 text-white rounded-full p-1.5"
+              title="Chiudi"
+            >
+              <X size={16} />
+            </button>
+          {legalCases.filter(c => c.id === selectedCaseDetailId).map((lawsuit) => {
             return (
               <div 
                 key={lawsuit.id} 
@@ -398,12 +555,8 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
                         </div>
                         <button
                           onClick={() => {
-                            if (onUpdateLegalCase) {
-                              onUpdateLegalCase(lawsuit.id, {
-                                assignedLawyerId: "",
-                                assignedLawyerName: ""
-                              });
-                            }
+                            setDisconnectCaseTarget({ id: lawsuit.id, title: lawsuit.title });
+                            setDisconnectConfirmText("");
                           }}
                           className="text-[10px] text-rose-500 hover:text-rose-700 font-bold"
                         >
@@ -411,29 +564,9 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
                         </button>
                       </div>
                     ) : (
-                      <div className="space-y-1">
-                        <select
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (!val) return;
-                            const found = lawyers.find(l => l.id === val);
-                            if (found && onUpdateLegalCase) {
-                              onUpdateLegalCase(lawsuit.id, {
-                                assignedLawyerId: found.id,
-                                assignedLawyerName: `${found.studioName} - ${found.name}`
-                              });
-                            }
-                          }}
-                          defaultValue=""
-                          className="w-full text-xs border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 outline-hidden focus:border-indigo-500 font-medium text-slate-600"
-                        >
-                          <option value="">-- Seleziona Studio Legale --</option>
-                          {lawyers.map(l => (
-                            <option key={l.id} value={l.id}>{l.studioName} ({l.name})</option>
-                          ))}
-                        </select>
-                        <p className="text-[9px] text-slate-400">Associa immediatamente un avvocato indicizzato per trasmettere il fascicolo.</p>
-                      </div>
+                      <p className="text-[10px] text-slate-400 italic">
+                        Chiudi questa scheda e trascina il fascicolo su uno Studio Legale nella colonna "Studi Legali" per assegnarlo.
+                      </p>
                     )}
                   </div>
 
@@ -560,6 +693,7 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
               </div>
             );
           })}
+          </div>
         </div>
       )}
 
@@ -810,6 +944,51 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CORREZIONE Q — Conferma pesante per sciogliere Pratica↔Studio Legale */}
+      {disconnectCaseTarget && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-rose-100">
+            <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
+              <h3 className="font-sans font-bold text-base">Sciogliere l'assegnazione?</h3>
+              <button onClick={() => setDisconnectCaseTarget(null)} className="text-rose-100 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Per confermare che vuoi davvero staccare questa pratica dallo studio legale assegnato, scrivi qui sotto il titolo esatto della pratica:
+              </p>
+              <p className="text-sm font-black text-slate-900 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                {disconnectCaseTarget.title}
+              </p>
+              <input
+                type="text"
+                autoFocus
+                value={disconnectConfirmText}
+                onChange={(e) => setDisconnectConfirmText(e.target.value)}
+                placeholder="Scrivi qui il titolo per confermare"
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-rose-500"
+              />
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={() => setDisconnectCaseTarget(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleConfirmCaseDisconnect}
+                  disabled={disconnectConfirmText.trim().toLowerCase() !== disconnectCaseTarget.title.trim().toLowerCase()}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black shadow-sm"
+                >
+                  Sciogli Definitivamente
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
