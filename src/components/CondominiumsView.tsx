@@ -405,6 +405,18 @@ export default function CondominiumsView({
       return;
     }
 
+    // CORREZIONE N — mai permettere di inserire una spesa in un Fast Closing già chiuso
+    // (un mese passato). Controllo di sicurezza anche qui, non solo sul selettore,
+    // nel caso il valore arrivi comunque (es. digitato a mano nel campo).
+    const currentMonthStr = getDefaultDueMonth().slice(0, 7); // "YYYY-MM"
+    const selectedMonthStr = expenseDueDate.slice(0, 7);
+    if (selectedMonthStr < currentMonthStr) {
+      alert(
+        "⚠️ Mese già passato: non è possibile inserire una spesa in un Fast Closing già chiuso.\n\nScegli il mese corrente o un mese futuro."
+      );
+      return;
+    }
+
     let amountTenant = 0;
     let amountOwner = 0;
     let tenantDesc = "";
@@ -1072,12 +1084,13 @@ export default function CondominiumsView({
                           <input
                             type="month"
                             required
+                            min={getDefaultDueMonth().slice(0, 7)}
                             value={expenseDueDate ? expenseDueDate.slice(0, 7) : ""}
                             onChange={(e) => setExpenseDueDate(e.target.value ? `${e.target.value}-05` : "")}
                             className="w-full text-xs border border-slate-200 bg-white rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500 font-mono"
                           />
                           <p className="text-[9px] text-slate-400 mt-1">
-                            Scegli solo il mese: comparirà nel Fast Closing di quel mese, il giorno esatto non è rilevante.
+                            Solo Fast Closing correnti o futuri: un mese già passato non è selezionabile.
                           </p>
                         </div>
                         <div>
