@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { 
   Plus, Edit3, Trash2, Building, Calendar, UserCheck, 
   Sparkles, X, AlertCircle, Eye, Info, MapPin, User, 
@@ -244,6 +244,43 @@ export default function CondominiumsView({
   useEffect(() => {
     registerAddHandler?.(handleOpenAddModal);
   });
+
+  // CORREZIONE O — Migrazione automatica amministratori "vecchio stile"
+  // Un condominio creato prima della CORREZIONE L ha solo il nome scritto nel campo
+  // legacy `administrator`, senza nessun collegamento reale (`administratorId`). Questo
+  // lo rendeva invisibile nell'elenco Amministratori (che mostra solo entità reali) — un
+  // vero problema: "se c'è l'elenco degli amministratori ci devono essere tutti". Qui si
+  // promuove automaticamente ogni nome trovato a un Amministratore reale, riusando un
+  // record già esistente con lo stesso nome se c'è (stessa logica anti-duplicato di sempre).
+  // Evita che la stessa migrazione parta due volte in corsa (race condition) prima che
+  // Firestore rispedisca indietro il dato aggiornato tramite il listener in tempo reale.
+  const migratingCondoIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const needsMigration = condominiums.filter(
+      c => !c.administratorId && (c.administrator || "").trim().length > 0 && !migratingCondoIdsRef.current.has(c.id)
+    );
+    if (needsMigration.length === 0 || !onAddAdministrator) return;
+
+    (async () => {
+      for (const condo of needsMigration) {
+        migratingCondoIdsRef.current.add(condo.id);
+        const cleanName = (condo.administrator || "").trim();
+        const existing = administrators.find(a => a.name.toLowerCase().trim() === cleanName.toLowerCase());
+        const adminId = existing
+          ? existing.id
+          : await onAddAdministrator({
+              name: cleanName,
+              phone: condo.phone || "",
+              email: condo.email || "",
+              notes: "Creato automaticamente: era il nome scritto nel condominio prima del collegamento reale."
+            });
+        if (adminId) {
+          await onEditCondominium(condo.id, { administratorId: adminId });
+        }
+      }
+    })();
+  }, [condominiums, administrators, onAddAdministrator, onEditCondominium]);
 
   // CORREZIONE L — Fase 1: CRUD Amministratori
   const handleOpenAddAdminModal = () => {
