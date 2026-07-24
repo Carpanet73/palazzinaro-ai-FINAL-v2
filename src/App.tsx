@@ -2581,6 +2581,7 @@ export default function App() {
             onDeleteLegalCase={handleDeleteLegalCase}
             onAddLawyer={handleAddLawyer}
             registerAddHandler={(fn) => { legalAddHandlerRef.current = fn; }}
+            ownerProfile={ownerProfile}
           />
         )}
 

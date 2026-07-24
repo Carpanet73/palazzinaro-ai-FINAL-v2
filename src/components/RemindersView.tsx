@@ -495,8 +495,8 @@ export default function RemindersView({
           contractId: activeStepReminder.contractId || "",
           unpaidBalance: activeStepReminder.amount,
           status: "Active",
-          assignedLawyerId: "lawyer-1", // standard assigned lawyer
-          assignedLawyerName: "Studio Legale Bovio & Partners",
+          // CORREZIONE R — non assegnare più un avvocato finto scritto fisso nel codice:
+          // la pratica nasce SENZA assegnazione, da affidare con il drag&drop nell'Area Legale.
           zipFileName: `Fascicolo_Legale_${activeStepReminder.tenantName.replace(/\s+/g, "_")}.zip`,
           filesToAssign: true,
           notes: `Cartella fascicolo creata in Area Legale con nome "${activeStepReminder.tenantName}". Allegati inseriti: Contratto di locazione registrato, Prova di invio, Ricevuta di ritorno firmata (${activeStepReminder.registeredLetterReceiptName || "ricevuta.pdf"}), Registro solleciti 1-2, F24 imposta di registro, Mastrino spese condominiali e canoni insoluti.`

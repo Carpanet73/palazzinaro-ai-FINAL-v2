@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from "react";
 import { Plus, Scale, FolderOpen, AlertCircle, CheckCircle, X, Trash2, UserCheck, Briefcase, Download, FileText, Check, ShieldAlert } from "lucide-react";
-import { LegalCase, Property, Lawyer, Tenant } from "../types";
+import { LegalCase, Property, Lawyer, Tenant, OwnerProfile } from "../types";
 import JSZip from "jszip";
+import emailjs from "@emailjs/browser";
 
 interface LegalViewProps {
   legalCases: LegalCase[];
@@ -16,6 +17,7 @@ interface LegalViewProps {
   onAddLawyer?: (lawyerData: Omit<Lawyer, "id" | "userId" | "createdAt">) => Promise<void>;
   // CORREZIONE E/Q — consente al tasto flottante globale di aprire QUESTA stessa procedura
   registerAddHandler?: (fn: () => void) => void;
+  ownerProfile?: OwnerProfile | null; // CORREZIONE R — credenziali EmailJS per l'invio automatico del fascicolo
 }
 
 // CORREZIONE Q — stessa silhouette professionale usata per gli Amministratori, per coerenza
@@ -39,7 +41,8 @@ export default function LegalView({
   onUpdateLegalCase,
   onDeleteLegalCase,
   onAddLawyer,
-  registerAddHandler
+  registerAddHandler,
+  ownerProfile
 }: LegalViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [showLawyerModal, setShowLawyerModal] = useState(false);
@@ -93,6 +96,12 @@ export default function LegalView({
       assignedLawyerName: `${lawyer.studioName} - ${lawyer.name}`
     });
     setTimeout(() => setMergingCaseId(null), 700);
+
+    // CORREZIONE R — subito dopo l'assegnazione, chiede se inviare il fascicolo via email
+    const sendNow = confirm(`Pratica affidata a ${lawyer.studioName}.\n\nVuoi inviare subito il fascicolo via email a questo studio legale?`);
+    if (sendNow) {
+      await handleSendDossierEmail(lawsuit, lawyer);
+    }
   };
 
   const handleConfirmCaseDisconnect = async () => {
@@ -168,9 +177,10 @@ export default function LegalView({
     }
   };
 
-  const handleDownloadZip = async (lawsuit: LegalCase) => {
-    try {
-      const zip = new JSZip();
+  // CORREZIONE R — Estratta per essere riutilizzabile sia dal download manuale
+  // sia dall'invio email automatico del fascicolo.
+  const buildDossierZipBlob = async (lawsuit: LegalCase): Promise<Blob> => {
+    const zip = new JSZip();
       
       const divider = "================================================================================\n";
       const timestamp = new Date().toLocaleDateString("it-IT") + " " + new Date().toLocaleTimeString("it-IT");
@@ -300,8 +310,12 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
       }
 
       const content = await zip.generateAsync({ type: "blob" });
-      
-      // Trigger browser download
+      return content;
+  };
+
+  const handleDownloadZip = async (lawsuit: LegalCase) => {
+    try {
+      const content = await buildDossierZipBlob(lawsuit);
       const url = window.URL.createObjectURL(content);
       const link = document.createElement("a");
       link.href = url;
@@ -313,6 +327,83 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
     } catch (err: any) {
       console.error("Error generating ZIP:", err);
       alert("Errore durante la generazione del file ZIP: " + err.message);
+    }
+  };
+
+  // ── CORREZIONE R — Invio email automatico del fascicolo (mai il client di posta) ──
+  const handleSendDossierEmail = async (lawsuit: LegalCase, lawyer: Lawyer) => {
+    const serviceId = ownerProfile?.emailServiceId || "";
+    const templateId = ownerProfile?.emailTemplateId || "";
+    const publicKey = ownerProfile?.emailPublicKey || "";
+
+    if (!serviceId || !templateId || !publicKey) {
+      alert(
+        "⚠️ CONFIGURAZIONE EMAILJS MANCANTE:\nLe credenziali EmailJS non sono ancora configurate nel tuo profilo.\nVai nelle Impostazioni per inserire Service ID, Template ID e Public Key, poi riprova."
+      );
+      return;
+    }
+    if (!lawyer.email || !lawyer.email.includes("@")) {
+      alert(`⚠️ Lo studio legale "${lawyer.studioName}" non ha un indirizzo email valido in anagrafica. Impossibile inviare.`);
+      return;
+    }
+
+    // Nome del proprietario, da riportare allo studio come referente di contatto
+    const relatedProperty = properties.find(p => p.id === lawsuit.propertyId);
+    const ownerName = relatedProperty?.owner || "il proprietario dell'immobile (nome non specificato in anagrafica)";
+
+    // Elenco delle voci non pagate, nei limiti dei dati disponibili sulla pratica
+    const itemsList: string[] = [];
+    if (lawsuit.unpaidBalance) {
+      itemsList.push(`- Canoni di locazione scaduti e non versati: €${lawsuit.unpaidBalance.toLocaleString("it-IT", { minimumFractionDigits: 2 })}`);
+    }
+    if (lawsuit.description) {
+      itemsList.push(`- ${lawsuit.description}`);
+    }
+    if (itemsList.length === 0) {
+      itemsList.push("- Dettaglio importi: vedere fascicolo allegato");
+    }
+
+    const emailBody = `Egregio Studio ${lawyer.studioName}, alla cortese attenzione dell'Avv. ${lawyer.name},
+
+Con la presente si inoltra il fascicolo per il recupero coattivo delle somme dovute da parte dell'inquilino ${lawsuit.tenantName || "(nominativo nel fascicolo allegato)"}, relativo all'immobile "${lawsuit.propertyName || "non specificato"}".
+
+Le somme oggetto di recupero risultano così composte:
+${itemsList.join("\n")}
+
+Si allega il fascicolo completo con la documentazione a supporto (contratto di locazione, solleciti, messa in mora e ricevuta di ritorno della raccomandata, ove disponibili).
+
+Per qualsiasi chiarimento è possibile contattare direttamente il proprietario, Sig./Sig.ra ${ownerName}.
+
+Cordiali saluti.
+
+---
+La presente email è stata generata automaticamente dal sistema di intelligenza artificiale Palazzinaro AI, in nome e per conto del proprietario.`;
+
+    try {
+      const zipBlob = await buildDossierZipBlob(lawsuit);
+      const templateParams: any = {
+        to_email: lawyer.email,
+        subject: "Invio Documentazione per Recupero Coattivo",
+        message: emailBody,
+        message_content: emailBody,
+        // NB: l'allegato viene inviato solo se il Template EmailJS è configurato per
+        // accettare un parametro file — verificare in Impostazioni EmailJS lato utente.
+        attachment: zipBlob
+      };
+      await emailjs.send(serviceId, templateId, templateParams, publicKey);
+
+      const nowIso = new Date().toISOString();
+      await onUpdateLegalCase?.(lawsuit.id, {
+        dossierSentAt: nowIso,
+        dossierSentToEmail: lawyer.email
+      });
+
+      alert(`📧 Email inviata con successo a ${lawyer.email} (${lawyer.studioName}). Registrato l'invio in data odierna.`);
+    } catch (err: any) {
+      console.error("Errore invio email fascicolo:", err);
+      alert(
+        `❌ Errore durante l'invio automatico dell'email:\n${err?.text || err?.message || JSON.stringify(err)}\n\nSe l'errore riguarda l'allegato, verifica che il tuo Template EmailJS supporti un parametro file "attachment" — altrimenti l'email può essere inviata senza allegato.`
+      );
     }
   };
 
@@ -542,18 +633,38 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
                     </div>
 
                     {lawsuit.assignedLawyerId ? (
-                      <div className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-slate-100 shadow-3xs">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                          <span className="font-semibold text-slate-800">{lawsuit.assignedLawyerName}</span>
+                      <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-3xs space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="font-semibold text-slate-800">{lawsuit.assignedLawyerName}</span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setDisconnectCaseTarget({ id: lawsuit.id, title: lawsuit.title, lawyerName: lawsuit.assignedLawyerName || "questo studio" });
+                            }}
+                            className="text-[10px] text-rose-500 hover:text-rose-700 font-bold"
+                          >
+                            Disassocia
+                          </button>
                         </div>
+                        {lawsuit.dossierSentAt ? (
+                          <p className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-2 py-1.5">
+                            📧 Fascicolo inviato il {new Date(lawsuit.dossierSentAt).toLocaleDateString("it-IT")} alle {new Date(lawsuit.dossierSentAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} a {lawsuit.dossierSentToEmail}
+                          </p>
+                        ) : (
+                          <p className="text-[9px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+                            ⚠️ Fascicolo non ancora inviato a questo studio.
+                          </p>
+                        )}
                         <button
                           onClick={() => {
-                            setDisconnectCaseTarget({ id: lawsuit.id, title: lawsuit.title, lawyerName: lawsuit.assignedLawyerName || "questo studio" });
+                            const lawyer = lawyers.find(l => l.id === lawsuit.assignedLawyerId);
+                            if (lawyer) handleSendDossierEmail(lawsuit, lawyer);
                           }}
-                          className="text-[10px] text-rose-500 hover:text-rose-700 font-bold"
+                          className="w-full text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg py-1.5 transition-colors"
                         >
-                          Disassocia
+                          {lawsuit.dossierSentAt ? "📧 Invia di Nuovo il Fascicolo" : "📧 Invia il Fascicolo Ora"}
                         </button>
                       </div>
                     ) : (
