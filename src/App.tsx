@@ -2540,6 +2540,7 @@ export default function App() {
           <RemindersView 
             reminders={reminders}
             tenants={tenants}
+            owners={owners}
             movements={movements}
             fastClosing={fastClosing}
             properties={properties}

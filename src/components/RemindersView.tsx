@@ -19,13 +19,14 @@ import {
   Image as ImageIcon
 } from "lucide-react";
 import JSZip from "jszip";
-import { Reminder, Tenant, BankMovement, FastClosingItem, Communication, OwnerProfile } from "../types";
+import { Reminder, Tenant, BankMovement, FastClosingItem, Communication, OwnerProfile, Owner } from "../types";
 import { generateMessaInMoraPDF } from "../lib/pdfHelper";
 import emailjs from "@emailjs/browser";
 
 interface RemindersViewProps {
   reminders: Reminder[];
   tenants: Tenant[];
+  owners?: Owner[]; // CORREZIONE W — un debitore può essere anche un proprietario, non solo un inquilino
   movements: BankMovement[];
   fastClosing: FastClosingItem[];
   properties?: any[];
@@ -42,6 +43,7 @@ interface RemindersViewProps {
 export default function RemindersView({
   reminders,
   tenants,
+  owners = [],
   movements,
   fastClosing,
   properties,
@@ -274,13 +276,22 @@ export default function RemindersView({
   };
 
   const dispatchCommunications = async (reminder: Reminder, stepLabel: string) => {
-    const tenant = tenants.find(t => t.id === reminder.tenantId) || 
-                   tenants.find(t => t.name.toLowerCase().trim() === reminder.tenantName.toLowerCase().trim());
-    
-    if (!tenant) {
-      alert(`Errore: Inquilino "${reminder.tenantName}" non trovato nell'anagrafica del sistema.`);
+    // CORREZIONE W — Un debitore può essere un Inquilino O un Proprietario (es. quota di
+    // manutenzione al 100% a suo carico). Prima si cercava SEMPRE e SOLO tra gli inquilini:
+    // per un debitore-proprietario risultava sempre "non trovato in anagrafica", anche con
+    // l'anagrafica corretta, perché si guardava nell'elenco sbagliato.
+    const isOwnerDebtor = reminder.debtorType === "owner";
+    const debtor: any = isOwnerDebtor
+      ? (owners.find(o => o.id === reminder.tenantId) ||
+         owners.find(o => o.name.toLowerCase().trim() === reminder.tenantName.toLowerCase().trim()))
+      : (tenants.find(t => t.id === reminder.tenantId) ||
+         tenants.find(t => t.name.toLowerCase().trim() === reminder.tenantName.toLowerCase().trim()));
+
+    if (!debtor) {
+      alert(`Errore: ${isOwnerDebtor ? "Proprietario" : "Inquilino"} "${reminder.tenantName}" non trovato nell'anagrafica del sistema.`);
       return false;
     }
+    const tenant = debtor; // alias per non toccare il resto della funzione sotto
 
     // 1. Compose the message text
     const associated = (fastClosing || []).filter(item => (reminder.associatedItemsIds || []).includes(item.id));
@@ -416,8 +427,9 @@ export default function RemindersView({
 
   const handleExecuteThirdStepPrint = () => {
     if (!activeStepReminder) return;
-    const tenant = tenants.find(t => t.id === activeStepReminder.tenantId) ||
-                   tenants.find(t => t.name.toLowerCase().trim() === activeStepReminder.tenantName.toLowerCase().trim());
+    const tenant = activeStepReminder.debtorType === "owner" ? undefined :
+                   (tenants.find(t => t.id === activeStepReminder.tenantId) ||
+                    tenants.find(t => t.name.toLowerCase().trim() === activeStepReminder.tenantName.toLowerCase().trim()));
     generateMessaInMoraPDF(
       activeStepReminder.tenantName,
       activeStepReminder.amount,
@@ -732,7 +744,7 @@ export default function RemindersView({
                             className="inline-flex items-center justify-center space-x-1.5 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold active:transition-all shadow-md active:shadow-sm"
                           >
                             <Send size={14} />
-                            <span>Invia Addebito Addizionale</span>
+                            <span>Invia Primo Sollecito</span>
                           </button>
                         )}
                         {reminder.step === 2 && (
@@ -741,7 +753,7 @@ export default function RemindersView({
                             className="inline-flex items-center justify-center space-x-1.5 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold active:transition-all shadow-md active:shadow-sm"
                           >
                             <Send size={14} />
-                            <span>Invia Secondo Addebito Addizionale</span>
+                            <span>Invia Secondo Sollecito</span>
                           </button>
                         )}
                         {reminder.step === 3 && (
@@ -750,7 +762,7 @@ export default function RemindersView({
                             className="inline-flex items-center justify-center space-x-1.5 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold active:transition-all shadow-md active:shadow-sm"
                           >
                             <FileText size={14} />
-                            <span>Invia Messa in Mora (Send Entry)</span>
+                            <span>Genera Messa in Mora</span>
                           </button>
                         )}
                         {reminder.step === 4 && (
@@ -759,7 +771,7 @@ export default function RemindersView({
                             className="inline-flex items-center justify-center space-x-1.5 px-4 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold active:transition-all shadow-md active:shadow-sm"
                           >
                             <Scale size={14} />
-                            <span>Sposta in Azione Legale</span>
+                            <span>Passa Fascicolo ad Area Legale</span>
                           </button>
                         )}
                         {reminder.step === 5 && (
@@ -923,7 +935,7 @@ export default function RemindersView({
               <div>
                 <h3 className="font-sans font-bold text-base flex items-center space-x-2">
                   <Scale size={18} className="text-indigo-400" />
-                  <span>Sequenza Addebito Addizionale & Solleciti</span>
+                  <span>Sequenza Solleciti & Recupero Crediti</span>
                 </h3>
                 <p className="text-[10px] text-slate-300 mt-0.5">Gestione morosità inquilino: {activeStepReminder.tenantName}</p>
               </div>
