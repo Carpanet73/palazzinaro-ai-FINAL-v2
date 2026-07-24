@@ -39,6 +39,7 @@ import {
   BankAccount,
   OwnerProfile,
   Owner,
+  Administrator,
   InsurancePolicy,
   DeliveryReport
 } from "./types";
@@ -144,6 +145,8 @@ export default function App() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [condominiums, setCondominiums] = useState<Condominium[]>([]);
   const [owners, setOwners] = useState<Owner[]>([]);
+  // CORREZIONE L — Amministratori condominiali come entità reale
+  const [administrators, setAdministrators] = useState<Administrator[]>([]);
   const [movements, setMovements] = useState<BankMovement[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [fastClosing, setFastClosing] = useState<FastClosingItem[]>([]);
@@ -271,6 +274,8 @@ export default function App() {
     const unsubContracts = listenToCollection("contracts", setContracts, "createdAt");
     const unsubCondominiums = listenToCollection("condominiums", setCondominiums, "createdAt");
     const unsubOwners = listenToCollection("owners", setOwners, "createdAt");
+    // CORREZIONE L
+    const unsubAdministrators = listenToCollection("administrators", setAdministrators, "createdAt");
     const unsubMovements = listenToCollection("movements", setMovements, "createdAt");
     const unsubReminders = listenToCollection("reminders", setReminders, "createdAt");
     const unsubFastClosing = listenToCollection("fastClosing", setFastClosing, "dueDate");
@@ -290,6 +295,7 @@ export default function App() {
       unsubContracts();
       unsubCondominiums();
       unsubOwners();
+      unsubAdministrators();
       unsubMovements();
       unsubReminders();
       unsubFastClosing();
@@ -1069,6 +1075,71 @@ export default function App() {
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.DELETE, `owners/${id}`);
       showError("Impossibile eliminare il proprietario: " + errInfo.error);
+    }
+  };
+
+  // ── CORREZIONE L — Administrators CRUD (anagrafica amministratori condominiali reale) ──
+  // Stesso pattern identico di Owner: anti-duplicato per nome, create/update/delete.
+  const handleAddAdministrator = async (data: Omit<Administrator, "id" | "userId" | "createdAt">): Promise<string | null> => {
+    if (!user) return null;
+    try {
+      const existingByName = administrators.find((a) => {
+        const x = (a.name || "").toLowerCase().trim();
+        const y = (data.name || "").toLowerCase().trim();
+        return x.length > 0 && x === y;
+      });
+      if (existingByName) {
+        showSuccess(`Amministratore "${existingByName.name}" già esistente — riuso del record.`);
+        return existingByName.id;
+      }
+
+      const cleanData: any = {};
+      Object.keys(data).forEach((key) => {
+        if ((data as any)[key] !== undefined) {
+          cleanData[key] = (data as any)[key];
+        }
+      });
+
+      const docRef = await addDoc(collection(db, "administrators"), {
+        ...cleanData,
+        userId: user.uid,
+        createdAt: serverTimestamp(),
+      });
+      showSuccess(`Amministratore "${data.name}" creato con successo!`);
+      return docRef.id;
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.CREATE, "administrators");
+      showError("Impossibile salvare l'amministratore: " + errInfo.error);
+      return null;
+    }
+  };
+
+  const handleEditAdministrator = async (id: string, data: Partial<Administrator>) => {
+    try {
+      const cleanData: any = {};
+      Object.keys(data).forEach((key) => {
+        if ((data as any)[key] !== undefined) {
+          cleanData[key] = (data as any)[key];
+        }
+      });
+      await updateDoc(doc(db, "administrators", id), {
+        ...cleanData,
+        updatedAt: serverTimestamp(),
+      });
+      showSuccess("Amministratore aggiornato con successo!");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `administrators/${id}`);
+      showError("Impossibile aggiornare l'amministratore: " + errInfo.error);
+    }
+  };
+
+  const handleDeleteAdministrator = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "administrators", id));
+      showSuccess("Amministratore eliminato con successo!");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.DELETE, `administrators/${id}`);
+      showError("Impossibile eliminare l'amministratore: " + errInfo.error);
     }
   };
 
@@ -2358,6 +2429,10 @@ export default function App() {
             properties={properties}
             tenants={tenants}
             fastClosing={fastClosing}
+            administrators={administrators}
+            onAddAdministrator={handleAddAdministrator}
+            onEditAdministrator={handleEditAdministrator}
+            onDeleteAdministrator={handleDeleteAdministrator}
             onAddCondominium={handleAddCondominium}
             onEditCondominium={handleEditCondominium}
             onDeleteCondominium={handleDeleteCondominium}

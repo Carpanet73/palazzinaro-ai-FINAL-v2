@@ -160,11 +160,22 @@ export interface CondoRate {
   amountOwner?: number; // calculated owner share
 }
 
+export interface Administrator {
+  id: string;
+  userId: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Condominium {
   id: string;
   userId: string;
   name: string;
-  administrator?: string;
+  administrator?: string; // legacy: testo libero, mantenuto per i condomini creati prima della CORREZIONE L
+  administratorId?: string; // CORREZIONE L — collegamento reale all'entità Administrator
   phone?: string;
   email?: string;
   notes?: string;

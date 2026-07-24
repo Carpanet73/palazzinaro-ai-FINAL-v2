@@ -6,13 +6,17 @@ import {
   FileText, Upload, RefreshCw, CheckCircle2, ChevronRight,
   ShieldCheck, ShieldAlert, CreditCard, Receipt, FileUp, DollarSign
 } from "lucide-react";
-import { Condominium, CondoRate, Property, Tenant, FastClosingItem } from "../types";
+import { Condominium, CondoRate, Property, Tenant, FastClosingItem, Administrator } from "../types";
 
 interface CondominiumsViewProps {
   condominiums: Condominium[];
   properties: Property[];
   tenants: Tenant[];
   fastClosing: FastClosingItem[];
+  administrators?: Administrator[]; // CORREZIONE L
+  onAddAdministrator?: (data: Omit<Administrator, "id" | "userId" | "createdAt">) => Promise<string | null>;
+  onEditAdministrator?: (id: string, data: Partial<Administrator>) => Promise<void>;
+  onDeleteAdministrator?: (id: string) => Promise<void>;
   onAddCondominium: (condo: Omit<Condominium, "id" | "userId" | "createdAt">) => Promise<void>;
   onEditCondominium: (id: string, condo: Partial<Condominium>) => Promise<void>;
   onDeleteCondominium: (id: string) => Promise<void>;
@@ -28,6 +32,10 @@ export default function CondominiumsView({
   properties,
   tenants,
   fastClosing,
+  administrators = [],
+  onAddAdministrator,
+  onEditAdministrator,
+  onDeleteAdministrator,
   onAddCondominium,
   onEditCondominium,
   onDeleteCondominium,
@@ -42,9 +50,18 @@ export default function CondominiumsView({
   // Form Fields for Condominium
   const [name, setName] = useState("");
   const [administrator, setAdministrator] = useState("");
+  const [administratorId, setAdministratorId] = useState(""); // CORREZIONE L
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
+
+  // CORREZIONE L — Fase 1: gestione Amministratori come entità reale
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState<Administrator | null>(null);
+  const [adminName, setAdminName] = useState("");
+  const [adminPhone, setAdminPhone] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminNotes, setAdminNotes] = useState("");
 
   // AI assistant states
   const [showAiAssist, setShowAiAssist] = useState(false);
@@ -190,6 +207,7 @@ export default function CondominiumsView({
     setEditingCondo(null);
     setName("");
     setAdministrator("");
+    setAdministratorId("");
     setPhone("");
     setEmail("");
     setNotes("");
@@ -204,11 +222,61 @@ export default function CondominiumsView({
     registerAddHandler?.(handleOpenAddModal);
   });
 
+  // CORREZIONE L — Fase 1: CRUD Amministratori
+  const handleOpenAddAdminModal = () => {
+    setEditingAdmin(null);
+    setAdminName("");
+    setAdminPhone("");
+    setAdminEmail("");
+    setAdminNotes("");
+    setShowAdminModal(true);
+  };
+
+  const handleOpenEditAdminModal = (admin: Administrator) => {
+    setEditingAdmin(admin);
+    setAdminName(admin.name);
+    setAdminPhone(admin.phone || "");
+    setAdminEmail(admin.email || "");
+    setAdminNotes(admin.notes || "");
+    setShowAdminModal(true);
+  };
+
+  const handleSubmitAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminName.trim()) {
+      alert("Il nome dell'amministratore è obbligatorio.");
+      return;
+    }
+    const payload = {
+      name: adminName.trim(),
+      phone: adminPhone.trim(),
+      email: adminEmail.trim(),
+      notes: adminNotes.trim()
+    };
+    if (editingAdmin) {
+      await onEditAdministrator?.(editingAdmin.id, payload);
+    } else {
+      await onAddAdministrator?.(payload);
+    }
+    setShowAdminModal(false);
+  };
+
+  const handleDeleteAdminClick = async (admin: Administrator) => {
+    const managedCount = condominiums.filter(c => c.administratorId === admin.id).length;
+    const warning = managedCount > 0
+      ? `"${admin.name}" amministra attualmente ${managedCount} condomini/o. Eliminandolo, questi condomini resteranno senza amministratore collegato (potrai riassegnarlo in seguito).\n\nSei sicuro di voler eliminare "${admin.name}"?`
+      : `Sei sicuro di voler eliminare l'amministratore "${admin.name}"?`;
+    if (confirm(warning)) {
+      await onDeleteAdministrator?.(admin.id);
+    }
+  };
+
   // Handle open edit condo modal
   const handleOpenEditModal = (condo: Condominium) => {
     setEditingCondo(condo);
     setName(condo.name);
     setAdministrator(condo.administrator || "");
+    setAdministratorId(condo.administratorId || "");
     setPhone(condo.phone || "");
     setEmail(condo.email || "");
     setNotes(condo.notes || "");
@@ -266,9 +334,17 @@ export default function CondominiumsView({
       return;
     }
 
+    // CORREZIONE L — se è stato selezionato un Amministratore reale, il nome mostrato
+    // (campo legacy "administrator") si allinea sempre al suo record, non resta un testo
+    // libero scollegato: evita che il mastrino/i badge mostrino un nome diverso da quello reale.
+    const linkedAdminName = administratorId
+      ? (administrators.find(a => a.id === administratorId)?.name || administrator)
+      : administrator;
+
     const payload = {
       name,
-      administrator,
+      administrator: linkedAdminName,
+      administratorId: administratorId || null,
       phone,
       email,
       notes
@@ -543,6 +619,60 @@ export default function CondominiumsView({
                   );
                 })}
               </div>
+            </div>
+
+            {/* CORREZIONE L — Fase 1: Amministratori come entità reale, con avatar */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 space-y-3">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Amministratori ({administrators.length})
+                </h3>
+                <button
+                  onClick={handleOpenAddAdminModal}
+                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                >
+                  <Plus size={12} />
+                  Nuovo
+                </button>
+              </div>
+
+              {administrators.length === 0 ? (
+                <p className="text-[11px] text-slate-400 italic">
+                  Nessun amministratore creato. Aggiungine uno per collegarlo ai condomini.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {administrators.map(admin => {
+                    const managedCount = condominiums.filter(c => c.administratorId === admin.id).length;
+                    const initials = admin.name
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map(w => w[0]?.toUpperCase())
+                      .join("");
+                    return (
+                      <button
+                        key={admin.id}
+                        onClick={() => handleOpenEditAdminModal(admin)}
+                        className="flex flex-col items-center w-20 group"
+                        title={`${admin.name} — ${managedCount} condomini/o gestiti`}
+                      >
+                        <span className="relative w-12 h-12 rounded-full bg-indigo-600 text-white font-black text-sm flex items-center justify-center shadow-sm group-hover:bg-indigo-700 transition-colors">
+                          {initials || "?"}
+                          {managedCount > 0 && (
+                            <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white text-[8px] font-black rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">
+                              {managedCount}
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-700 mt-1.5 truncate w-full text-center">
+                          {admin.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* List of general administrators and basic contacts */}
@@ -1117,13 +1247,33 @@ export default function CondominiumsView({
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                     Amministratore
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Studio Amministrativo S.r.l."
-                    value={administrator}
-                    onChange={(e) => setAdministrator(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
-                  />
+                  <select
+                    value={administratorId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__new__") {
+                        setShowAdminModal(true);
+                        setEditingAdmin(null);
+                        setAdminName("");
+                        setAdminPhone("");
+                        setAdminEmail("");
+                        setAdminNotes("");
+                        return;
+                      }
+                      setAdministratorId(val);
+                      const found = administrators.find(a => a.id === val);
+                      if (found) setAdministrator(found.name);
+                    }}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 bg-white"
+                  >
+                    <option value="">
+                      {administrator ? `${administrator} (non collegato)` : "-- Nessuno --"}
+                    </option>
+                    {administrators.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                    <option value="__new__">➕ Crea nuovo amministratore…</option>
+                  </select>
                 </div>
 
                 <div>
@@ -1241,6 +1391,101 @@ export default function CondominiumsView({
                 >
                   Salva Documento
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CORREZIONE L — Fase 1: Modulo Nuovo/Modifica Amministratore */}
+      {showAdminModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-slate-100">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="font-sans font-bold text-base">
+                {editingAdmin ? "Modifica Amministratore" : "Nuovo Amministratore"}
+              </h3>
+              <button onClick={() => setShowAdminModal(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmitAdmin} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Nome e Cognome / Studio *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="Studio Amministrativo Rossi"
+                  value={adminName}
+                  onChange={(e) => setAdminName(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 font-bold"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Telefono
+                  </label>
+                  <input
+                    type="tel"
+                    value={adminPhone}
+                    onChange={(e) => setAdminPhone(e.target.value)}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Note
+                </label>
+                <textarea
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  rows={2}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                {editingAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAdminClick(editingAdmin)}
+                    className="text-rose-500 hover:text-rose-700 text-xs font-bold flex items-center gap-1"
+                  >
+                    <Trash2 size={13} />
+                    Elimina
+                  </button>
+                ) : <span />}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminModal(false)}
+                    className="px-4 py-2 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-sm"
+                  >
+                    Salva
+                  </button>
+                </div>
               </div>
             </form>
           </div>
