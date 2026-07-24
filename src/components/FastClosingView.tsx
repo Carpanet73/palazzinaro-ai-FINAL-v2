@@ -89,6 +89,9 @@ export default function FastClosingView({
   const [cumulativeTenant, setCumulativeTenant] = useState<Tenant | null>(null);
   const [selectedCumulativeItemIds, setSelectedCumulativeItemIds] = useState<string[]>([]);
   const [cumulativeMovementId, setCumulativeMovementId] = useState("");
+  // CORREZIONE K — consente di saldare anche senza abbinare un movimento bancario
+  // (contanti, o un movimento già verificato manualmente dall'utente fuori sistema)
+  const [cumulativeCashMode, setCumulativeCashMode] = useState(false);
   const [reconciliationError, setReconciliationError] = useState("");
 
   // Manual Closing State / Summary
@@ -618,6 +621,7 @@ export default function FastClosingView({
       .map(item => item.id);
     setSelectedCumulativeItemIds(activeItemIds);
     setCumulativeMovementId("");
+    setCumulativeCashMode(false);
     setReconciliationError("");
   };
 
@@ -627,9 +631,10 @@ export default function FastClosingView({
     );
   };
 
-  // Confirm Cumulative bank transfer reconciliation with validation & partial support
+  // Confirm Cumulative reconciliation — con bonifico, oppure in contanti/verifica manuale
   const handleConfirmCumulativeReconciliation = async () => {
-    if (!cumulativeTenant || !cumulativeMovementId || selectedCumulativeItemIds.length === 0) return;
+    if (!cumulativeTenant || selectedCumulativeItemIds.length === 0) return;
+    if (!cumulativeCashMode && !cumulativeMovementId) return;
     
     const selectedItems = monthFilteredItems.filter(item => selectedCumulativeItemIds.includes(item.id));
     
@@ -658,6 +663,26 @@ export default function FastClosingView({
     }
 
     const totalNeeded = selectedItems.reduce((sum, item) => sum + item.amount, 0);
+
+    // ── CORREZIONE K — Saldo in contanti / verifica manuale, senza bonifico da abbinare ──
+    if (cumulativeCashMode) {
+      const confirmed = confirm(
+        `Confermi di aver saldato €${totalNeeded.toFixed(2)} per ${cumulativeTenant.name} in contanti (o comunque verificato personalmente, senza un movimento bancario da abbinare)?\n\nQuesta azione segnerà come "Pagato" le voci selezionate.`
+      );
+      if (!confirmed) return;
+
+      try {
+        for (const item of selectedItems) {
+          await onUpdateClosingItemStatus(item.id, "Paid");
+        }
+        alert(`Saldo in contanti registrato con successo per ${cumulativeTenant.name}!`);
+        setCumulativeTenant(null);
+      } catch (err) {
+        console.error("Error in cash settlement", err);
+      }
+      return;
+    }
+
     const movement = movements.find(m => m.id === cumulativeMovementId);
     if (!movement) return;
 
@@ -675,11 +700,17 @@ export default function FastClosingView({
         await onReconcileMovement(movement.id, selectedItems[0].id);
 
         // 3. Create residue row for next month's Fast Closing
+        // CORREZIONE H — mai una data scritta fissa: il "mese prossimo" si calcola sempre da oggi
+        const nextMonthDate = new Date();
+        nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
+        nextMonthDate.setDate(5);
+        const nextMonthDueDate = nextMonthDate.toISOString().split("T")[0];
+
         await onAddClosingItem({
           title: `Residuo Riconciliazione Parziale - Canone ${cumulativeTenant.name}`,
           description: `Residuo insoluto dopo riconciliazione parziale con bonifico di €${movement.amount.toFixed(2)}.`,
           amount: residue,
-          dueDate: "2026-08-05", // proposed next month
+          dueDate: nextMonthDueDate,
           source: "contract",
           status: "Pending"
         });
@@ -1608,8 +1639,32 @@ export default function FastClosingView({
             </div>
 
             <div className="p-6 space-y-4">
-              
-              {/* Bank Movement Selection */}
+
+              {/* CORREZIONE K — Alternativa al bonifico: contanti o verifica manuale */}
+              <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div>
+                  <span className="text-xs font-semibold text-slate-700 block">
+                    Saldo in Contanti / Verifica Manuale
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Nessun bonifico da abbinare — da usare per pagamenti in contanti o quando hai già verificato tu stesso il movimento
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCumulativeCashMode(prev => !prev);
+                    setCumulativeMovementId("");
+                    setReconciliationError("");
+                  }}
+                  className={`shrink-0 ml-3 w-11 h-6 rounded-full transition-colors relative ${cumulativeCashMode ? "bg-emerald-500" : "bg-slate-300"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${cumulativeCashMode ? "translate-x-5" : ""}`} />
+                </button>
+              </div>
+
+              {/* Bank Movement Selection — nascosta in modalità contanti */}
+              {!cumulativeCashMode && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Seleziona Movimento Bancario Ricevuto *
@@ -1631,6 +1686,7 @@ export default function FastClosingView({
                   ))}
                 </select>
               </div>
+              )}
 
               {/* Checklist of all items */}
               <div>
@@ -1680,7 +1736,18 @@ export default function FastClosingView({
               </div>
 
               {/* Live calculations preview */}
-              {cumulativeMovementId && selectedCumulativeItemIds.length > 0 && (
+              {cumulativeCashMode && selectedCumulativeItemIds.length > 0 && (
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs space-y-1">
+                  <div className="flex justify-between text-emerald-800">
+                    <span>Totale da Saldare in Contanti:</span>
+                    <strong>
+                      €{monthFilteredItems.filter(item => selectedCumulativeItemIds.includes(item.id)).reduce((s, i) => s + i.amount, 0).toFixed(2)}
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {!cumulativeCashMode && cumulativeMovementId && selectedCumulativeItemIds.length > 0 && (
                 <div className="p-3 bg-slate-100 rounded-xl border border-slate-200 text-xs space-y-1">
                   <div className="flex justify-between text-slate-500">
                     <span>Bonifico Disponibile:</span>
@@ -1735,12 +1802,12 @@ export default function FastClosingView({
               </button>
               <button
                 type="button"
-                disabled={!cumulativeMovementId || selectedCumulativeItemIds.length === 0}
+                disabled={(!cumulativeCashMode && !cumulativeMovementId) || selectedCumulativeItemIds.length === 0}
                 onClick={handleConfirmCumulativeReconciliation}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm inline-flex items-center space-x-1.5"
               >
                 <Check size={14} />
-                <span>Riconcilia Cumulative</span>
+                <span>{cumulativeCashMode ? "Segna come Pagato (Contanti)" : "Riconcilia Cumulative"}</span>
               </button>
             </div>
           </div>
