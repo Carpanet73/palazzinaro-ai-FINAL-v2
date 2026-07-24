@@ -47,6 +47,9 @@ export default function CondominiumsView({
   const [showModal, setShowModal] = useState(false);
   const [editingCondo, setEditingCondo] = useState<Condominium | null>(null);
 
+  // CORREZIONE L — Fase 1.5: Amministratori come vista principale della pagina
+  const [viewMode, setViewMode] = useState<"administrators" | "condominiums">("administrators");
+
   // Form Fields for Condominium
   const [name, setName] = useState("");
   const [administrator, setAdministrator] = useState("");
@@ -511,6 +514,41 @@ export default function CondominiumsView({
     }, { paid: 0, unpaid: 0 });
   }, [ledgerMovementsForTab]);
 
+  // CORREZIONE L — Fase 1.5: dati aggregati per la card di ogni amministratore
+  // Soglia di allerta per il semaforo: sopra questa cifra di spese condominiali non
+  // pagate (sommate su tutti i condomini gestiti), la card passa da verde a giallo/rosso.
+  const ADMIN_DEBT_WARNING_THRESHOLD = 500;
+  const ADMIN_DEBT_CRITICAL_THRESHOLD = 1500;
+
+  const adminCardsData = useMemo(() => {
+    return administrators.map(admin => {
+      const managedCondos = condominiums.filter(c => c.administratorId === admin.id);
+      const managedCondoIds = new Set(managedCondos.map(c => c.id));
+      const managedProperties = properties.filter(p => p.condominiumId && managedCondoIds.has(p.condominiumId));
+      const managedPropertyIds = new Set(managedProperties.map(p => p.id));
+
+      const unpaidDebt = fastClosing
+        .filter(fc =>
+          fc.source === "condominium" &&
+          (fc.status === "Pending" || fc.status === "Overdue") &&
+          fc.propertyId && managedPropertyIds.has(fc.propertyId)
+        )
+        .reduce((sum, fc) => sum + fc.amount, 0);
+
+      let semaforo: "green" | "yellow" | "red" = "green";
+      if (unpaidDebt >= ADMIN_DEBT_CRITICAL_THRESHOLD) semaforo = "red";
+      else if (unpaidDebt >= ADMIN_DEBT_WARNING_THRESHOLD) semaforo = "yellow";
+
+      return {
+        admin,
+        managedCondos,
+        managedProperties,
+        unpaidDebt,
+        semaforo
+      };
+    });
+  }, [administrators, condominiums, properties, fastClosing]);
+
   return (
     <div className="space-y-6 animate-fadeIn" id="condominiums-view-container">
       {/* Upper header */}
@@ -530,8 +568,116 @@ export default function CondominiumsView({
         </div>
       </div>
 
+      {/* CORREZIONE L — Selettore vista: Amministratori (predefinita) / Condomini & Immobili */}
+      <div className="flex gap-2 bg-white p-1.5 rounded-xl border border-slate-100 w-fit">
+        <button
+          onClick={() => setViewMode("administrators")}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+            viewMode === "administrators" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
+          }`}
+        >
+          👤 Amministratori
+        </button>
+        <button
+          onClick={() => setViewMode("condominiums")}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+            viewMode === "condominiums" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
+          }`}
+        >
+          🏢 Condomini & Immobili
+        </button>
+      </div>
+
+      {/* CORREZIONE L — Vista principale: griglia Amministratori */}
+      {viewMode === "administrators" && (
+        <div className="space-y-4">
+          {administrators.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto">
+              <div className="bg-slate-50 text-indigo-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-indigo-50/50">
+                <User size={28} />
+              </div>
+              <h3 className="font-bold text-slate-800 mb-1.5">Nessun amministratore creato</h3>
+              <p className="text-xs text-slate-500 mb-4">Crea il primo amministratore per iniziare a collegarlo ai condomini.</p>
+              <button
+                onClick={handleOpenAddAdminModal}
+                className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-xs transition-colors shadow-xs"
+              >
+                <Plus size={14} />
+                <span>Crea Amministratore</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {adminCardsData.map(({ admin, managedCondos, managedProperties, unpaidDebt, semaforo }) => (
+                <div
+                  key={admin.id}
+                  className="bg-white rounded-2xl border border-slate-100 p-5 space-y-3.5 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer"
+                  onClick={() => handleOpenEditAdminModal(admin)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="relative w-12 h-12 rounded-full bg-slate-100 text-indigo-600 flex items-center justify-center shrink-0 border border-slate-200">
+                        <User size={22} strokeWidth={2} />
+                      </span>
+                      <div>
+                        <h4 className="font-black text-sm text-slate-900 leading-tight">{admin.name}</h4>
+                        <span className="text-[10px] text-slate-400">
+                          {managedCondos.length} condomini/o gestiti
+                        </span>
+                      </div>
+                    </div>
+                    <span
+                      className={`w-3 h-3 rounded-full shrink-0 mt-1 ${
+                        semaforo === "green" ? "bg-emerald-500" : semaforo === "yellow" ? "bg-amber-400" : "bg-rose-500 animate-pulse"
+                      }`}
+                      title={
+                        semaforo === "green"
+                          ? "Regolare"
+                          : semaforo === "yellow"
+                          ? `Attenzione: €${unpaidDebt.toFixed(2)} di spese condominiali non pagate`
+                          : `Critico: €${unpaidDebt.toFixed(2)} di spese condominiali non pagate`
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 text-[11px] border-t border-slate-100 pt-3">
+                    <div className="flex items-center gap-1.5 text-slate-600">
+                      <span className="text-slate-400">📞</span>
+                      <span>{admin.phone || "Nessun telefono"}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-600 truncate">
+                      <span className="text-slate-400">✉️</span>
+                      <span className="truncate">{admin.email || "Nessuna email"}</span>
+                    </div>
+                  </div>
+
+                  {managedCondos.length > 0 && (
+                    <div className="border-t border-slate-100 pt-3 space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Condomini Gestiti</span>
+                      {managedCondos.slice(0, 3).map(c => (
+                        <div key={c.id} className="text-[10px] text-slate-700 truncate">🏢 {c.name}</div>
+                      ))}
+                      {managedCondos.length > 3 && (
+                        <div className="text-[10px] text-slate-400">+ altri {managedCondos.length - 3}</div>
+                      )}
+                    </div>
+                  )}
+
+                  {managedProperties.length > 0 && (
+                    <div className="text-[10px] text-slate-400">
+                      🏠 {managedProperties.length} immobili collegati
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main split dashboard: Left relationship list, Right active relationship details */}
-      {constitutedProperties.length === 0 ? (
+      {viewMode === "condominiums" && (
+      constitutedProperties.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto">
           <div className="bg-slate-50 text-indigo-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-indigo-50/50">
             <Building size={28} />
@@ -1156,7 +1302,7 @@ export default function CondominiumsView({
           </div>
 
         </div>
-      )}
+      ))}
 
       {/* Condominium Creation/Editing Modal */}
       {showModal && (
