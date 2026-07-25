@@ -129,7 +129,12 @@ export default function DashboardView({
       const currentM = now.getMinutes();
       
       const startMinutes = startH * 60 + startM;
-      const endMinutes = endH * 60 + endM;
+      // CORREZIONE AQ — bug reale trovato e corretto: un orario di fine "00:00" veniva
+      // interpretato come "zero minuti dopo mezzanotte" (il valore più basso possibile),
+      // bloccando la bacheca praticamente tutto il giorno tranne esattamente a mezzanotte.
+      // 00:00 come orario di FINE significa "fino a fine giornata" (equivale a 24:00/1440
+      // minuti), non "all'inizio della giornata".
+      const endMinutes = (endH === 0 && endM === 0) ? 24 * 60 : endH * 60 + endM;
       const currentMinutes = currentH * 60 + currentM;
       
       if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
