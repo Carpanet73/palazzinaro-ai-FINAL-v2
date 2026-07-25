@@ -25,6 +25,7 @@ import { AppSection } from "../types";
 interface AIAreaViewProps {
   onAddProperty: (property: any) => Promise<void>;
   onAddContract: (contract: any) => Promise<void>;
+  onOpenWizardWithPrefill?: (data: any) => void; // CORREZIONE AR
   onAddTenant: (tenant: any) => Promise<void>;
   onAddCondominium: (condo: any) => Promise<void>;
   onAddMovement: (movement: any) => Promise<void>;
@@ -38,6 +39,7 @@ type AiContextType = "contracts" | "condominiums" | "banks" | "tenants" | "prope
 export default function AIAreaView({
   onAddProperty,
   onAddContract,
+  onOpenWizardWithPrefill,
   onAddTenant,
   onAddCondominium,
   onAddMovement,
@@ -224,20 +226,31 @@ export default function AIAreaView({
           break;
 
         case "contracts":
-          await onAddContract({
-            propertyId: parsedResult.propertyId || "",
-            propertyName: parsedResult.propertyName || "Immobile Generico",
-            tenantId: parsedResult.tenantId || "",
-            tenantName: parsedResult.tenantName || "Inquilino Generico",
-            startDate: parsedResult.startDate || new Date().toISOString().split("T")[0],
-            endDate: parsedResult.endDate || new Date(Date.now() + 365*24*3600*1000).toISOString().split("T")[0],
-            rentAmount: Number(parsedResult.rentAmount) || 0,
-            frequency: parsedResult.frequency || "Mensile",
-            status: parsedResult.status || "Active",
-            notes: parsedResult.notes || "Caricato tramite l'Area AI",
-            ownerName: parsedResult.ownerName || ""
+          // CORREZIONE AR — non salva più nulla in automatico: apre il Wizard guidato già
+          // precompilato con i dati estratti, così restano sempre correggibili e
+          // completabili (es. con dati che il documento non conteneva) prima di salvare.
+          onOpenWizardWithPrefill?.({
+            property: {
+              name: parsedResult.propertyName || "",
+              address: parsedResult.propertyAddress || ""
+            },
+            owner: {
+              name: parsedResult.ownerName || ""
+            },
+            tenant: {
+              name: parsedResult.tenantName || "",
+              email: parsedResult.tenantEmail || "",
+              phone: parsedResult.tenantPhone || "",
+              fiscalCode: parsedResult.tenantFiscalCode || ""
+            },
+            contract: {
+              startDate: parsedResult.startDate || "",
+              endDate: parsedResult.endDate || "",
+              rentAmount: Number(parsedResult.rentAmount) || 0,
+              frequency: parsedResult.frequency || "Mensile"
+            }
           });
-          targetSection = "contracts";
+          targetSection = "properties";
           break;
 
         case "tenants":

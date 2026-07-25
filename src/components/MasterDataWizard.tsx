@@ -51,6 +51,14 @@ import {
 // ============================================================================
 
 export interface MasterDataWizardProps {
+  // CORREZIONE AR — dati precompilati dall'estrazione AI: il Wizard si apre già riempito,
+  // ma resta sempre possibile correggere/completare ogni campo prima di salvare davvero.
+  prefillData?: {
+    property?: { name?: string; address?: string; type?: string };
+    tenant?: { name?: string; email?: string; phone?: string; fiscalCode?: string };
+    owner?: { name?: string };
+    contract?: { startDate?: string; endDate?: string; rentAmount?: number; frequency?: string };
+  } | null;
   isOpen: boolean;
   onClose: () => void;
   onPersist: (data: MasterDataPayload) => Promise<void>;
@@ -158,6 +166,7 @@ export default function MasterDataWizard({
   isOpen,
   onClose,
   onPersist,
+  prefillData,
   existingOwners,
   existingCondominiums,
   existingTenants,
@@ -306,6 +315,45 @@ export default function MasterDataWizard({
       }
     }
   }, [isOpen, standaloneEntity]);
+
+  // ============================================================================
+  // CORREZIONE AR — Precompilazione da estrazione AI (Area AI)
+  // ============================================================================
+  // Quando l'AI estrae dei dati (es. da un PDF di contratto), il Wizard si apre già
+  // riempito con quei valori, partendo dal primo passo — così restano sempre
+  // controllabili, correggibili e completabili con dati che il documento non aveva,
+  // prima di salvare davvero. Non salva mai nulla in automatico.
+  useEffect(() => {
+    if (isOpen && prefillData) {
+      setCurrentStep(1);
+      setMaxStepReached(5);
+
+      if (prefillData.property) {
+        setPropName(prefillData.property.name || "");
+        setPropAddress(prefillData.property.address || "");
+        if (prefillData.property.type) setPropType(prefillData.property.type);
+      }
+      if (prefillData.owner?.name) {
+        setOwnerMode("new");
+        setNewOwnerName(prefillData.owner.name);
+      }
+      if (prefillData.tenant) {
+        setIsRented(true);
+        setTenantMode("new");
+        setTName(prefillData.tenant.name || "");
+        setTEmail(prefillData.tenant.email || "");
+        setTPhone(prefillData.tenant.phone || "");
+        setTFiscalCode(prefillData.tenant.fiscalCode || "");
+      }
+      if (prefillData.contract) {
+        setHasContract(true);
+        setCStartDate(prefillData.contract.startDate || "");
+        setCEndDate(prefillData.contract.endDate || "");
+        setCRentAmount(prefillData.contract.rentAmount || 0);
+        if (prefillData.contract.frequency) setCFrequency(prefillData.contract.frequency as any);
+      }
+    }
+  }, [isOpen, prefillData]);
 
   const handleStandaloneSubmit = async () => {
     if (!standaloneEntity || !isStepValid(currentStep)) {

@@ -179,6 +179,13 @@ export default function App() {
   // CORREZIONE E — quando valorizzato, il wizard si apre in modalità isolata
   // (solo Proprietario / Inquilino / Condominio, senza creare un immobile)
   const [wizardStandaloneEntity, setWizardStandaloneEntity] = useState<"owner" | "tenant" | "condominium" | undefined>(undefined);
+  const [wizardPrefillData, setWizardPrefillData] = useState<any>(null); // CORREZIONE AR
+
+  const handleOpenWizardWithPrefill = (data: any) => {
+    setWizardStandaloneEntity(undefined);
+    setWizardPrefillData(data);
+    setMasterWizardOpen(true);
+  };
   // Riferimenti alle procedure di aggiunta già esistenti in Inquilini/Condomini/Manutenzioni,
   // "prestate" al tasto flottante globale per evitare un secondo flusso duplicato
   const tenantsAddHandlerRef = useRef<(() => void) | null>(null);
@@ -2691,6 +2698,7 @@ export default function App() {
             onAddMovement={handleAddMovement}
             onAddReminder={handleAddReminder}
             onAddClosingItem={handleAddClosingItem}
+            onOpenWizardWithPrefill={handleOpenWizardWithPrefill}
             setCurrentSection={setCurrentSection}
           />
         )}
@@ -2746,9 +2754,11 @@ export default function App() {
       )}
       <MasterDataWizard
         isOpen={masterWizardOpen}
+        prefillData={wizardPrefillData}
         onClose={() => {
           setMasterWizardOpen(false);
           setWizardStandaloneEntity(undefined);
+          setWizardPrefillData(null);
         }}
         onPersist={handleMasterDataSave}
         existingOwners={owners}
