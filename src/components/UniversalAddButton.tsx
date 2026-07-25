@@ -23,7 +23,7 @@ export default function UniversalAddButton({
     <button
       type="button"
       onClick={onClick}
-      className="fixed bottom-6 right-6 z-50 group flex items-center gap-2 pl-4 pr-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95"
+      className="fixed bottom-6 right-6 z-40 group flex items-center gap-2 pl-4 pr-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95"
       title="Aggiungi nuovo immobile / inquilino / contratto"
     >
       <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
