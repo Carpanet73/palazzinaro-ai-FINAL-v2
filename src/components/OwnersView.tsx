@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo } from "react";
+import AddressFields, { AddressValue } from "./AddressFields";
 import { 
   ArrowLeft, 
   Building2, 
@@ -76,6 +77,8 @@ export default function OwnersView({
   const [ownerFormEmail, setOwnerFormEmail] = useState("");
   const [ownerFormPhone, setOwnerFormPhone] = useState("");
   const [ownerFormAddress, setOwnerFormAddress] = useState("");
+  const [ownerFormBirthDate, setOwnerFormBirthDate] = useState(""); // CORREZIONE AA
+  const [ownerFormStructuredAddress, setOwnerFormStructuredAddress] = useState<AddressValue>({});
   const [ownerFormIban, setOwnerFormIban] = useState("");
   const [existingRealOwnerId, setExistingRealOwnerId] = useState<string | null>(null);
 
@@ -89,6 +92,8 @@ export default function OwnersView({
     setOwnerFormEmail(match?.email || "");
     setOwnerFormPhone(match?.phone || "");
     setOwnerFormAddress(match?.address || "");
+    setOwnerFormBirthDate(match?.birthDate || "");
+    setOwnerFormStructuredAddress(match?.structuredAddress || {});
     setOwnerFormIban(match?.iban || "");
     setShowOwnerEditModal(true);
   };
@@ -104,6 +109,8 @@ export default function OwnersView({
       email: ownerFormEmail.trim(),
       phone: ownerFormPhone.trim(),
       address: ownerFormAddress.trim(),
+      birthDate: ownerFormBirthDate || "",
+      structuredAddress: ownerFormStructuredAddress,
       iban: ownerFormIban.trim()
     };
     if (existingRealOwnerId) {
@@ -1794,15 +1801,16 @@ export default function OwnersView({
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Indirizzo (facoltativo)
+                  Data di Nascita
                 </label>
                 <input
-                  type="text"
-                  value={ownerFormAddress}
-                  onChange={(e) => setOwnerFormAddress(e.target.value)}
+                  type="date"
+                  value={ownerFormBirthDate}
+                  onChange={(e) => setOwnerFormBirthDate(e.target.value)}
                   className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
                 />
               </div>
+              <AddressFields value={ownerFormStructuredAddress} onChange={setOwnerFormStructuredAddress} />
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   IBAN (facoltativo)

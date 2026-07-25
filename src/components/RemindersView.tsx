@@ -224,6 +224,18 @@ export default function RemindersView({
   const [receiptOfReturnFile, setReceiptOfReturnFile] = useState<string>("");
   const [legalCaseCreatedSuccessfully, setLegalCaseCreatedSuccessfully] = useState(false);
 
+  // CORREZIONE AC — formatta un indirizzo strutturato (via/civico/interno/città/prov/cap) in
+  // un'unica riga di testo leggibile, per le lettere formali.
+  const formatStructuredAddress = (addr?: { via?: string; civico?: string; interno?: string; citta?: string; provincia?: string; cap?: string }): string => {
+    if (!addr) return "";
+    const parts: string[] = [];
+    if (addr.via) parts.push(addr.civico ? `${addr.via}, ${addr.civico}` : addr.via);
+    if (addr.interno) parts.push(`int. ${addr.interno}`);
+    const cityLine = [addr.cap, addr.citta, addr.provincia ? `(${addr.provincia})` : ""].filter(Boolean).join(" ");
+    if (cityLine.trim()) parts.push(cityLine.trim());
+    return parts.join(", ");
+  };
+
   // ── CORREZIONE Z — Un Sollecito non si elimina mai a mano (voce rigida). L'unica
   // flessibilità ammessa: se ciò che resta ancora da saldare in un gruppo sono SOLO spese
   // accessorie (mai un canone scaduto insieme), quelle possono tornare al Fast Closing
@@ -345,7 +357,7 @@ export default function RemindersView({
       : `- ${reminder.reason}: €${reminder.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}`;
 
     const total = reminder.amount;
-    const footerText = "Messaggio inviato mediante procedura automatizzata del sistema, in nome e per conto del proprietario, con supporto dell'intelligenza artificiale.";
+    const footerText = "Messaggio inviato mediante procedura automatizzata del sistema, in nome e per conto del proprietario, con supporto dell'intelligenza artificiale. La firma del proprietario è raccolta digitalmente.";
     const messageBody = `Gentile ${tenant.name},\n` +
       `Le inviamo questo ${stepLabel} in merito alla Sua posizione contabile.\n\n` +
       `Dettaglio delle scadenze insolute:\n` +
@@ -472,12 +484,35 @@ export default function RemindersView({
     const tenant = activeStepReminder.debtorType === "owner" ? undefined :
                    (tenants.find(t => t.id === activeStepReminder.tenantId) ||
                     tenants.find(t => t.name.toLowerCase().trim() === activeStepReminder.tenantName.toLowerCase().trim()));
-    generateMessaInMoraPDF(
-      activeStepReminder.tenantName,
-      activeStepReminder.amount,
-      activeStepReminder.dueDate,
-      tenant?.guarantor?.name ? { name: tenant.guarantor.name, fiscalCode: tenant.guarantor.fiscalCode } : undefined
-    );
+
+    // CORREZIONE AC — indirizzo dell'immobile collegato a questa pratica, se risolvibile
+    const linkedProperty = (properties || []).find((p: any) => p.id === activeStepReminder.propertyId);
+
+    // CORREZIONE AC — descrizione del credito: elenco delle voci insolute associate
+    const linkedItems = (fastClosing || []).filter(item => (activeStepReminder.associatedItemsIds || []).includes(item.id));
+    const description = linkedItems.length > 0
+      ? linkedItems.map(i => i.title.split(" - ")[1] || i.title).join(", ")
+      : (activeStepReminder.reason || "canoni di locazione e spese accessorie scaduti e non versati");
+
+    // CORREZIONE AB/AC — il proprietario è SEMPRE mittente e firmatario della lettera,
+    // mai un fantomatico "ufficio legale". Dati presi dal profilo proprietario in Impostazioni.
+    generateMessaInMoraPDF({
+      tenantName: activeStepReminder.tenantName,
+      tenantAddress: formatStructuredAddress(tenant?.address) || undefined,
+      amount: activeStepReminder.amount,
+      description,
+      owner: {
+        name: ownerProfile?.name || "Il Proprietario",
+        birthPlace: ownerProfile?.birthPlace,
+        birthDate: ownerProfile?.birthDate,
+        residenceAddress: formatStructuredAddress(ownerProfile?.structuredAddress) || ownerProfile?.address,
+        citta: ownerProfile?.structuredAddress?.citta,
+        phone: ownerProfile?.phone,
+        email: ownerProfile?.email
+      },
+      propertyAddress: linkedProperty?.address,
+      guarantor: tenant?.guarantor?.name ? { name: tenant.guarantor.name, fiscalCode: tenant.guarantor.fiscalCode } : undefined
+    });
     alert(
       tenant?.guarantor?.name
         ? `Lettera di Diffida e Messa in Mora generata in formato PDF (con il Garante ${tenant.guarantor.name} citato per conoscenza) e avviata alla stampa per spedizione cartacea Raccomandata A/R a entrambi!`

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from "react";
+import AddressFields, { AddressValue } from "./AddressFields";
 import { Plus, Scale, FolderOpen, AlertCircle, CheckCircle, X, Trash2, UserCheck, Briefcase, Download, FileText, Check, ShieldAlert } from "lucide-react";
 import { LegalCase, Property, Lawyer, Tenant, OwnerProfile } from "../types";
 import JSZip from "jszip";
@@ -58,6 +59,7 @@ export default function LegalView({
   const [lawyerEmail, setLawyerEmail] = useState("");
   const [lawyerPhone, setLawyerPhone] = useState("");
   const [lawyerAddress, setLawyerAddress] = useState("");
+  const [lawyerStructuredAddress, setLawyerStructuredAddress] = useState<AddressValue>({}); // CORREZIONE AB
   const [lawyerSpecialization, setLawyerSpecialization] = useState("Sfratti e Morosità");
 
   // Form fields
@@ -162,14 +164,16 @@ export default function LegalView({
           email: lawyerEmail || undefined,
           phone: lawyerPhone || undefined,
           address: lawyerAddress || undefined,
+          structuredAddress: lawyerStructuredAddress,
           specialization: lawyerSpecialization
-        });
+        } as any);
       }
       setLawyerStudioName("");
       setLawyerName("");
       setLawyerEmail("");
       setLawyerPhone("");
       setLawyerAddress("");
+      setLawyerStructuredAddress({});
       setLawyerSpecialization("Sfratti e Morosità");
       setShowLawyerModal(false);
     } catch (err) {
@@ -377,7 +381,7 @@ Per qualsiasi chiarimento è possibile contattare direttamente il proprietario, 
 Cordiali saluti.
 
 ---
-La presente email è stata generata automaticamente dal sistema di intelligenza artificiale Palazzinaro AI, in nome e per conto del proprietario.`;
+La presente email è stata generata automaticamente dal sistema di intelligenza artificiale Palazzinaro AI, in nome e per conto del proprietario. La firma del proprietario è raccolta digitalmente.`;
 
     try {
       const zipBlob = await buildDossierZipBlob(lawsuit);
@@ -1003,18 +1007,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Indirizzo Studio
-                </label>
-                <input
-                  type="text"
-                  placeholder="Es: Viale Mazzini 45, Roma"
-                  value={lawyerAddress}
-                  onChange={(e) => setLawyerAddress(e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-emerald-500"
-                />
-              </div>
+              <AddressFields value={lawyerStructuredAddress} onChange={setLawyerStructuredAddress} />
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">

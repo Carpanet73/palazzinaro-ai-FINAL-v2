@@ -16,6 +16,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { OwnerProfile } from "../types";
+import { guessProvinceFromCity } from "../lib/italianCities";
 
 interface SettingsViewProps {
   ownerProfile: OwnerProfile | null;
@@ -27,6 +28,15 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
   const [name, setName] = useState(ownerProfile?.name || "");
   const [fiscalCode, setFiscalCode] = useState(ownerProfile?.fiscalCode || "");
   const [address, setAddress] = useState(ownerProfile?.address || "");
+  // CORREZIONE AB — indirizzo strutturato e data di nascita del proprietario titolare
+  const [addrVia, setAddrVia] = useState(ownerProfile?.structuredAddress?.via || "");
+  const [addrCivico, setAddrCivico] = useState(ownerProfile?.structuredAddress?.civico || "");
+  const [addrInterno, setAddrInterno] = useState(ownerProfile?.structuredAddress?.interno || "");
+  const [addrCitta, setAddrCitta] = useState(ownerProfile?.structuredAddress?.citta || "");
+  const [addrProvincia, setAddrProvincia] = useState(ownerProfile?.structuredAddress?.provincia || "");
+  const [addrCap, setAddrCap] = useState(ownerProfile?.structuredAddress?.cap || "");
+  const [ownerBirthDate, setOwnerBirthDate] = useState(ownerProfile?.birthDate || "");
+  const [ownerBirthPlace, setOwnerBirthPlace] = useState(ownerProfile?.birthPlace || "");
   const [email, setEmail] = useState(ownerProfile?.email || "");
   const [phone, setPhone] = useState(ownerProfile?.phone || "");
   const [iban, setIban] = useState(ownerProfile?.iban || "");
@@ -60,6 +70,14 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
       setName(ownerProfile.name || "");
       setFiscalCode(ownerProfile.fiscalCode || "");
       setAddress(ownerProfile.address || "");
+      setAddrVia(ownerProfile.structuredAddress?.via || "");
+      setAddrCivico(ownerProfile.structuredAddress?.civico || "");
+      setAddrInterno(ownerProfile.structuredAddress?.interno || "");
+      setAddrCitta(ownerProfile.structuredAddress?.citta || "");
+      setAddrProvincia(ownerProfile.structuredAddress?.provincia || "");
+      setAddrCap(ownerProfile.structuredAddress?.cap || "");
+      setOwnerBirthDate(ownerProfile.birthDate || "");
+      setOwnerBirthPlace(ownerProfile.birthPlace || "");
       setEmail(ownerProfile.email || "");
       setPhone(ownerProfile.phone || "");
       setIban(ownerProfile.iban || "");
@@ -136,6 +154,16 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
         name: name.trim(),
         fiscalCode: fiscalCode.trim().toUpperCase(),
         address: address.trim(),
+        structuredAddress: {
+          via: addrVia.trim(),
+          civico: addrCivico.trim(),
+          interno: addrInterno.trim(),
+          citta: addrCitta.trim(),
+          provincia: addrProvincia.trim().toUpperCase(),
+          cap: addrCap.trim()
+        },
+        birthDate: ownerBirthDate,
+        birthPlace: ownerBirthPlace.trim(),
         email: email.trim(),
         phone: phone.trim(),
         iban: iban.trim().toUpperCase().replace(/\s+/g, ""),
@@ -241,6 +269,71 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 outline-hidden focus:border-indigo-500 transition-colors"
                   id="settings-input-address"
+                />
+              </div>
+              <p className="text-[9px] text-slate-500 mt-1">
+                Questo resta come indirizzo generico. Sotto, per le lettere formali (Messa in Mora), l'indirizzo va inserito in modo dettagliato.
+              </p>
+            </div>
+
+            {/* CORREZIONE AB — Indirizzo strutturato + data di nascita, per le comunicazioni
+                formali (Messa in Mora): "Città, lì [data]" richiede di sapere la città reale. */}
+            <div className="border border-slate-800 rounded-xl p-3.5 bg-slate-950/50 space-y-3">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Indirizzo Dettagliato (per lettere e comunicazioni formali)
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="text" placeholder="Via / Piazza" value={addrVia}
+                  onChange={(e) => setAddrVia(e.target.value)}
+                  className="col-span-2 text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                />
+                <input
+                  type="text" placeholder="N. Civico" value={addrCivico}
+                  onChange={(e) => setAddrCivico(e.target.value)}
+                  className="text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                />
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                <input
+                  type="text" placeholder="Interno" value={addrInterno}
+                  onChange={(e) => setAddrInterno(e.target.value)}
+                  className="text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                />
+                <input
+                  type="text" placeholder="Città" value={addrCitta}
+                  onChange={(e) => {
+                    setAddrCitta(e.target.value);
+                    if (!addrProvincia) {
+                      const guessed = guessProvinceFromCity(e.target.value);
+                      if (guessed) setAddrProvincia(guessed);
+                    }
+                  }}
+                  className="col-span-2 text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                />
+                <input
+                  type="text" placeholder="Prov." maxLength={2} value={addrProvincia}
+                  onChange={(e) => setAddrProvincia(e.target.value.toUpperCase())}
+                  className="text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500 uppercase text-center font-mono"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="text" placeholder="CAP" value={addrCap}
+                  onChange={(e) => setAddrCap(e.target.value)}
+                  className="text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500 font-mono"
+                />
+                <input
+                  type="date" value={ownerBirthDate}
+                  onChange={(e) => setOwnerBirthDate(e.target.value)}
+                  className="text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                  title="Data di nascita"
+                />
+                <input
+                  type="text" placeholder="Nato/a a..." value={ownerBirthPlace}
+                  onChange={(e) => setOwnerBirthPlace(e.target.value)}
+                  className="text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                  title="Luogo di nascita"
                 />
               </div>
             </div>

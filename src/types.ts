@@ -45,6 +45,19 @@ export interface Tenant {
   contractId?: string; // current contract
   notes?: string;
   createdAt: string;
+  // CORREZIONE AA — anagrafica più completa: data di nascita e indirizzo strutturato
+  // (mai più un campo unico "indirizzo": via, civico, interno, città, provincia, CAP
+  // separati), servono per le comunicazioni formali (Messa in Mora, lettere) e per
+  // funzioni come il promemoria di compleanno.
+  birthDate?: string; // YYYY-MM-DD
+  address?: {
+    via?: string;
+    civico?: string;
+    interno?: string;
+    citta?: string;
+    provincia?: string; // sigla, es. "MI" — proposta automaticamente dalla città quando nota
+    cap?: string;
+  };
   // Company optional fields
   isCompany?: boolean;
   companyName?: string;
@@ -90,7 +103,19 @@ export interface OwnerProfile {
   userId: string;
   name: string;
   fiscalCode: string;
-  address: string;
+  address: string; // legacy: testo libero, mantenuto per compatibilità
+  // CORREZIONE AB — indirizzo strutturato: serve anche per la formula "Città, lì [data]"
+  // nelle lettere formali (Messa in Mora), coerente con lo stile di una vera lettera legale.
+  structuredAddress?: {
+    via?: string;
+    civico?: string;
+    interno?: string;
+    citta?: string;
+    provincia?: string;
+    cap?: string;
+  };
+  birthDate?: string;
+  birthPlace?: string; // "nato a ___" — per la formula di autoidentificazione nella Messa in Mora
   email: string;
   phone: string;
   iban: string;
@@ -119,7 +144,18 @@ export interface Owner {
   fiscalCode: string;      // Codice Fiscale (persona) o P.IVA (società)
   email: string;
   phone: string;
-  address?: string;        // Residenza / Sede legale (facoltativo)
+  address?: string;        // legacy: testo libero, mantenuto per compatibilità con record vecchi
+  // CORREZIONE AA — indirizzo strutturato reale, e data di nascita: servono per le
+  // comunicazioni formali (Messa in Mora con il proprietario come mittente/firmatario).
+  birthDate?: string; // YYYY-MM-DD
+  structuredAddress?: {
+    via?: string;
+    civico?: string;
+    interno?: string;
+    citta?: string;
+    provincia?: string;
+    cap?: string;
+  };
   iban?: string;           // IBAN del proprietario per accrediti (facoltativo)
   isCompany?: boolean;     // true se persona giuridica
   notes?: string;
@@ -166,6 +202,15 @@ export interface Administrator {
   name: string;
   phone?: string;
   email?: string;
+  // CORREZIONE AB — indirizzo strutturato, stessa struttura usata ovunque nell'app
+  structuredAddress?: {
+    via?: string;
+    civico?: string;
+    interno?: string;
+    citta?: string;
+    provincia?: string;
+    cap?: string;
+  };
   notes?: string;
   createdAt: string;
 }
@@ -348,7 +393,16 @@ export interface Lawyer {
   studioName: string;
   email: string;
   phone: string;
-  address: string;
+  address: string; // legacy: testo libero, mantenuto per compatibilità
+  // CORREZIONE AB — indirizzo strutturato, stessa struttura usata per Inquilini/Proprietari
+  structuredAddress?: {
+    via?: string;
+    civico?: string;
+    interno?: string;
+    citta?: string;
+    provincia?: string;
+    cap?: string;
+  };
   specialization?: string;
   createdAt: string;
 }

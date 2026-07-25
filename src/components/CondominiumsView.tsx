@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import AddressFields, { AddressValue } from "./AddressFields";
 import { 
   Plus, Edit3, Trash2, Building, Calendar, UserCheck, 
   Sparkles, X, AlertCircle, Eye, Info, MapPin, User, 
@@ -80,6 +81,7 @@ export default function CondominiumsView({
   const [adminPhone, setAdminPhone] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminNotes, setAdminNotes] = useState("");
+  const [adminStructuredAddress, setAdminStructuredAddress] = useState<AddressValue>({}); // CORREZIONE AB
 
   // AI assistant states
   const [showAiAssist, setShowAiAssist] = useState(false);
@@ -365,6 +367,7 @@ export default function CondominiumsView({
     setAdminPhone("");
     setAdminEmail("");
     setAdminNotes("");
+    setAdminStructuredAddress({});
     setShowAdminModal(true);
   };
 
@@ -374,6 +377,7 @@ export default function CondominiumsView({
     setAdminPhone(admin.phone || "");
     setAdminEmail(admin.email || "");
     setAdminNotes(admin.notes || "");
+    setAdminStructuredAddress(admin.structuredAddress || {});
     setShowAdminModal(true);
   };
 
@@ -387,7 +391,8 @@ export default function CondominiumsView({
       name: adminName.trim(),
       phone: adminPhone.trim(),
       email: adminEmail.trim(),
-      notes: adminNotes.trim()
+      notes: adminNotes.trim(),
+      structuredAddress: adminStructuredAddress
     };
     if (editingAdmin) {
       await onEditAdministrator?.(editingAdmin.id, payload);
@@ -1848,6 +1853,9 @@ export default function CondominiumsView({
                   />
                 </div>
               </div>
+
+              <AddressFields value={adminStructuredAddress} onChange={setAdminStructuredAddress} />
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Note

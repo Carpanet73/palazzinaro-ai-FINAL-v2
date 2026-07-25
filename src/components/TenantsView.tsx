@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from "react";
+import AddressFields, { AddressValue } from "./AddressFields";
 import { 
   Plus, 
   Edit3, 
@@ -103,6 +104,9 @@ export default function TenantsView({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [fiscalCode, setFiscalCode] = useState("");
+  // CORREZIONE AA — data di nascita e indirizzo strutturato
+  const [birthDate, setBirthDate] = useState("");
+  const [address, setAddress] = useState<AddressValue>({});
   const [propertyId, setPropertyId] = useState("");
   const [notes, setNotes] = useState("");
   const [coTenants, setCoTenants] = useState<Array<{ name: string; fiscalCode?: string; phone?: string; email?: string }>>([]);
@@ -132,6 +136,8 @@ export default function TenantsView({
     setEmail("");
     setPhone("");
     setFiscalCode("");
+    setBirthDate("");
+    setAddress({});
     // CORREZIONE F — il campo Immobile deve partire VUOTO ("Nessuno / Libero"), mai
     // precompilato con il primo immobile della lista: il collegamento è facoltativo
     // e la scelta di lasciarlo vuoto deve essere sempre disponibile e visibile di default.
@@ -169,6 +175,8 @@ export default function TenantsView({
     setEmail(tenant.email);
     setPhone(tenant.phone || "");
     setFiscalCode(tenant.fiscalCode || "");
+    setBirthDate(tenant.birthDate || "");
+    setAddress(tenant.address || {});
     setPropertyId(tenant.propertyId || "");
     setNotes(tenant.notes || "");
     setCoTenants(tenant.coTenants || []);
@@ -257,7 +265,9 @@ export default function TenantsView({
         email: guarantorEmail.trim(),
         notes: guarantorNotes.trim(),
         documents: guarantorDocuments
-      } : null
+      } : null,
+      birthDate: birthDate || "",
+      address
     } as any;
 
     try {
@@ -1488,6 +1498,20 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                       className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 uppercase font-mono"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Data di Nascita
+                    </label>
+                    <input
+                      type="date"
+                      value={birthDate}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                      className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <AddressFields value={address} onChange={setAddress} />
                 </div>
               ) : (
                 /* Company Tenant Fields */
