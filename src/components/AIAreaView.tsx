@@ -172,6 +172,19 @@ export default function AIAreaView({
         })
       });
 
+      // CORREZIONE AR — Se il server rifiuta la richiesta per dimensione troppo grande
+      // (limite ~4.5MB delle funzioni serverless Vercel), la risposta non è JSON ma testo
+      // semplice ("Request Entity Too Large"): prima veniva mostrato un errore incomprensibile
+      // ("Unexpected token..."). Ora si riconosce il caso e si spiega chiaramente.
+      if (response.status === 413 || response.status === 400) {
+        const rawText = await response.text();
+        if (rawText.includes("Entity Too Large") || rawText.toLowerCase().includes("too large") || rawText.toLowerCase().includes("payload")) {
+          setError("Il file caricato è troppo grande (limite di circa 4,5 MB per richiesta). Prova con una foto/PDF più piccolo, o comprimi il file prima di caricarlo.");
+          setLoading(false);
+          return;
+        }
+      }
+
       const result = await response.json();
       if (result.success && result.data) {
         setParsedResult(result.data);
@@ -179,7 +192,11 @@ export default function AIAreaView({
         setError(result.error || "Impossibile elaborare il documento. Riprova con un testo o foto differente.");
       }
     } catch (err: any) {
-      setError("Errore di rete durante la connessione al server: " + err.message);
+      if (err.message && err.message.includes("is not valid JSON")) {
+        setError("Il server ha rifiutato la richiesta, probabilmente perché il file è troppo grande (limite di circa 4,5 MB). Prova con un file più piccolo.");
+      } else {
+        setError("Errore di rete durante la connessione al server: " + err.message);
+      }
     } finally {
       setLoading(false);
     }
