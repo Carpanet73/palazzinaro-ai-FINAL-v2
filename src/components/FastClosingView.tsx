@@ -1174,9 +1174,13 @@ export default function FastClosingView({
                                   {icon} {roleLabel}
                                 </span>
                                 <span className={`text-[8px] font-black rounded px-1 ${
-                                  isPaid ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400 animate-pulse"
+                                  isPaid
+                                    ? "bg-emerald-500/20 text-emerald-400"
+                                    : item.status === "Overdue"
+                                    ? "bg-rose-500/20 text-rose-400 animate-pulse"
+                                    : "bg-amber-500/20 text-amber-400"
                                 }`}>
-                                  {isPaid ? "PAGATO" : "ATTESA"}
+                                  {isPaid ? "PAGATO" : item.status === "Overdue" ? "INSOLUTO" : "ATTESA"}
                                 </span>
                               </div>
                               <p className="text-[10px] text-slate-300 truncate mt-1 font-bold">
@@ -1189,7 +1193,7 @@ export default function FastClosingView({
 
                             <div className="mt-2 pt-1.5 border-t border-slate-900 flex justify-end items-center">
                               {!isPaid ? (
-                                <div className="flex gap-1.5 w-full">
+                                <div className="flex gap-1.5 w-full flex-wrap">
                                   <button
                                     type="button"
                                     onClick={() => handleOpenReconcile(item)}
@@ -1204,6 +1208,26 @@ export default function FastClosingView({
                                   >
                                     Salda
                                   </button>
+                                  {/* CORREZIONE AH — mancava il tasto Insoluto in questo pannello dedicato:
+                                      le quote di manutenzione qui dentro non potevano essere mandate a Solleciti */}
+                                  {item.status === "Overdue" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStatusChange(item.id, "Pending")}
+                                      className="flex-1 py-1 bg-slate-600 hover:bg-slate-500 text-white font-black text-[9px] rounded-md transition-colors cursor-pointer"
+                                    >
+                                      In Attesa
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStatusChange(item.id, "Overdue")}
+                                      className="flex-1 py-1 bg-rose-600 hover:bg-rose-500 text-white font-black text-[9px] rounded-md transition-colors cursor-pointer"
+                                      title="Segna come insoluto (crea sollecito automatico)"
+                                    >
+                                      Insoluto
+                                    </button>
+                                  )}
                                 </div>
                               ) : (
                                 <button
