@@ -371,12 +371,15 @@ export default function RemindersView({
     const templateId = ownerProfile?.emailTemplateId || "";
     const publicKey = ownerProfile?.emailPublicKey || "";
 
-    // CORREZIONE D+G — Se il contratto è cointestato (obbligazione solidale) e/o è presente
-    // un Garante, il sollecito deve raggiungere anche loro, non solo l'intestatario principale.
-    // Resta un unico debitore/conto: qui cambiano solo i destinatari dell'invio.
+    // CORREZIONE D+G+AK — Se il contratto/anagrafica è cointestato/a (obbligazione
+    // solidale, sia lato Inquilino con coTenants sia lato Proprietario con coOwners)
+    // e/o è presente un Garante, il sollecito deve raggiungere anche loro, non solo
+    // l'intestatario principale. Resta un unico debitore/conto: qui cambiano solo i
+    // destinatari dell'invio.
     const allRecipients = [
       { name: tenant.name, email: tenant.email, phone: tenant.phone },
-      ...((tenant.coTenants || []).map(ct => ({ name: ct.name, email: ct.email, phone: ct.phone }))),
+      ...((tenant.coTenants || []).map((ct: any) => ({ name: ct.name, email: ct.email, phone: ct.phone }))),
+      ...((tenant.coOwners || []).map((co: any) => ({ name: co.name, email: co.email, phone: co.phone }))),
       ...(tenant.guarantor?.name ? [{ name: `${tenant.guarantor.name} (Garante)`, email: tenant.guarantor.email, phone: tenant.guarantor.phone }] : [])
     ];
 

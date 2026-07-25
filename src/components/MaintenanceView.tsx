@@ -254,29 +254,47 @@ export default function MaintenanceView({
     // Construct splits array
     const splits: any[] = [];
     if (calculatedSplits.ownerAmt > 0) {
-      const ownersList = (activePropertyData?.ownerName || "Proprietario")
-        .split(",")
-        .map(o => o.trim())
-        .filter(Boolean);
-      
-      if (ownersList.length > 1) {
-        const splitAmount = calculatedSplits.ownerAmt / ownersList.length;
-        ownersList.forEach(owner => {
-          splits.push({
-            debtorName: owner,
-            type: "owner",
-            amount: splitAmount,
-            debtorId: resolveOwnerIdByName(owner) // CORREZIONE D
-          });
-        });
-      } else {
-        const singleOwnerName = activePropertyData?.ownerName || "Proprietario";
+      // CORREZIONE AK — Se il proprietario dell'immobile corrisponde a un'anagrafica Owner
+      // reale con Comproprietari collegati (conto unico, obbligazione solidale), genera UNA
+      // SOLA riga per tutto il lato proprietario, invece di dividerla per nome dal vecchio
+      // testo libero dell'immobile. La vecchia divisione resta solo come ripiego per le
+      // proprietà non ancora collegate a un'anagrafica reale con comproprietari.
+      const primaryOwnerName = (activePropertyData?.ownerName || "").trim();
+      const linkedOwner = owners.find(o => o.name.toLowerCase().trim() === primaryOwnerName.toLowerCase());
+
+      if (linkedOwner && linkedOwner.coOwners && linkedOwner.coOwners.length > 0) {
+        const allNames = [linkedOwner.name, ...linkedOwner.coOwners.map(co => co.name)];
         splits.push({
-          debtorName: singleOwnerName,
+          debtorName: allNames.join(", "),
           type: "owner",
           amount: calculatedSplits.ownerAmt,
-          debtorId: resolveOwnerIdByName(singleOwnerName) // CORREZIONE D
+          debtorId: linkedOwner.id // conto unico: un solo collegamento reale
         });
+      } else {
+        const ownersList = (activePropertyData?.ownerName || "Proprietario")
+          .split(",")
+          .map(o => o.trim())
+          .filter(Boolean);
+
+        if (ownersList.length > 1) {
+          const splitAmount = calculatedSplits.ownerAmt / ownersList.length;
+          ownersList.forEach(owner => {
+            splits.push({
+              debtorName: owner,
+              type: "owner",
+              amount: splitAmount,
+              debtorId: resolveOwnerIdByName(owner) // CORREZIONE D
+            });
+          });
+        } else {
+          const singleOwnerName = activePropertyData?.ownerName || "Proprietario";
+          splits.push({
+            debtorName: singleOwnerName,
+            type: "owner",
+            amount: calculatedSplits.ownerAmt,
+            debtorId: resolveOwnerIdByName(singleOwnerName) // CORREZIONE D
+          });
+        }
       }
     }
     if (calculatedSplits.tenantAmt > 0 && activePropertyData?.tenantName) {
