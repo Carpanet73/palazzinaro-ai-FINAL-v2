@@ -2101,6 +2101,27 @@ export default function App() {
     }
   };
 
+  // CORREZIONE AE — modifica dati di uno Studio Legale già esistente
+  const handleEditLawyer = async (id: string, data: Partial<Lawyer>) => {
+    try {
+      const cleanData: any = {};
+      Object.keys(data).forEach(key => {
+        const val = (data as any)[key];
+        if (val !== undefined) {
+          cleanData[key] = val;
+        }
+      });
+      await updateDoc(doc(db, "lawyers", id), {
+        ...cleanData,
+        updatedAt: serverTimestamp()
+      });
+      showSuccess("Studio Legale aggiornato con successo!");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `lawyers/${id}`);
+      showError("Impossibile aggiornare lo studio legale: " + errInfo.error);
+    }
+  };
+
   // Insurance Policies CRUD
   const handleAddInsurancePolicy = async (data: any) => {
     if (!user) return;
@@ -2581,6 +2602,7 @@ export default function App() {
             onUpdateLegalCase={handleUpdateLegalCase}
             onDeleteLegalCase={handleDeleteLegalCase}
             onAddLawyer={handleAddLawyer}
+            onEditLawyer={handleEditLawyer}
             registerAddHandler={(fn) => { legalAddHandlerRef.current = fn; }}
             ownerProfile={ownerProfile}
           />

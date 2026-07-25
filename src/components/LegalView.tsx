@@ -16,6 +16,7 @@ interface LegalViewProps {
   onUpdateLegalCase?: (id: string, updates: Partial<LegalCase>) => Promise<void>;
   onDeleteLegalCase: (id: string) => Promise<void>;
   onAddLawyer?: (lawyerData: Omit<Lawyer, "id" | "userId" | "createdAt">) => Promise<void>;
+  onEditLawyer?: (id: string, data: Partial<Lawyer>) => Promise<void>;
   // CORREZIONE E/Q — consente al tasto flottante globale di aprire QUESTA stessa procedura
   registerAddHandler?: (fn: () => void) => void;
   ownerProfile?: OwnerProfile | null; // CORREZIONE R — credenziali EmailJS per l'invio automatico del fascicolo
@@ -42,15 +43,27 @@ export default function LegalView({
   onUpdateLegalCase,
   onDeleteLegalCase,
   onAddLawyer,
+  onEditLawyer,
   registerAddHandler,
   ownerProfile
 }: LegalViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [showLawyerModal, setShowLawyerModal] = useState(false);
+  const [editingLawyer, setEditingLawyer] = useState<Lawyer | null>(null); // CORREZIONE AE
 
   // CORREZIONE Q — espone l'apertura del modulo Studio Legale al tasto flottante globale
   useEffect(() => {
-    registerAddHandler?.(() => setShowLawyerModal(true));
+    registerAddHandler?.(() => {
+      setEditingLawyer(null);
+      setLawyerStudioName("");
+      setLawyerName("");
+      setLawyerEmail("");
+      setLawyerPhone("");
+      setLawyerAddress("");
+      setLawyerStructuredAddress({});
+      setLawyerSpecialization("Sfratti e Morosità");
+      setShowLawyerModal(true);
+    });
   });
 
   // Studio Legale Form states
@@ -150,6 +163,18 @@ export default function LegalView({
     }
   };
 
+  const handleOpenEditLawyer = (lawyer: Lawyer) => {
+    setEditingLawyer(lawyer);
+    setLawyerStudioName(lawyer.studioName);
+    setLawyerName(lawyer.name);
+    setLawyerEmail(lawyer.email || "");
+    setLawyerPhone(lawyer.phone || "");
+    setLawyerAddress(lawyer.address || "");
+    setLawyerStructuredAddress(lawyer.structuredAddress || {});
+    setLawyerSpecialization(lawyer.specialization || "Sfratti e Morosità");
+    setShowLawyerModal(true);
+  };
+
   const handleLawyerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!lawyerStudioName.trim() || !lawyerName.trim()) {
@@ -157,17 +182,21 @@ export default function LegalView({
       return;
     }
     try {
-      if (onAddLawyer) {
-        await onAddLawyer({
-          studioName: lawyerStudioName,
-          name: lawyerName,
-          email: lawyerEmail || undefined,
-          phone: lawyerPhone || undefined,
-          address: lawyerAddress || undefined,
-          structuredAddress: lawyerStructuredAddress,
-          specialization: lawyerSpecialization
-        } as any);
+      const payload = {
+        studioName: lawyerStudioName,
+        name: lawyerName,
+        email: lawyerEmail || undefined,
+        phone: lawyerPhone || undefined,
+        address: lawyerAddress || undefined,
+        structuredAddress: lawyerStructuredAddress,
+        specialization: lawyerSpecialization
+      };
+      if (editingLawyer) {
+        await onEditLawyer?.(editingLawyer.id, payload as any);
+      } else if (onAddLawyer) {
+        await onAddLawyer(payload as any);
       }
+      setEditingLawyer(null);
       setLawyerStudioName("");
       setLawyerName("");
       setLawyerEmail("");
@@ -437,16 +466,6 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Archivio Pratiche Legali</h2>
           <p className="text-xs text-slate-500 mt-0.5">Gestisci contenziosi, sfratti per morosità, diffide e comunicazioni legali degli immobili.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={handleOpenAddModal}
-            id="add-legal-case-btn"
-            className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors shadow-sm self-start sm:self-auto cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Apri Pratica Legale</span>
-          </button>
-        </div>
       </div>
 
       {/* Legal Cases Grid */}
@@ -457,15 +476,8 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
           </div>
           <h3 className="font-sans font-bold text-slate-800 text-base">Nessun fascicolo legale aperto</h3>
           <p className="text-xs text-slate-500 mt-2">
-            Non ci sono vertenze o pratiche legali registrate. Il tuo portafoglio è in piena armonia amministrativa!
+            Non ci sono vertenze o pratiche legali registrate. Il tuo portafoglio è in piena armonia amministrativa! Una pratica arriva qui automaticamente solo dalla sequenza Solleciti, dopo l'upload della ricevuta di ritorno della raccomandata.
           </p>
-          <button
-            onClick={handleOpenAddModal}
-            className="mt-5 inline-flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-lg text-xs transition-colors"
-          >
-            <Plus size={14} />
-            <span>Nuovo fascicolo</span>
-          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -513,19 +525,21 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
                       onDragOver={(e) => { e.preventDefault(); setDragOverLawyerId(l.id); }}
                       onDragLeave={() => setDragOverLawyerId(null)}
                       onDrop={(e) => handleDropCaseOnLawyer(e, l)}
-                      className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all ${
+                      onClick={() => handleOpenEditLawyer(l)}
+                      className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer group ${
                         dragOverLawyerId === l.id
                           ? "border-indigo-500 ring-2 ring-indigo-200 scale-[1.02] bg-indigo-50/30"
-                          : "border-slate-100 bg-slate-50/40"
+                          : "border-slate-100 bg-slate-50/40 hover:border-indigo-200"
                       }`}
                     >
                       <span className="relative w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100 overflow-hidden">
                         <LegalPersonAvatarIcon className="w-7 h-7" />
                       </span>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-bold text-slate-800 truncate">{l.studioName}</p>
                         <p className="text-[10px] text-slate-400 truncate">{l.name} · {count} pratiche</p>
                       </div>
+                      <span className="text-slate-300 group-hover:text-indigo-500 shrink-0 text-[10px]" title="Modifica dati">✏️</span>
                     </div>
                   );
                 })}
@@ -944,8 +958,10 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
             <div className="px-6 py-4 bg-emerald-700 text-white flex items-center justify-between">
-              <h3 className="font-sans font-bold text-base">Registra Nuovo Studio Legale</h3>
-              <button onClick={() => setShowLawyerModal(false)} className="text-slate-100 hover:text-white transition-colors">
+              <h3 className="font-sans font-bold text-base">
+                {editingLawyer ? "Modifica Studio Legale" : "Registra Nuovo Studio Legale"}
+              </h3>
+              <button onClick={() => { setShowLawyerModal(false); setEditingLawyer(null); }} className="text-slate-100 hover:text-white transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -1037,7 +1053,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
                   type="submit"
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm"
                 >
-                  Registra Studio
+                  {editingLawyer ? "Salva Modifiche" : "Registra Studio"}
                 </button>
               </div>
             </form>
