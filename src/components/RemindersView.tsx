@@ -239,10 +239,17 @@ export default function RemindersView({
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   };
 
+  // ⚠️⚠️⚠️ CORREZIONE Y — GATING 15 GIORNI TEMPORANEAMENTE DISATTIVATO ⚠️⚠️⚠️
+  // Disattivato su richiesta esplicita dell'utente il 24/07/2026 per testare tutta la
+  // sequenza dei Solleciti senza aspettare i tempi reali. RIATTIVARE rimettendo questa
+  // costante a `false` non appena il test è concluso — NON deve mai restare disattivato
+  // in un utilizzo reale, altrimenti si perdono i termini procedurali di legge.
+  const DISABLE_15_DAY_GATING_FOR_TESTING = true;
+
   const handleOpenStepWizard = (reminder: Reminder) => {
     const step = reminder.step || 1;
     const daysPassed = getDaysPassedSinceLastStep(reminder);
-    if (step > 1 && daysPassed < 15) {
+    if (!DISABLE_15_DAY_GATING_FOR_TESTING && step > 1 && daysPassed < 15) {
       alert(`BLOCCO TEMPORALE (Gating 15 Giorni): Non sono ancora trascorsi 15 giorni dall'azione precedente per questo sollecito. Giorni trascorsi: ${daysPassed}/15.\n\nPer legge, è necessario rispettare i termini procedurali di morosità.`);
       return;
     }
@@ -1130,6 +1137,20 @@ export default function RemindersView({
                       </div>
 
                       <div className="border-t border-slate-150 pt-4 space-y-4">
+                        {/* ⚠️ CORREZIONE Y — Tasto di comodo SOLO per test: compila al volo le due
+                            ricevute simulate, per poter provare tutta la sequenza fino al passaggio
+                            all'Area Legale senza dover scrivere ogni volta un nome file a mano. */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProofOfSendingFile("TEST_prova_spedizione_raccomandata.pdf");
+                            setReceiptOfReturnFile("TEST_ricevuta_ritorno_firmata.pdf");
+                          }}
+                          className="w-full py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-[10px] font-black border border-dashed border-amber-300"
+                        >
+                          🧪 Compila con Dati di Prova (solo per test)
+                        </button>
+
                         <div>
                           <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
                             3. Carica Prova di Invio (Raccomandata)
