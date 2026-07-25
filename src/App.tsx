@@ -158,6 +158,16 @@ export default function App() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [insurancePolicies, setInsurancePolicies] = useState<InsurancePolicy[]>([]);
   const [deliveryReports, setDeliveryReports] = useState<DeliveryReport[]>([]);
+  // CORREZIONE AP — Il "mese attivo" del Fast Closing è ora un dato VERO salvato su
+  // Firestore, non più calcolato al volo da new Date(). Questo permette a "Chiudi Fast
+  // Closing" di far scattare davvero il mese successivo, indipendentemente dalla data reale
+  // del calendario. Il valore di fallback (finché non arriva il primo dato da Firestore) è
+  // comunque calcolato da new Date(), mai scritto fisso.
+  const getRealCurrentPeriod = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  };
+  const [fastClosingActivePeriod, setFastClosingActivePeriod] = useState<string>(getRealCurrentPeriod());
   const [selectedTenantIdForLedger, setSelectedTenantIdForLedger] = useState<string | null>(null);
 
   // Owner profile for onboarding flow
@@ -289,6 +299,17 @@ export default function App() {
     const unsubInsurancePolicies = listenToCollection("insurancePolicies", setInsurancePolicies, "createdAt");
     const unsubDeliveryReports = listenToCollection("deliveryReports", setDeliveryReports, "createdAt");
 
+    // CORREZIONE AP — Listener del documento singolo (non una collezione) che tiene il
+    // "mese attivo" del Fast Closing di QUESTO utente — un documento per utente, isolato
+    // per userId come tutto il resto dei dati, MAI un documento condiviso globalmente.
+    const unsubFastClosingPeriod = onSnapshot(doc(db, "appState", user.uid), (snap) => {
+      if (snap.exists() && snap.data().fastClosingActivePeriod) {
+        setFastClosingActivePeriod(snap.data().fastClosingActivePeriod);
+      }
+    }, (error) => {
+      console.error("Errore nel listener del periodo Fast Closing:", error);
+    });
+
     // Cleanups
     return () => {
       unsubProperties();
@@ -308,6 +329,7 @@ export default function App() {
       unsubAccounts();
       unsubInsurancePolicies();
       unsubDeliveryReports();
+      unsubFastClosingPeriod();
     };
   }, [user]);
 
@@ -1013,6 +1035,27 @@ export default function App() {
   };
 
   // Owner settings update handler
+  // CORREZIONE AP — Fa avanzare di un mese il "periodo attivo" del Fast Closing di questo
+  // utente, salvandolo su Firestore. Chiamata alla chiusura di un mese: il mese successivo
+  // diventa subito quello attivo, indipendentemente dalla data reale del calendario.
+  const handleAdvanceFastClosingPeriod = async () => {
+    if (!user) return;
+    try {
+      const [y, m] = fastClosingActivePeriod.split("-").map(Number);
+      const next = new Date(y, m - 1, 1); // m è 1-indexed nel formato salvato
+      next.setMonth(next.getMonth() + 1);
+      const nextPeriod = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+      await setDoc(doc(db, "appState", user.uid), {
+        fastClosingActivePeriod: nextPeriod,
+        userId: user.uid,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `appState/${user.uid}`);
+      showError("Impossibile avanzare il periodo del Fast Closing: " + errInfo.error);
+    }
+  };
+
   const handleUpdateOwnerProfile = async (profileData: Partial<OwnerProfile>) => {
     if (!user) return;
     try {
@@ -2551,6 +2594,8 @@ export default function App() {
             properties={properties}
             contracts={contracts}
             deliveryReports={deliveryReports}
+            fastClosingActivePeriod={fastClosingActivePeriod}
+            onAdvanceFastClosingPeriod={handleAdvanceFastClosingPeriod}
             legalCases={legalCases}
             reminders={reminders}
             onAddClosingItem={handleAddClosingItem}

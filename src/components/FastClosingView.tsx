@@ -33,6 +33,8 @@ interface FastClosingViewProps {
   properties: Property[];
   contracts?: Contract[]; // CORREZIONE AN — per l'Indennità di Occupazione post-scadenza
   deliveryReports?: DeliveryReport[]; // CORREZIONE AN — per sapere se la riconsegna è avvenuta
+  fastClosingActivePeriod?: string; // CORREZIONE AP — "YYYY-MM" del mese attivo, dato vero persistito
+  onAdvanceFastClosingPeriod?: () => Promise<void>; // CORREZIONE AP — avanza al mese successivo alla chiusura
   legalCases?: LegalCase[];
   reminders?: Reminder[];
   onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">) => Promise<void>;
@@ -53,6 +55,8 @@ export default function FastClosingView({
   properties,
   contracts = [],
   deliveryReports = [],
+  fastClosingActivePeriod,
+  onAdvanceFastClosingPeriod,
   legalCases = [],
   reminders = [],
   onAddClosingItem,
@@ -68,23 +72,27 @@ export default function FastClosingView({
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>("current"); // "current", "2026-06", "2026-05"
 
-  // CORREZIONE S — etichetta SEMPRE calcolata da new Date(), mai un mese scritto fisso.
-  // Usata sia nell'intestazione ben visibile sia nel tasto di chiusura e nella stampa.
+  // CORREZIONE AP — etichetta calcolata dal periodo attivo VERO e persistito, non più da
+  // new Date() (che non "sa" se un mese è già stato chiuso in anticipo).
   const italianMonthsFull = [
     "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
     "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
   ];
+  const activePeriod = fastClosingActivePeriod || (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  })();
   const currentFastClosingLabel = useMemo(() => {
     if (selectedMonthYear === "current") {
-      const now = new Date();
-      return `Fast Closing ${italianMonthsFull[now.getMonth()]} ${now.getFullYear()}`;
+      const [y, m] = activePeriod.split("-").map(Number);
+      return `Fast Closing ${italianMonthsFull[m - 1]} ${y}`;
     }
     const [y, m] = selectedMonthYear.split("-").map(Number);
     if (y && m) {
       return `Fast Closing ${italianMonthsFull[m - 1]} ${y}`;
     }
     return `Fast Closing ${selectedMonthYear}`;
-  }, [selectedMonthYear]);
+  }, [selectedMonthYear, activePeriod]);
 
   // Statement Import PDF/Photo OCR states
   const [showImportModal, setShowImportModal] = useState(false);
@@ -399,14 +407,15 @@ export default function FastClosingView({
     return fastClosing.filter(item => {
       const dateStr = item.dueDate; // format YYYY-MM-DD
       if (selectedMonthYear === "current") {
-        // Current month and general upcoming/overdue
-        return dateStr.startsWith("2026-07") || item.status === "Overdue" || (item.status === "Pending" && new Date(item.dueDate) < new Date());
+        // CORREZIONE AP — bug critico corretto: prima c'era scritto fisso "2026-07" invece
+        // di usare il periodo attivo vero. Il mese corrente e generale in ritardo/insoluto.
+        return dateStr.startsWith(activePeriod) || item.status === "Overdue" || (item.status === "Pending" && new Date(item.dueDate) < new Date());
       } else {
         // Specific past month (e.g. June 2026 "2026-06", May 2026 "2026-05")
         return dateStr.startsWith(selectedMonthYear);
       }
     });
-  }, [fastClosing, selectedMonthYear]);
+  }, [fastClosing, selectedMonthYear, activePeriod]);
 
   // 2. Apply status filters on top of month filter
   const filteredItems = useMemo(() => {
@@ -859,10 +868,12 @@ export default function FastClosingView({
         );
         if (hasRiconsegna) continue; // immobile liberato: nessuna indennità da generare
 
-        // Prossimo mese di competenza (mese successivo a quello che si sta chiudendo)
-        const nextMonth = new Date();
+        // Prossimo mese di competenza (mese successivo a quello che si sta chiudendo),
+        // calcolato dal periodo attivo VERO, non dalla data reale del calendario.
+        const [activeY, activeM] = activePeriod.split("-").map(Number);
+        const nextMonth = new Date(activeY, activeM - 1, 1);
         nextMonth.setMonth(nextMonth.getMonth() + 1);
-        const nextMonthKey = nextMonth.toISOString().slice(0, 7); // "YYYY-MM"
+        const nextMonthKey = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}`;
 
         // Evita doppioni: non generare se esiste già una riga per questo contratto in questo mese
         const alreadyExists = fastClosing.some(
@@ -889,6 +900,10 @@ export default function FastClosingView({
       setClosedItemsCount(closedCount);
       setReproposedItemsList(reproposedTitles);
       setShowClosingSummary(true);
+
+      // CORREZIONE AP — Il mese chiuso ora fa APRIRE SUBITO quello successivo (dato vero
+      // persistito), indipendentemente dalla data reale del calendario.
+      await onAdvanceFastClosingPeriod?.();
     } catch (err) {
       console.error("Error confirming fast closing closure", err);
     }
@@ -908,9 +923,15 @@ export default function FastClosingView({
     window.print();
   };
 
-  // CORREZIONE S — limite assoluto: mai chiudibile manualmente prima del giorno 20, senza eccezioni
+  // ⚠️⚠️⚠️ CORREZIONE AO — LIMITE GIORNO 20 TEMPORANEAMENTE SBLOCCATO PER TEST ⚠️⚠️⚠️
+  // Sbloccato su richiesta esplicita dell'utente il 25/07/2026 per testare il passaggio
+  // immediato tra un mese e l'altro (es. Luglio -> Agosto) senza aspettare il giorno 20.
+  // RIMETTERE a `false` non appena il test è concluso — a regime la regola del blocco fino
+  // al giorno 20 DEVE tornare attiva, altrimenti si può chiudere un mese quando si vuole.
+  const DISABLE_DAY_20_GATING_FOR_TESTING = true;
+
   const currentDayOfMonth = new Date().getDate();
-  const isClosingButtonDisabled = currentDayOfMonth < 20;
+  const isClosingButtonDisabled = !DISABLE_DAY_20_GATING_FOR_TESTING && currentDayOfMonth < 20;
 
   return (
     <div className="space-y-6" id="fast-closing-view-container">
