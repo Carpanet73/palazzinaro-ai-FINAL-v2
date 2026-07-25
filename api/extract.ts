@@ -405,7 +405,7 @@ Segui rigorosamente le istruzioni di sistema per restituire solo JSON.`;
     contents.push(promptMessage);
 
     const response = await client.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.5-flash", // CORREZIONE AR — "gemini-2.5-flash" dismesso da Google (luglio 2026), aggiornato al modello GA corrente
       contents,
       config: {
         systemInstruction,
