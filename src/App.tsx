@@ -2549,6 +2549,8 @@ export default function App() {
             tenants={tenants}
             owners={owners}
             properties={properties}
+            contracts={contracts}
+            deliveryReports={deliveryReports}
             legalCases={legalCases}
             reminders={reminders}
             onAddClosingItem={handleAddClosingItem}

@@ -23,7 +23,7 @@ import {
   Image as ImageIcon,
   Sparkles
 } from "lucide-react";
-import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner } from "../types";
+import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner, Contract, DeliveryReport } from "../types";
 
 interface FastClosingViewProps {
   fastClosing: FastClosingItem[];
@@ -31,6 +31,8 @@ interface FastClosingViewProps {
   tenants: Tenant[];
   owners?: Owner[]; // CORREZIONE D — per risolvere il debitore reale delle voci a carico proprietario
   properties: Property[];
+  contracts?: Contract[]; // CORREZIONE AN — per l'Indennità di Occupazione post-scadenza
+  deliveryReports?: DeliveryReport[]; // CORREZIONE AN — per sapere se la riconsegna è avvenuta
   legalCases?: LegalCase[];
   reminders?: Reminder[];
   onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">) => Promise<void>;
@@ -49,6 +51,8 @@ export default function FastClosingView({
   tenants,
   owners = [],
   properties,
+  contracts = [],
+  deliveryReports = [],
   legalCases = [],
   reminders = [],
   onAddClosingItem,
@@ -837,6 +841,49 @@ export default function FastClosingView({
         d.setMonth(d.getMonth() + 1);
         const nextDueDate = d.toISOString().split('T')[0];
         await onPostponeClosingItem(item.id, nextDueDate);
+      }
+
+      // CORREZIONE AN — Indennità di Occupazione: se un contratto è scaduto (o è stata
+      // inviata disdetta) ma l'immobile NON risulta riconsegnato (nessun Verbale di
+      // Riconsegna registrato), il canone deve continuare a fluire regolarmente nel Fast
+      // Closing ogni mese, semplicemente cambiando nome in "Indennità di Occupazione" e
+      // mantenendo lo stesso importo — finché non viene registrata la riconsegna.
+      const today = new Date();
+      for (const contract of contracts) {
+        if (!contract.endDate || !contract.rentAmount) continue;
+        const contractEnded = new Date(contract.endDate) < today;
+        if (!contractEnded) continue;
+
+        const hasRiconsegna = deliveryReports.some(
+          dr => dr.contractId === contract.id && dr.type === "riconsegna"
+        );
+        if (hasRiconsegna) continue; // immobile liberato: nessuna indennità da generare
+
+        // Prossimo mese di competenza (mese successivo a quello che si sta chiudendo)
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        const nextMonthKey = nextMonth.toISOString().slice(0, 7); // "YYYY-MM"
+
+        // Evita doppioni: non generare se esiste già una riga per questo contratto in questo mese
+        const alreadyExists = fastClosing.some(
+          fc => fc.sourceId === contract.id &&
+                fc.title.startsWith("Indennità di Occupazione") &&
+                fc.dueDate.startsWith(nextMonthKey)
+        );
+        if (alreadyExists) continue;
+
+        const dueDate = `${nextMonthKey}-01`;
+        await onAddClosingItem({
+          title: `Indennità di Occupazione - ${contract.tenantName}`,
+          description: `Contratto scaduto il ${new Date(contract.endDate).toLocaleDateString("it-IT")} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`,
+          amount: contract.rentAmount,
+          dueDate,
+          source: "contract",
+          sourceId: contract.id,
+          status: "Pending",
+          debtorId: contract.tenantId || null,
+          debtorType: "tenant"
+        } as any);
       }
 
       setClosedItemsCount(closedCount);
