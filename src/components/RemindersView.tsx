@@ -241,6 +241,24 @@ export default function RemindersView({
   // accessorie (mai un canone scaduto insieme), quelle possono tornare al Fast Closing
   // normale come "obbligazioni pecuniarie secondarie" — il Sollecito si chiude, le voci
   // restano regolarmente in Fast Closing (rinvio/insoluto come sempre).
+  // CORREZIONE AL — Raggruppamento per debitore con subtotale, stesso stile del Fast Closing
+  const groupedReminders = useMemo(() => {
+    const groups: { [name: string]: Reminder[] } = {};
+    reminders.forEach(r => {
+      if (!groups[r.tenantName]) groups[r.tenantName] = [];
+      groups[r.tenantName].push(r);
+    });
+    return Object.keys(groups)
+      .sort((a, b) => a.localeCompare(b))
+      .map(name => {
+        const items = groups[name];
+        const subtotal = items
+          .filter(r => r.status !== "Paid")
+          .reduce((sum, r) => sum + r.amount, 0);
+        return { debtorName: name, items, subtotal };
+      });
+  }, [reminders]);
+
   const getReminderComposition = (reminder: Reminder) => {
     const linkedItems = (fastClosing || []).filter(item => (reminder.associatedItemsIds || []).includes(item.id));
     const isRentItem = (item: FastClosingItem) => {
@@ -704,7 +722,7 @@ export default function RemindersView({
         </div>
       </div>
 
-      {/* Reminders Table — stile foglio di calcolo, sobrio */}
+      {/* Reminders — raggruppati per debitore con subtotale, stesso stile del Fast Closing */}
       {reminders.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto mt-8">
           <div className="bg-slate-50 text-slate-400 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4">
@@ -716,143 +734,161 @@ export default function RemindersView({
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-2xs">
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-800 text-slate-100">
-                <th className="p-2.5 text-left font-bold uppercase tracking-wider text-[10px] border border-slate-700">Debitore</th>
-                <th className="p-2.5 text-left font-bold uppercase tracking-wider text-[10px] border border-slate-700">Causale</th>
-                <th className="p-2.5 text-right font-bold uppercase tracking-wider text-[10px] border border-slate-700">Importo</th>
-                <th className="p-2.5 text-center font-bold uppercase tracking-wider text-[10px] border border-slate-700">Scaduto il</th>
-                <th className="p-2.5 text-center font-bold uppercase tracking-wider text-[10px] border border-slate-700">Stato</th>
-                <th className="p-2.5 text-center font-bold uppercase tracking-wider text-[10px] border border-slate-700 no-print">Azioni</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reminders.map((reminder, idx) => {
-                const composition = getReminderComposition(reminder);
-                const isPaidReminder = reminder.status === "Paid";
-                return (
-                  <tr
-                    key={reminder.id}
-                    id={`reminder-card-${reminder.id}`}
-                    className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-indigo-50/30 transition-colors ${isPaidReminder ? "opacity-50" : ""}`}
-                  >
-                    <td className="p-2.5 border border-slate-200 font-bold text-slate-800 align-top">
-                      {reminder.tenantName}
-                      {reminder.suggestedLetterBody && (
-                        <button
-                          onClick={() => setSelectedReminder(reminder)}
-                          className="ml-1.5 text-indigo-400 hover:text-indigo-600"
-                          title="Visualizza lettera AI"
+        groupedReminders.map((group, groupIdx) => {
+          const borderColors = ["border-indigo-400", "border-emerald-400", "border-violet-400", "border-amber-400", "border-rose-400"];
+          const colorClass = borderColors[groupIdx % borderColors.length];
+          return (
+            <div key={group.debtorName} className={`bg-white rounded-2xl border-2 ${colorClass} overflow-hidden shadow-2xs mb-5`}>
+              {/* Group header bar — nome debitore + subtotale, stile Fast Closing */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">👤</span>
+                  <h4 className="font-black text-sm text-slate-900">{group.debtorName}</h4>
+                </div>
+                {group.subtotal > 0 && (
+                  <div className="text-right">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold">Totale Sollecitato</span>
+                    <span className="text-sm font-black text-rose-600 font-mono">€{group.subtotal.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-800 text-slate-100">
+                      <th className="p-2.5 text-left font-bold uppercase tracking-wider text-[10px] border border-slate-700">Causale</th>
+                      <th className="p-2.5 text-right font-bold uppercase tracking-wider text-[10px] border border-slate-700">Importo</th>
+                      <th className="p-2.5 text-center font-bold uppercase tracking-wider text-[10px] border border-slate-700">Scaduto il</th>
+                      <th className="p-2.5 text-center font-bold uppercase tracking-wider text-[10px] border border-slate-700">Stato</th>
+                      <th className="p-2.5 text-center font-bold uppercase tracking-wider text-[10px] border border-slate-700 no-print">Azioni</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.items.map((reminder, idx) => {
+                      const composition = getReminderComposition(reminder);
+                      const isPaidReminder = reminder.status === "Paid";
+                      return (
+                        <tr
+                          key={reminder.id}
+                          id={`reminder-card-${reminder.id}`}
+                          className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-indigo-50/30 transition-colors ${isPaidReminder ? "opacity-50" : ""}`}
                         >
-                          <Sparkles size={11} className="inline" />
-                        </button>
-                      )}
-                      {reminder.registeredLetterReceiptName && (
-                        <span className="ml-1.5 text-rose-400" title={`Raccomandata: ${reminder.registeredLetterReceiptName}`}>
-                          <FileText size={11} className="inline" />
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-2.5 border border-slate-200 text-slate-600 align-top max-w-xs truncate" title={reminder.reason}>
-                      {reminder.reason}
-                    </td>
-                    <td className="p-2.5 border border-slate-200 text-right font-mono font-black text-rose-600 align-top">
-                      €{reminder.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-2.5 border border-slate-200 text-center font-mono text-slate-600 align-top">
-                      {new Date(reminder.dueDate).toLocaleDateString("it-IT")}
-                    </td>
-                    <td className="p-2.5 border border-slate-200 text-center align-top">
-                      <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${
-                        reminder.status === "Paid"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : reminder.status === "MessaInMora"
-                          ? "bg-rose-200 text-rose-900"
-                          : reminder.status === "Sent"
-                          ? "bg-indigo-100 text-indigo-800"
-                          : "bg-amber-100 text-amber-800"
-                      }`}>
-                        {reminder.status === "Paid" && "Saldato"}
-                        {reminder.status === "MessaInMora" && "Messa in Mora"}
-                        {reminder.status === "Sent" && "Sollecitato"}
-                        {reminder.status === "Pending" && "Bozza/Pronto"}
-                      </span>
-                    </td>
-                    <td className="p-2.5 border border-slate-200 align-top no-print">
-                      <div className="flex flex-wrap items-center justify-center gap-1">
-                        {!isPaidReminder && (
-                          <>
-                            {(!reminder.step || reminder.step === 1) && (
+                          <td className="p-2.5 border border-slate-200 text-slate-600 align-top max-w-xs truncate" title={reminder.reason}>
+                            {reminder.reason}
+                            {reminder.suggestedLetterBody && (
                               <button
-                                onClick={() => handleOpenStepWizard(reminder)}
-                                className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-sm text-[9px] font-black tracking-wide"
+                                onClick={() => setSelectedReminder(reminder)}
+                                className="ml-1.5 text-indigo-400 hover:text-indigo-600"
+                                title="Visualizza lettera AI"
                               >
-                                1° Sollecito
+                                <Sparkles size={11} className="inline" />
                               </button>
                             )}
-                            {reminder.step === 2 && (
-                              <button
-                                onClick={() => handleOpenStepWizard(reminder)}
-                                className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-sm text-[9px] font-black tracking-wide"
-                              >
-                                2° Sollecito
-                              </button>
-                            )}
-                            {reminder.step === 3 && (
-                              <button
-                                onClick={() => handleOpenStepWizard(reminder)}
-                                className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-sm text-[9px] font-black tracking-wide"
-                              >
-                                Messa in Mora
-                              </button>
-                            )}
-                            {reminder.step === 4 && (
-                              <button
-                                onClick={() => handleOpenStepWizard(reminder)}
-                                className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-sm text-[9px] font-black tracking-wide"
-                              >
-                                → Area Legale
-                              </button>
-                            )}
-                            {reminder.step === 5 && (
-                              <span className="px-2 py-1 bg-slate-200 text-slate-500 rounded-sm text-[9px] font-bold">
-                                In Legale
+                            {reminder.registeredLetterReceiptName && (
+                              <span className="ml-1.5 text-rose-400" title={`Raccomandata: ${reminder.registeredLetterReceiptName}`}>
+                                <FileText size={11} className="inline" />
                               </span>
                             )}
-                            <button
-                              onClick={() => handleOpenReconcileReminder(reminder)}
-                              className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-sm text-[9px] font-black tracking-wide"
-                              title="Riconcilia con un bonifico bancario registrato"
-                            >
-                              Riconcilia
-                            </button>
-                            <button
-                              onClick={() => handleMarkAsPaid(reminder.id)}
-                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-sm text-[9px] font-black tracking-wide"
-                            >
-                              Saldato
-                            </button>
-                            {composition.onlyAccessoriesRemain && (
-                              <button
-                                onClick={() => handleReturnAccessoriesToFastClosing(reminder)}
-                                className="px-2 py-1 bg-slate-500 hover:bg-slate-400 text-white rounded-sm text-[9px] font-black tracking-wide"
-                                title="Nessun canone scaduto residuo: le spese accessorie possono tornare al Fast Closing normale"
-                              >
-                                ↩ Fast Closing
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                          </td>
+                          <td className="p-2.5 border border-slate-200 text-right font-mono font-black text-rose-600 align-top">
+                            €{reminder.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-2.5 border border-slate-200 text-center font-mono text-slate-600 align-top">
+                            {new Date(reminder.dueDate).toLocaleDateString("it-IT")}
+                          </td>
+                          <td className="p-2.5 border border-slate-200 text-center align-top">
+                            <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${
+                              reminder.status === "Paid"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : reminder.status === "MessaInMora"
+                                ? "bg-rose-200 text-rose-900"
+                                : reminder.status === "Sent"
+                                ? "bg-indigo-100 text-indigo-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}>
+                              {reminder.status === "Paid" && "Saldato"}
+                              {reminder.status === "MessaInMora" && "Messa in Mora"}
+                              {reminder.status === "Sent" && "Sollecitato"}
+                              {reminder.status === "Pending" && "Bozza/Pronto"}
+                            </span>
+                          </td>
+                          <td className="p-2.5 border border-slate-200 align-top no-print">
+                            <div className="flex flex-wrap items-center justify-center gap-1">
+                              {!isPaidReminder && (
+                                <>
+                                  {(!reminder.step || reminder.step === 1) && (
+                                    <button
+                                      onClick={() => handleOpenStepWizard(reminder)}
+                                      className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-sm text-[9px] font-black tracking-wide"
+                                    >
+                                      1° Sollecito
+                                    </button>
+                                  )}
+                                  {reminder.step === 2 && (
+                                    <button
+                                      onClick={() => handleOpenStepWizard(reminder)}
+                                      className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-sm text-[9px] font-black tracking-wide"
+                                    >
+                                      2° Sollecito
+                                    </button>
+                                  )}
+                                  {reminder.step === 3 && (
+                                    <button
+                                      onClick={() => handleOpenStepWizard(reminder)}
+                                      className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-sm text-[9px] font-black tracking-wide"
+                                    >
+                                      Messa in Mora
+                                    </button>
+                                  )}
+                                  {reminder.step === 4 && (
+                                    <button
+                                      onClick={() => handleOpenStepWizard(reminder)}
+                                      className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-sm text-[9px] font-black tracking-wide"
+                                    >
+                                      → Area Legale
+                                    </button>
+                                  )}
+                                  {reminder.step === 5 && (
+                                    <span className="px-2 py-1 bg-slate-200 text-slate-500 rounded-sm text-[9px] font-bold">
+                                      In Legale
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => handleOpenReconcileReminder(reminder)}
+                                    className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-sm text-[9px] font-black tracking-wide"
+                                    title="Riconcilia con un bonifico bancario registrato"
+                                  >
+                                    Riconcilia
+                                  </button>
+                                  <button
+                                    onClick={() => handleMarkAsPaid(reminder.id)}
+                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-sm text-[9px] font-black tracking-wide"
+                                  >
+                                    Saldato
+                                  </button>
+                                  {composition.onlyAccessoriesRemain && (
+                                    <button
+                                      onClick={() => handleReturnAccessoriesToFastClosing(reminder)}
+                                      className="px-2 py-1 bg-slate-500 hover:bg-slate-400 text-white rounded-sm text-[9px] font-black tracking-wide"
+                                      title="Nessun canone scaduto residuo: le spese accessorie possono tornare al Fast Closing normale"
+                                    >
+                                      ↩ Fast Closing
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })
       )}
 
       {/* Reminder Full View Modal */}
