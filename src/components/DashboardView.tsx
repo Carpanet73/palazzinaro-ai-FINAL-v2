@@ -265,6 +265,30 @@ export default function DashboardView({
     return pendingFastClosing.reduce((sum, item) => sum + (item.amount || 0), 0);
   }, [pendingFastClosing]);
 
+  // ── CORREZIONE AD — Promemoria compleanno inquilini ──
+  // Confronta solo giorno e mese (mai l'anno) della data di nascita con oggi.
+  const tenantsWithBirthdayToday = useMemo(() => {
+    const today = new Date();
+    const todayDay = today.getDate();
+    const todayMonth = today.getMonth();
+    return tenants.filter(t => {
+      if (!t.birthDate) return false;
+      const bd = new Date(t.birthDate);
+      return bd.getDate() === todayDay && bd.getMonth() === todayMonth;
+    });
+  }, [tenants]);
+
+  const handleSendBirthdayWishes = (tenant: Tenant) => {
+    if (!tenant.phone) {
+      alert(`⚠️ "${tenant.name}" non ha un numero di telefono in anagrafica: impossibile inviare gli auguri via WhatsApp.`);
+      return;
+    }
+    const firstName = tenant.name.trim().split(" ")[0];
+    const message = `Buongiorno ${firstName}, dalla documentazione ho visto che oggi è il tuo compleanno, ti faccio i miei migliori auguri.`;
+    const phoneClean = tenant.phone.replace(/[^0-9+]/g, "");
+    window.open(`https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`, "_blank");
+  };
+
   // ── CORREZIONE X — Due coefficienti di indebitamento del Proprietario ──
   // 1) Soglia per singolo immobile: oltre questa cifra di spese non pagate (condominio +
   //    manutenzioni a suo carico) su UN SOLO immobile, scatta comunque l'avviso.
@@ -1827,6 +1851,42 @@ export default function DashboardView({
                         className="bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] px-3.5 py-2 rounded-lg -2 border-indigo-800 active:-0 transition-all cursor-pointer"
                       >
                         Assegna Ora
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* CORREZIONE AD — Promemoria: compleanno inquilini oggi */}
+              {tenantsWithBirthdayToday.map(t => (
+                <div
+                  key={`birthday-${t.id}`}
+                  className="p-4 rounded-xl border-2 border-emerald-300 bg-emerald-50/70 transition-all duration-300 shadow-2xs"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-2xl mt-0.5 shrink-0">🎂</span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-extrabold text-xs text-emerald-950 leading-snug">
+                            Oggi è il compleanno di {t.name}
+                          </h4>
+                          <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 uppercase">
+                            Promemoria
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-emerald-900/80 mt-1 leading-relaxed">
+                          Un piccolo pensiero può fare la differenza nel rapporto con l'inquilino.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="sm:text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center pt-3 sm:pt-0 border-t sm:border-t-0 border-emerald-200">
+                      <button
+                        onClick={() => handleSendBirthdayWishes(t)}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] px-3.5 py-2 rounded-lg -2 border-emerald-800 active:-0 transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        💬 Invia Auguri via WhatsApp
                       </button>
                     </div>
                   </div>
