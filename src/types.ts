@@ -156,6 +156,17 @@ export interface Owner {
     provincia?: string;
     cap?: string;
   };
+  // CORREZIONE AJ — Comproprietari: stessa logica dei Cointestatari dell'Inquilino.
+  // NON creano un secondo conto/debitore — il conto/mastrino resta UNICO su questo Owner
+  // (obbligazione solidale: se non paga uno, paga l'altro). Se il comproprietario esiste
+  // già come Owner reale, si collega con `linkedOwnerId` invece di duplicare i dati.
+  coOwners?: Array<{
+    name: string;
+    fiscalCode?: string;
+    phone?: string;
+    email?: string;
+    linkedOwnerId?: string; // se collegato a un Owner già esistente, per evitare doppioni
+  }>;
   iban?: string;           // IBAN del proprietario per accrediti (facoltativo)
   isCompany?: boolean;     // true se persona giuridica
   notes?: string;

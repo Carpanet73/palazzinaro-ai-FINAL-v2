@@ -79,6 +79,11 @@ export default function OwnersView({
   const [ownerFormAddress, setOwnerFormAddress] = useState("");
   const [ownerFormBirthDate, setOwnerFormBirthDate] = useState(""); // CORREZIONE AA
   const [ownerFormStructuredAddress, setOwnerFormStructuredAddress] = useState<AddressValue>({});
+  // CORREZIONE AJ — Comproprietari: stesso conto unico, con selezione smart tra i
+  // proprietari già a sistema per evitare di ridigitare/duplicare dati
+  const [ownerFormCoOwners, setOwnerFormCoOwners] = useState<Array<{ name: string; fiscalCode?: string; phone?: string; email?: string; linkedOwnerId?: string }>>([]);
+  const [showAddCoOwnerPicker, setShowAddCoOwnerPicker] = useState(false);
+  const [coOwnerSearchTerm, setCoOwnerSearchTerm] = useState("");
   const [ownerFormIban, setOwnerFormIban] = useState("");
   const [existingRealOwnerId, setExistingRealOwnerId] = useState<string | null>(null);
 
@@ -94,6 +99,9 @@ export default function OwnersView({
     setOwnerFormAddress(match?.address || "");
     setOwnerFormBirthDate(match?.birthDate || "");
     setOwnerFormStructuredAddress(match?.structuredAddress || {});
+    setOwnerFormCoOwners(match?.coOwners || []);
+    setShowAddCoOwnerPicker(false);
+    setCoOwnerSearchTerm("");
     setOwnerFormIban(match?.iban || "");
     setShowOwnerEditModal(true);
   };
@@ -111,6 +119,7 @@ export default function OwnersView({
       address: ownerFormAddress.trim(),
       birthDate: ownerFormBirthDate || "",
       structuredAddress: ownerFormStructuredAddress,
+      coOwners: ownerFormCoOwners,
       iban: ownerFormIban.trim()
     };
     if (existingRealOwnerId) {
@@ -1811,6 +1820,111 @@ export default function OwnersView({
                 />
               </div>
               <AddressFields value={ownerFormStructuredAddress} onChange={setOwnerFormStructuredAddress} />
+
+              {/* CORREZIONE AJ — Comproprietari: stesso conto unico, ricerca smart tra i
+                  proprietari già a sistema per evitare di ridigitare/duplicare i dati */}
+              <div className="space-y-2 border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Comproprietari (facoltativo)
+                </label>
+                <p className="text-[10px] text-slate-400">
+                  Il conto resta unico (obbligazione solidale): questi nominativi non creano un secondo proprietario, ma vengono raggiunti anche loro dalle comunicazioni.
+                </p>
+
+                {ownerFormCoOwners.map((co, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs">
+                    <div className="min-w-0">
+                      <span className="font-bold text-slate-800">{co.name}</span>
+                      {co.linkedOwnerId && (
+                        <span className="ml-1.5 text-[9px] text-emerald-600 font-bold">🔗 collegato ad anagrafica esistente</span>
+                      )}
+                      <div className="text-[10px] text-slate-400 truncate">
+                        {[co.fiscalCode, co.phone, co.email].filter(Boolean).join(" · ") || "Nessun dato aggiuntivo"}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setOwnerFormCoOwners(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-slate-400 hover:text-rose-500 shrink-0 ml-2"
+                      title="Rimuovi comproprietario"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+
+                {!showAddCoOwnerPicker ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCoOwnerPicker(true)}
+                    className="w-full text-xs font-semibold text-indigo-600 hover:text-indigo-700 border border-dashed border-indigo-300 rounded-lg py-2"
+                  >
+                    + Aggiungi Comproprietario
+                  </button>
+                ) : (
+                  <div className="bg-white border border-indigo-200 rounded-lg p-2.5 space-y-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Cerca tra i proprietari già a sistema..."
+                      value={coOwnerSearchTerm}
+                      onChange={(e) => setCoOwnerSearchTerm(e.target.value)}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                    />
+                    {coOwnerSearchTerm.trim().length > 0 && (
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {owners
+                          .filter(o =>
+                            o.id !== existingRealOwnerId /* non se stesso */ &&
+                            o.name.toLowerCase().includes(coOwnerSearchTerm.toLowerCase().trim()) &&
+                            !ownerFormCoOwners.some(co => co.linkedOwnerId === o.id)
+                          )
+                          .slice(0, 5)
+                          .map(o => (
+                            <button
+                              key={o.id}
+                              type="button"
+                              onClick={() => {
+                                setOwnerFormCoOwners(prev => [...prev, {
+                                  name: o.name,
+                                  fiscalCode: o.fiscalCode,
+                                  phone: o.phone,
+                                  email: o.email,
+                                  linkedOwnerId: o.id
+                                }]);
+                                setShowAddCoOwnerPicker(false);
+                                setCoOwnerSearchTerm("");
+                              }}
+                              className="w-full text-left text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg px-2.5 py-2 flex items-center gap-1.5"
+                            >
+                              🔗 <strong>{o.name}</strong> <span className="text-[10px] text-emerald-600">— usa questa anagrafica già esistente</span>
+                            </button>
+                          ))
+                        }
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOwnerFormCoOwners(prev => [...prev, { name: coOwnerSearchTerm.trim() }]);
+                            setShowAddCoOwnerPicker(false);
+                            setCoOwnerSearchTerm("");
+                          }}
+                          className="w-full text-left text-xs bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg px-2.5 py-2"
+                        >
+                          ➕ Crea nuovo nominativo "{coOwnerSearchTerm.trim()}" (non ancora a sistema)
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => { setShowAddCoOwnerPicker(false); setCoOwnerSearchTerm(""); }}
+                      className="text-[10px] text-slate-400 hover:text-slate-600"
+                    >
+                      Annulla
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   IBAN (facoltativo)
