@@ -365,16 +365,6 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
 
   // ── CORREZIONE R — Invio email automatico del fascicolo (mai il client di posta) ──
   const handleSendDossierEmail = async (lawsuit: LegalCase, lawyer: Lawyer) => {
-    const serviceId = ownerProfile?.emailServiceId || "";
-    const templateId = ownerProfile?.emailTemplateId || "";
-    const publicKey = ownerProfile?.emailPublicKey || "";
-
-    if (!serviceId || !templateId || !publicKey) {
-      alert(
-        "⚠️ CONFIGURAZIONE EMAILJS MANCANTE:\nLe credenziali EmailJS non sono ancora configurate nel tuo profilo.\nVai nelle Impostazioni per inserire Service ID, Template ID e Public Key, poi riprova."
-      );
-      return;
-    }
     if (!lawyer.email || !lawyer.email.includes("@")) {
       alert(`⚠️ Lo studio legale "${lawyer.studioName}" non ha un indirizzo email valido in anagrafica. Impossibile inviare.`);
       return;
@@ -412,52 +402,28 @@ Cordiali saluti.
 ---
 La presente email è stata generata automaticamente dal sistema di intelligenza artificiale Palazzinaro AI, in nome e per conto del proprietario. La firma del proprietario è raccolta digitalmente.`;
 
+    // CORREZIONE AI — niente più EmailJS per questo invio: si usa il client di posta vero
+    // del dispositivo (con l'account già configurato lì, quindi la mail di login dell'utente
+    // sul suo dispositivo), che gestisce gli allegati in modo affidabile. Un mailto: non può
+    // MAI allegare file da programma per motivi di sicurezza del browser — quindi lo ZIP
+    // viene scaricato subito prima, pronto da trascinare nell'email che si apre.
     try {
       const zipBlob = await buildDossierZipBlob(lawsuit);
       const zipFileName = `Fascicolo_Legale_${lawsuit.tenantName?.replace(/\s+/g, "_") || "Pratica"}.zip`;
 
-      // CORREZIONE AG — EmailJS accetta allegati SOLO tramite un vero campo file dentro un
-      // <form> reale con sendForm() (mai un Blob passato come parametro dati con send()), e
-      // richiede comunque un piano EmailJS a pagamento (non funziona sul piano gratuito).
-      // Si costruisce quindi un form nascosto con un vero input file, popolato con il file
-      // ZIP generato al volo tramite l'API DataTransfer.
-      let attachmentAttached = false;
-      const form = document.createElement("form");
-      form.style.display = "none";
-      const hiddenFields: Record<string, string> = {
-        to_email: lawyer.email,
-        subject: "Invio Documentazione per Recupero Coattivo",
-        message: emailBody,
-        message_content: emailBody
-      };
-      Object.entries(hiddenFields).forEach(([name, value]) => {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = name;
-        input.value = value;
-        form.appendChild(input);
-      });
+      const url = window.URL.createObjectURL(zipBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = zipFileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
-      const fileInput = document.createElement("input");
-      fileInput.type = "file";
-      fileInput.name = "attachment";
-      try {
-        const dataTransfer = new DataTransfer();
-        const zipFile = new File([zipBlob], zipFileName, { type: "application/zip" });
-        dataTransfer.items.add(zipFile);
-        fileInput.files = dataTransfer.files;
-        attachmentAttached = true;
-      } catch (dtErr) {
-        console.warn("Impossibile popolare l'allegato automaticamente:", dtErr);
-      }
-      form.appendChild(fileInput);
-      document.body.appendChild(form);
-
-      try {
-        await emailjs.sendForm(serviceId, templateId, form, publicKey);
-      } finally {
-        document.body.removeChild(form);
-      }
+      const subject = encodeURIComponent("Invio Documentazione per Recupero Coattivo");
+      const body = encodeURIComponent(emailBody);
+      const mailtoUrl = `mailto:${lawyer.email}?subject=${subject}&body=${body}`;
+      window.location.href = mailtoUrl;
 
       const nowIso = new Date().toISOString();
       await onUpdateLegalCase?.(lawsuit.id, {
@@ -465,31 +431,13 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         dossierSentToEmail: lawyer.email
       });
 
-      if (attachmentAttached) {
-        alert(
-          `📧 Email inviata con successo a ${lawyer.email} (${lawyer.studioName}), con il fascicolo ZIP allegato.\n\n` +
-          `⚠️ Nota: l'allegato viene recapitato solo se il tuo piano EmailJS supporta gli allegati (serve almeno il piano "Personal", non funziona sul piano gratuito) e se il Template EmailJS ha un campo per il file collegato a "attachment". Se il destinatario non riceve il file, controlla questi due punti nel tuo account EmailJS.`
-        );
-      } else {
-        // Fallback: l'allegato non è stato costruibile — scarica lo ZIP e avvisa chiaramente
-        const url = window.URL.createObjectURL(zipBlob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = zipFileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        alert(
-          `📧 Email inviata a ${lawyer.email}, ma NON è stato possibile allegare automaticamente il fascicolo.\n\n` +
-          `Ho scaricato il file "${zipFileName}" sul tuo dispositivo: allegalo tu manualmente rispondendo a questa email o inviandolo separatamente.`
-        );
-      }
-    } catch (err: any) {
-      console.error("Errore invio email fascicolo:", err);
       alert(
-        `❌ Errore durante l'invio automatico dell'email:\n${err?.text || err?.message || JSON.stringify(err)}\n\nVerifica le credenziali EmailJS in Impostazioni.`
+        `📎 Ho scaricato il fascicolo "${zipFileName}" e sto aprendo il tuo programma di posta con il testo già pronto per ${lawyer.email}.\n\n` +
+        `Ultimo passaggio da fare tu: trascina il file scaricato come allegato nell'email prima di inviarla — il client di posta non permette di farlo automaticamente per motivi di sicurezza.`
       );
+    } catch (err: any) {
+      console.error("Errore preparazione invio fascicolo:", err);
+      alert(`❌ Errore durante la preparazione dell'invio: ${err?.message || JSON.stringify(err)}`);
     }
   };
 
