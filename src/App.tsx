@@ -1259,8 +1259,12 @@ export default function App() {
         let currentDueDate = new Date(start);
         let monthIndex = 1;
 
-        // Generate first 6 rent dues monthly for scheduling convenience
-        while (currentDueDate <= end && monthIndex <= 6) {
+        // CORREZIONE AM — RIMOSSO il limite artificiale di 6 mesi: prima, dopo il sesto
+        // canone, un contratto smetteva di generare scadenze future (bug serio, verificato
+        // su richiesta esplicita dell'utente). Ora si genera per l'INTERA durata reale del
+        // contratto (da inizio a fine), senza eccezioni — un contratto di 4+4 anni genera
+        // tutte le sue ~96 rate fin da subito.
+        while (currentDueDate <= end) {
           await addDoc(collection(db, "fastClosing"), {
             userId: user.uid,
             title: `Canone Affitto Mese ${monthIndex} - ${finalTenantName}`,
@@ -1496,13 +1500,14 @@ export default function App() {
           createdAt: serverTimestamp(),
         });
 
-        // Auto-genera 6 rate mensili in Fast Closing
+        // CORREZIONE AM — RIMOSSO il limite artificiale di 6 mesi (stesso fix del flusso
+        // principale in handleAddContract): genera per l'intera durata reale del contratto.
         const rentAmount = Number(ct.rentAmount);
         if (rentAmount > 0 && ct.startDate) {
           const start = new Date(ct.startDate);
           let currentDueDate = new Date(start);
           let monthIndex = 1;
-          while (currentDueDate <= new Date(ct.endDate || start) && monthIndex <= 6) {
+          while (currentDueDate <= new Date(ct.endDate || start)) {
             await addDoc(collection(db, "fastClosing"), {
               userId: user.uid,
               title: `Canone Affitto Mese ${monthIndex} - ${tenantName}`,
@@ -2661,7 +2666,7 @@ export default function App() {
           - Area Legale → crea un nuovo Studio Legale (CORREZIONE Q)
           - Dashboard/Area AI → nascosto: in queste pagine non si "aggiunge" nulla
           - Altre pagine → fallback sulla procedura guidata completa (comportamento precedente) */}
-      {currentSection !== "dashboard" && currentSection !== "ai_area" && currentSection !== "fast_closing" && (
+      {currentSection !== "dashboard" && currentSection !== "ai_area" && currentSection !== "fast_closing" && currentSection !== "reminders" && (
       <UniversalAddButton
         label={
           currentSection === "properties" ? "Aggiungi Immobile" :
