@@ -16,7 +16,8 @@ import {
   FileText, 
   Scale,
   Camera,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ArrowLeft
 } from "lucide-react";
 import JSZip from "jszip";
 import { Reminder, Tenant, BankMovement, FastClosingItem, Communication, OwnerProfile, Owner } from "../types";
@@ -222,6 +223,40 @@ export default function RemindersView({
   const [proofOfSendingFile, setProofOfSendingFile] = useState<string>("");
   const [receiptOfReturnFile, setReceiptOfReturnFile] = useState<string>("");
   const [legalCaseCreatedSuccessfully, setLegalCaseCreatedSuccessfully] = useState(false);
+
+  // ── CORREZIONE Z — Un Sollecito non si elimina mai a mano (voce rigida). L'unica
+  // flessibilità ammessa: se ciò che resta ancora da saldare in un gruppo sono SOLO spese
+  // accessorie (mai un canone scaduto insieme), quelle possono tornare al Fast Closing
+  // normale come "obbligazioni pecuniarie secondarie" — il Sollecito si chiude, le voci
+  // restano regolarmente in Fast Closing (rinvio/insoluto come sempre).
+  const getReminderComposition = (reminder: Reminder) => {
+    const linkedItems = (fastClosing || []).filter(item => (reminder.associatedItemsIds || []).includes(item.id));
+    const isRentItem = (item: FastClosingItem) => {
+      const t = (item.title || "").toLowerCase();
+      const d = (item.description || "").toLowerCase();
+      return item.source === "contract" || t.includes("canone") || t.includes("affitto") || d.includes("canone") || d.includes("affitto");
+    };
+    const rentItems = linkedItems.filter(isRentItem);
+    const accessoryItems = linkedItems.filter(item => !isRentItem(item));
+    const unpaidRentItems = rentItems.filter(item => item.status !== "Paid");
+    const unpaidAccessoryItems = accessoryItems.filter(item => item.status !== "Paid");
+    return {
+      hasUnpaidRent: unpaidRentItems.length > 0,
+      onlyAccessoriesRemain: unpaidRentItems.length === 0 && unpaidAccessoryItems.length > 0,
+      unpaidAccessoryItems
+    };
+  };
+
+  const handleReturnAccessoriesToFastClosing = async (reminder: Reminder) => {
+    const composition = getReminderComposition(reminder);
+    if (!composition.onlyAccessoriesRemain) return;
+    const list = composition.unpaidAccessoryItems.map(i => `- ${i.title} (€${i.amount.toFixed(2)})`).join("\n");
+    const confirmed = confirm(
+      `Su questo sollecito non restano canoni scaduti — solo spese accessorie ancora da saldare:\n\n${list}\n\nQueste sono obbligazioni pecuniarie secondarie: possono tornare al Fast Closing normale (con il consueto rinvio/insoluto) invece di restare bloccate qui nei Solleciti. Il sollecito verrà chiuso.\n\nProcedere?`
+    );
+    if (!confirmed) return;
+    await onUpdateReminderStatus(reminder.id, "Closed", "Chiuso: restavano solo spese accessorie senza canoni scaduti, rimandate al Fast Closing normale.");
+  };
 
   const getDaysPassedSinceLastStep = (reminder: Reminder) => {
     const now = new Date();
@@ -811,14 +846,20 @@ export default function RemindersView({
                      </button>
                    )}
 
-                   <button
-                     onClick={() => onDeleteReminder(reminder.id)}
-                     className="w-full sm:w-auto inline-flex items-center justify-center space-x-1.5 px-4 py-3 bg-slate-500 hover:bg-slate-400 text-white rounded-xl text-xs font-bold active:transition-all shadow-md active:shadow-sm"
-                     title="Elimina"
-                   >
-                     <X size={14} />
-                     <span>Elimina</span>
-                   </button>
+                   {(() => {
+                     const composition = getReminderComposition(reminder);
+                     if (!composition.onlyAccessoriesRemain) return null;
+                     return (
+                       <button
+                         onClick={() => handleReturnAccessoriesToFastClosing(reminder)}
+                         className="w-full sm:w-auto inline-flex items-center justify-center space-x-1.5 px-4 py-3 bg-slate-500 hover:bg-slate-400 text-white rounded-xl text-xs font-bold active:transition-all shadow-md active:shadow-sm"
+                         title="Nessun canone scaduto residuo: le spese accessorie possono tornare al Fast Closing normale"
+                       >
+                         <ArrowLeft size={14} />
+                         <span>Rimanda Accessorie al Fast Closing</span>
+                       </button>
+                     );
+                   })()}
                  </div>
               </div>
             );
