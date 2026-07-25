@@ -22,6 +22,7 @@
 
 
 import React, { useState, useMemo, useEffect } from "react";
+import AddressFields from "./AddressFields";
 import {
   X,
   ChevronRight,
@@ -199,6 +200,13 @@ export default function MasterDataWizard({
   const [newOwnerAddress, setNewOwnerAddress] = useState("");
   const [newOwnerIban, setNewOwnerIban] = useState("");
   const [newOwnerIsCompany, setNewOwnerIsCompany] = useState(false);
+  // CORREZIONE AJ — indirizzo strutturato e comproprietari, disponibili subito in fase di
+  // creazione (non solo dopo, dalla pagina Proprietari)
+  const [newOwnerStructuredAddress, setNewOwnerStructuredAddress] = useState<{ via?: string; civico?: string; interno?: string; citta?: string; provincia?: string; cap?: string }>({});
+  const [ownershipType, setOwnershipType] = useState<"single" | "multiple">("single");
+  const [newOwnerCoOwners, setNewOwnerCoOwners] = useState<Array<{ name: string; fiscalCode?: string; phone?: string; email?: string; linkedOwnerId?: string }>>([]);
+  const [showAddCoOwnerPicker, setShowAddCoOwnerPicker] = useState(false);
+  const [coOwnerSearchTerm, setCoOwnerSearchTerm] = useState("");
 
   // ── Step 4: Inquilino ──────────────────────────────────────────────────
   const [isRented, setIsRented] = useState(false);
@@ -324,6 +332,8 @@ export default function MasterDataWizard({
           email: newOwnerEmail.trim(),
           phone: newOwnerPhone.trim(),
           address: newOwnerAddress.trim() || undefined,
+          structuredAddress: newOwnerStructuredAddress,
+          coOwners: ownershipType === "multiple" ? newOwnerCoOwners : undefined,
           iban: newOwnerIban.trim() || undefined,
           isCompany: newOwnerIsCompany,
           notes: undefined,
@@ -439,6 +449,8 @@ export default function MasterDataWizard({
         email: newOwnerEmail.trim(),
         phone: newOwnerPhone.trim(),
         address: newOwnerAddress.trim() || undefined,
+        structuredAddress: newOwnerStructuredAddress,
+        coOwners: ownershipType === "multiple" ? newOwnerCoOwners : undefined,
         iban: newOwnerIban.trim() || undefined,
         isCompany: newOwnerIsCompany,
         notes: undefined,
@@ -956,6 +968,127 @@ export default function MasterDataWizard({
                     È una <strong>società</strong> (persona giuridica)
                   </label>
 
+                  {/* CORREZIONE AJ — prima domanda: proprietario singolo o comproprietà */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                    <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      È un proprietario singolo o una comproprietà?
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setOwnershipType("single")}
+                        className={`flex-1 text-xs font-bold py-2 rounded-lg border transition-colors ${
+                          ownershipType === "single" ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        👤 Singolo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOwnershipType("multiple")}
+                        className={`flex-1 text-xs font-bold py-2 rounded-lg border transition-colors ${
+                          ownershipType === "multiple" ? "bg-amber-500 text-slate-950 border-amber-500" : "bg-white text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        👥 Comproprietà
+                      </button>
+                    </div>
+                  </div>
+
+                  {ownershipType === "multiple" && (
+                    <div className="space-y-2 border border-amber-200 rounded-xl p-3 bg-amber-50/40">
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                        Comproprietari
+                      </label>
+                      <p className="text-[10px] text-slate-500">
+                        Il conto resta unico (obbligazione solidale). Cerca tra i proprietari già a sistema, o creane uno nuovo al volo.
+                      </p>
+
+                      {newOwnerCoOwners.map((co, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs">
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-800">{co.name}</span>
+                            {co.linkedOwnerId && (
+                              <span className="ml-1.5 text-[9px] text-emerald-600 font-bold">🔗 già a sistema</span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setNewOwnerCoOwners(prev => prev.filter((_, i) => i !== idx))}
+                            className="text-slate-400 hover:text-rose-500 shrink-0 ml-2"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+
+                      {!showAddCoOwnerPicker ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowAddCoOwnerPicker(true)}
+                          className="w-full text-xs font-semibold text-indigo-600 hover:text-indigo-700 border border-dashed border-indigo-300 rounded-lg py-2 bg-white"
+                        >
+                          + Aggiungi Comproprietario
+                        </button>
+                      ) : (
+                        <div className="bg-white border border-indigo-200 rounded-lg p-2.5 space-y-2">
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Cerca tra i proprietari già a sistema..."
+                            value={coOwnerSearchTerm}
+                            onChange={(e) => setCoOwnerSearchTerm(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                          />
+                          {coOwnerSearchTerm.trim().length > 0 && (
+                            <div className="max-h-32 overflow-y-auto space-y-1">
+                              {existingOwners
+                                .filter(o =>
+                                  o.name.toLowerCase().includes(coOwnerSearchTerm.toLowerCase().trim()) &&
+                                  !newOwnerCoOwners.some(co => co.linkedOwnerId === o.id)
+                                )
+                                .slice(0, 5)
+                                .map(o => (
+                                  <button
+                                    key={o.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setNewOwnerCoOwners(prev => [...prev, {
+                                        name: o.name, fiscalCode: o.fiscalCode, phone: o.phone, email: o.email, linkedOwnerId: o.id
+                                      }]);
+                                      setShowAddCoOwnerPicker(false);
+                                      setCoOwnerSearchTerm("");
+                                    }}
+                                    className="w-full text-left text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg px-2.5 py-2"
+                                  >
+                                    🔗 <strong>{o.name}</strong> <span className="text-[10px] text-emerald-600">— usa anagrafica esistente</span>
+                                  </button>
+                                ))}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNewOwnerCoOwners(prev => [...prev, { name: coOwnerSearchTerm.trim() }]);
+                                  setShowAddCoOwnerPicker(false);
+                                  setCoOwnerSearchTerm("");
+                                }}
+                                className="w-full text-left text-xs bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg px-2.5 py-2"
+                              >
+                                ➕ Crea nuovo nominativo "{coOwnerSearchTerm.trim()}"
+                              </button>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => { setShowAddCoOwnerPicker(false); setCoOwnerSearchTerm(""); }}
+                            className="text-[10px] text-slate-400 hover:text-slate-600"
+                          >
+                            Annulla
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <Field
                     label={newOwnerIsCompany ? "Ragione sociale" : "Nome e cognome"}
                     required
@@ -1004,15 +1137,7 @@ export default function MasterDataWizard({
                     />
                   </Field>
 
-                  <Field label="Indirizzo (facoltativo)">
-                    <input
-                      type="text"
-                      value={newOwnerAddress}
-                      onChange={(e) => setNewOwnerAddress(e.target.value)}
-                      placeholder="es. Via Roma 12, Milano (MI)"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                  </Field>
+                  <AddressFields value={newOwnerStructuredAddress} onChange={setNewOwnerStructuredAddress} />
 
                   <Field label="IBAN per accrediti (facoltativo)">
                     <input
