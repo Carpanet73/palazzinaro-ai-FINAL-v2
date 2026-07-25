@@ -507,6 +507,7 @@ export default function RemindersView({
         birthDate: ownerProfile?.birthDate,
         residenceAddress: formatStructuredAddress(ownerProfile?.structuredAddress) || ownerProfile?.address,
         citta: ownerProfile?.structuredAddress?.citta,
+        fiscalCode: ownerProfile?.fiscalCode,
         phone: ownerProfile?.phone,
         email: ownerProfile?.email
       },
