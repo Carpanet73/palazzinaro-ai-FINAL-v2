@@ -60,6 +60,9 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
   const [emailServiceId, setEmailServiceId] = useState(ownerProfile?.emailServiceId || "");
   const [emailTemplateId, setEmailTemplateId] = useState(ownerProfile?.emailTemplateId || "");
   const [emailPublicKey, setEmailPublicKey] = useState(ownerProfile?.emailPublicKey || "");
+  // CORREZIONE AT — le credenziali EmailJS restano mascherate e bloccate finché non si
+  // sblocca esplicitamente: evita sia la visibilità immediata sia la modifica involontaria
+  const [emailCredsUnlocked, setEmailCredsUnlocked] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -553,17 +556,36 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
             <p className="text-[10px] text-slate-400 leading-relaxed">
               Configura le credenziali EmailJS per abilitare l'invio reale delle e-mail di sollecito dal pannello di controllo.
             </p>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                {emailCredsUnlocked ? "🔓 Modifica sbloccata" : "🔒 Credenziali protette"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setEmailCredsUnlocked(v => !v)}
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
+                  emailCredsUnlocked
+                    ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                    : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                }`}
+              >
+                {emailCredsUnlocked ? "Blocca di nuovo" : "🔓 Sblocca per Modificare"}
+              </button>
+            </div>
             <div className="space-y-3.5">
               <div>
                 <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Service ID
                 </label>
                 <input
-                  type="text"
+                  type={emailCredsUnlocked ? "text" : "password"}
                   placeholder="es. service_xxxxxx"
                   value={emailServiceId}
                   onChange={(e) => setEmailServiceId(e.target.value)}
-                  className="w-full text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 font-mono transition-colors"
+                  readOnly={!emailCredsUnlocked}
+                  className={`w-full text-xs text-slate-200 bg-slate-950 border rounded-xl px-3 py-2 outline-hidden font-mono transition-colors ${
+                    emailCredsUnlocked ? "border-slate-800 focus:border-indigo-500" : "border-slate-900 text-slate-500 cursor-not-allowed"
+                  }`}
                   id="settings-input-emailjs-service"
                 />
               </div>
@@ -572,11 +594,14 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
                   Template ID
                 </label>
                 <input
-                  type="text"
+                  type={emailCredsUnlocked ? "text" : "password"}
                   placeholder="es. template_xxxxxx"
                   value={emailTemplateId}
                   onChange={(e) => setEmailTemplateId(e.target.value)}
-                  className="w-full text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 font-mono transition-colors"
+                  readOnly={!emailCredsUnlocked}
+                  className={`w-full text-xs text-slate-200 bg-slate-950 border rounded-xl px-3 py-2 outline-hidden font-mono transition-colors ${
+                    emailCredsUnlocked ? "border-slate-800 focus:border-indigo-500" : "border-slate-900 text-slate-500 cursor-not-allowed"
+                  }`}
                   id="settings-input-emailjs-template"
                 />
               </div>
@@ -585,11 +610,14 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
                   Public Key
                 </label>
                 <input
-                  type="text"
+                  type={emailCredsUnlocked ? "text" : "password"}
                   placeholder="es. xxxxxxxxxxxxxx"
                   value={emailPublicKey}
                   onChange={(e) => setEmailPublicKey(e.target.value)}
-                  className="w-full text-xs text-slate-200 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 font-mono transition-colors"
+                  readOnly={!emailCredsUnlocked}
+                  className={`w-full text-xs text-slate-200 bg-slate-950 border rounded-xl px-3 py-2 outline-hidden font-mono transition-colors ${
+                    emailCredsUnlocked ? "border-slate-800 focus:border-indigo-500" : "border-slate-900 text-slate-500 cursor-not-allowed"
+                  }`}
                   id="settings-input-emailjs-publickey"
                 />
               </div>
