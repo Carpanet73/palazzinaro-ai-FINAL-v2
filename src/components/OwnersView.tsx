@@ -82,6 +82,7 @@ export default function OwnersView({
   // CORREZIONE AJ — Comproprietari: stesso conto unico, con selezione smart tra i
   // proprietari già a sistema per evitare di ridigitare/duplicare dati
   const [ownerFormCoOwners, setOwnerFormCoOwners] = useState<Array<{ name: string; fiscalCode?: string; phone?: string; email?: string; linkedOwnerId?: string }>>([]);
+  const [sendingCountToCoOwner, setSendingCountToCoOwner] = useState<string | null>(null); // CORREZIONE AY
   const [showAddCoOwnerPicker, setShowAddCoOwnerPicker] = useState(false);
   const [coOwnerSearchTerm, setCoOwnerSearchTerm] = useState("");
   const [ownerFormIban, setOwnerFormIban] = useState("");
@@ -311,6 +312,69 @@ export default function OwnersView({
       grandTotalPaid
     };
   }, [selectedProperty, contracts, tenants, condominiums, fastClosing, movements, maintenance]);
+
+  // CORREZIONE AY — Invia il conteggio (totali del mastrino) a un comproprietario, via
+  // Resend (allegati/formattazione affidabili, mai EmailJS che resta riservato ai Solleciti).
+  const handleSendCountToCoOwner = async (
+    coOwner: { name: string; email?: string; phone?: string },
+    primaryOwner: Owner
+  ) => {
+    if (!coOwner.email || !coOwner.email.includes("@")) {
+      alert(`"${coOwner.name}" non ha un'email valida in anagrafica. Aggiungila prima di inviare il conteggio.`);
+      return;
+    }
+    if (!propertyModalData || !selectedProperty) return;
+
+    const confirmed = confirm(`Vuoi inviare il conteggio di "${selectedProperty.name}" a ${coOwner.name} (${coOwner.email})?`);
+    if (!confirmed) return;
+
+    setSendingCountToCoOwner(coOwner.name);
+    try {
+      const html = `
+        <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 600px; margin: 0 auto; color: #0f172a;">
+          <p>Gentile ${coOwner.name},</p>
+          <p>Le inviamo, in qualità di comproprietario, il conteggio aggiornato relativo all'immobile "<strong>${selectedProperty.name}</strong>" (${selectedProperty.address || ""}).</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr style="background: #fef2f2;">
+              <td style="padding: 10px; border: 1px solid #fecaca;">Totale da Incassare</td>
+              <td style="padding: 10px; border: 1px solid #fecaca; text-align: right; font-weight: bold;">€${propertyModalData.grandTotalPending.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr style="background: #f0fdf4;">
+              <td style="padding: 10px; border: 1px solid #bbf7d0;">Totale Già Incassato</td>
+              <td style="padding: 10px; border: 1px solid #bbf7d0; text-align: right; font-weight: bold;">€${propertyModalData.grandTotalPaid.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr style="background: #eef2ff;">
+              <td style="padding: 10px; border: 1px solid #c7d2fe;">Di cui, quota Canone (dovuta dall'inquilino)</td>
+              <td style="padding: 10px; border: 1px solid #c7d2fe; text-align: right; font-weight: bold;">€${propertyModalData.totals.rent.pending.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </table>
+          <p>Restiamo a disposizione per qualunque chiarimento.</p>
+          <p>Cordiali saluti,<br/>${primaryOwner.name}</p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+          <p style="font-size: 10px; color: #94a3b8;">Questa comunicazione è stata generata dall'intelligenza artificiale del sistema di gestione immobiliare Palazzinaro AI®. La firma del proprietario è raccolta digitalmente.</p>
+        </div>
+      `;
+
+      const response = await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: coOwner.email,
+          subject: `Conteggio Immobile — ${selectedProperty.name}`,
+          html
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Errore sconosciuto durante l'invio.");
+      }
+      alert(`✅ Conteggio inviato con successo a ${coOwner.name}.`);
+    } catch (err: any) {
+      alert(`❌ Errore durante l'invio: ${err?.message || err}\n\nVerifica che RESEND_API_KEY sia configurata su Vercel.`);
+    } finally {
+      setSendingCountToCoOwner(null);
+    }
+  };
 
   // Helper to extract unique owners (both individual and compound) from all properties
   const ownersList = useMemo(() => {
@@ -1375,8 +1439,27 @@ export default function OwnersView({
                   </div>
                 </div>
 
-                {/* CORREZIONE AX — Barra dei Totali: sempre visibile, indipendentemente dalla
-                    scheda selezionata, per capire subito quanto c'è ancora da incassare */}
+                  {/* CORREZIONE AY — Invio del conteggio ai Comproprietari, via Resend (con
+                    allegato/formattazione reale, mai EmailJS che è riservato ai Solleciti) */}
+                {(() => {
+                  const realOwnerRecord = owners.find(o => o.name === selectedProperty?.owner);
+                  const coOwnersToNotify = realOwnerRecord?.coOwners || [];
+                  if (coOwnersToNotify.length === 0) return null;
+                  return (
+                    <div className="flex flex-wrap gap-1.5">
+                      {coOwnersToNotify.map((co, idx) => (
+                        <button
+                          key={idx}
+                          disabled={sendingCountToCoOwner === co.name}
+                          onClick={() => handleSendCountToCoOwner(co, realOwnerRecord!)}
+                          className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-2.5 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1"
+                        >
+                          📧 {sendingCountToCoOwner === co.name ? "Invio in corso..." : `Invia Conteggio a ${co.name}`}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   <div className="bg-rose-50 border border-rose-100 rounded-xl p-3">
                     <span className="text-[9px] uppercase font-black text-rose-500 tracking-wider block">Totale da Incassare</span>
