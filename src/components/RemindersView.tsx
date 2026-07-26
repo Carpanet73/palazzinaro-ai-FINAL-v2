@@ -244,7 +244,11 @@ export default function RemindersView({
   // CORREZIONE AL — Raggruppamento per debitore con subtotale, stesso stile del Fast Closing
   const groupedReminders = useMemo(() => {
     const groups: { [name: string]: Reminder[] } = {};
-    reminders.forEach(r => {
+    // CORREZIONE BC — i proprietari non devono MAI avere Solleciti (un proprietario non fa
+    // causa a se stesso). Filtra qui eventuali residui creati prima di questa regola, senza
+    // toccare i dati sottostanti (la voce in Fast Closing resta comunque correttamente
+    // "Insoluta" e segnalata tramite l'avviso di soglia di indebitamento in Dashboard).
+    reminders.filter(r => r.debtorType !== "owner").forEach(r => {
       if (!groups[r.tenantName]) groups[r.tenantName] = [];
       groups[r.tenantName].push(r);
     });
