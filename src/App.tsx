@@ -1876,6 +1876,19 @@ export default function App() {
           if (debtorName) {
             const todayStr = new Date().toISOString().split("T")[0];
 
+            // CORREZIONE AW — I PROPRIETARI NON HANNO MAI SOLLECITI. Un proprietario non fa
+            // causa a se stesso: non ha senso una sequenza di solleciti/messa in mora/legale
+            // per una spesa che deve a se stesso (es. la sua quota di manutenzione/condominio).
+            // Per lui la voce resta semplicemente "Insoluta" in Fast Closing, e la situazione
+            // viene segnalata solo tramite l'avviso di soglia di indebitamento in Dashboard
+            // (già esistente), mai attraverso il percorso legale dei Solleciti.
+            if (debtorType === "owner") {
+              showSuccess(
+                `Voce marcata come insoluta per il proprietario "${debtorName}". I proprietari non generano Solleciti: la situazione viene segnalata in Dashboard se supera la soglia di indebitamento.`
+              );
+              return;
+            }
+
             // CORREZIONE AU — Se questo debitore ha già una pratica legale ATTIVA e AFFIDATA
             // a un avvocato, non si riparte da zero con i Solleciti: la voce nuova resta
             // semplicemente "Insoluta" in Fast Closing (lampeggiante), pronta per l'invio
