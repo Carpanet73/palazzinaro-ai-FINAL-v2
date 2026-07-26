@@ -402,28 +402,40 @@ Cordiali saluti.
 ---
 La presente email è stata generata automaticamente dal sistema di intelligenza artificiale Palazzinaro AI, in nome e per conto del proprietario. La firma del proprietario è raccolta digitalmente.`;
 
-    // CORREZIONE AI — niente più EmailJS per questo invio: si usa il client di posta vero
-    // del dispositivo (con l'account già configurato lì, quindi la mail di login dell'utente
-    // sul suo dispositivo), che gestisce gli allegati in modo affidabile. Un mailto: non può
-    // MAI allegare file da programma per motivi di sicurezza del browser — quindi lo ZIP
-    // viene scaricato subito prima, pronto da trascinare nell'email che si apre.
+    // CORREZIONE BD — Ora si usa davvero Resend (via la funzione server /api/send-email),
+    // che supporta allegati veri fino a 10MB anche sul piano gratuito — niente più client di
+    // posta da aprire a mano, l'email parte per davvero con lo ZIP allegato.
     try {
       const zipBlob = await buildDossierZipBlob(lawsuit);
       const zipFileName = `Fascicolo_Legale_${lawsuit.tenantName?.replace(/\s+/g, "_") || "Pratica"}.zip`;
 
-      const url = window.URL.createObjectURL(zipBlob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = zipFileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      // Converte il Blob in base64, formato richiesto da Resend per gli allegati
+      const zipBase64: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1] || ""); // rimuove il prefisso "data:...;base64,"
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(zipBlob);
+      });
 
-      const subject = encodeURIComponent("Invio Documentazione per Recupero Coattivo");
-      const body = encodeURIComponent(emailBody);
-      const mailtoUrl = `mailto:${lawyer.email}?subject=${subject}&body=${body}`;
-      window.location.href = mailtoUrl;
+      const htmlBody = emailBody.split("\n").map(line => line.trim() === "---" ? "<hr/>" : `<p>${line || "&nbsp;"}</p>`).join("\n");
+
+      const response = await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: lawyer.email,
+          subject: "Invio Documentazione per Recupero Coattivo",
+          html: htmlBody,
+          attachments: [{ filename: zipFileName, content: zipBase64 }]
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Errore sconosciuto durante l'invio tramite Resend.");
+      }
 
       const nowIso = new Date().toISOString();
       await onUpdateLegalCase?.(lawsuit.id, {
@@ -431,13 +443,10 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         dossierSentToEmail: lawyer.email
       });
 
-      alert(
-        `📎 Ho scaricato il fascicolo "${zipFileName}" e sto aprendo il tuo programma di posta con il testo già pronto per ${lawyer.email}.\n\n` +
-        `Ultimo passaggio da fare tu: trascina il file scaricato come allegato nell'email prima di inviarla — il client di posta non permette di farlo automaticamente per motivi di sicurezza.`
-      );
+      alert(`✅ Fascicolo inviato con successo a ${lawyer.email} (${lawyer.studioName}), con lo ZIP allegato per davvero.`);
     } catch (err: any) {
-      console.error("Errore preparazione invio fascicolo:", err);
-      alert(`❌ Errore durante la preparazione dell'invio: ${err?.message || JSON.stringify(err)}`);
+      console.error("Errore invio fascicolo via Resend:", err);
+      alert(`❌ Errore durante l'invio: ${err?.message || JSON.stringify(err)}\n\nVerifica che RESEND_API_KEY sia configurata su Vercel.`);
     }
   };
 

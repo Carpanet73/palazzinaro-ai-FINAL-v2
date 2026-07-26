@@ -211,6 +211,7 @@ export default function AIAreaView({
 
     try {
       let targetSection: AppSection = "dashboard";
+      let successMsgAlreadySet = false;
 
       switch (selectedContext) {
         case "properties":
@@ -277,28 +278,39 @@ export default function AIAreaView({
           break;
 
         case "banks":
-          if (parsedResult.movements && Array.isArray(parsedResult.movements)) {
-            for (const m of parsedResult.movements) {
-              await onAddMovement({
-                date: m.date || new Date().toISOString().split("T")[0],
-                description: m.description || "Transazione",
-                amount: Number(m.amount) || 0,
-                reconciled: false
-              });
+          // CORREZIONE BE — controllo VERO (non solo la richiesta all'AI nel prompt): scarta
+          // qualunque movimento con importo zero o negativo, anche se l'AI lo includesse per
+          // errore. Regola ferrea: solo ENTRATE (bonifici attivi), mai uscite.
+          let importedCount = 0;
+          let skippedCount = 0;
+          const movementsToImport = parsedResult.movements && Array.isArray(parsedResult.movements)
+            ? parsedResult.movements
+            : (parsedResult.date ? [parsedResult] : []);
+          for (const m of movementsToImport) {
+            const amt = Number(m.amount) || 0;
+            if (amt <= 0) {
+              skippedCount++;
+              continue;
             }
-          } else if (parsedResult.date) {
             await onAddMovement({
-              date: parsedResult.date,
-              description: parsedResult.description || "Transazione",
-              amount: Number(parsedResult.amount) || 0,
+              date: m.date || new Date().toISOString().split("T")[0],
+              description: m.description || "Transazione",
+              amount: amt,
               reconciled: false
             });
+            importedCount++;
+          }
+          if (skippedCount > 0) {
+            setSuccessMsg(`Importati ${importedCount} bonifici in entrata. Scartati ${skippedCount} movimenti in uscita (l'app importa solo entrate).`);
+            successMsgAlreadySet = true;
           }
           targetSection = "banks";
           break;
       }
 
-      setSuccessMsg("Perfetto! I dati estratti dall'AI sono stati importati con successo nel database.");
+      if (!successMsgAlreadySet) {
+        setSuccessMsg("Perfetto! I dati estratti dall'AI sono stati importati con successo nel database.");
+      }
       setParsedResult(null);
       setDocumentText("");
       setCustomInstructions("");

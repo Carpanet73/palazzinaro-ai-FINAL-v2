@@ -98,6 +98,22 @@ export default function FastClosingView({
     return `Fast Closing ${selectedMonthYear}`;
   }, [selectedMonthYear, activePeriod]);
 
+  // CORREZIONE BG — elenco dei mesi archiviati generato davvero dai dati (mai scritto
+  // fisso): tutti i mesi "YYYY-MM" presenti nelle scadenze, esclusi il mese attivo e quelli
+  // futuri, ordinati dal più recente al più vecchio.
+  const archivedMonthOptions = useMemo(() => {
+    const monthsSet = new Set<string>();
+    fastClosing.forEach(item => {
+      const monthKey = (item.dueDate || "").slice(0, 7); // "YYYY-MM"
+      if (monthKey && monthKey.length === 7 && monthKey !== activePeriod) {
+        monthsSet.add(monthKey);
+      }
+    });
+    return Array.from(monthsSet)
+      .filter(monthKey => monthKey < activePeriod) // solo il passato, mai il futuro
+      .sort((a, b) => b.localeCompare(a)); // più recente prima
+  }, [fastClosing, activePeriod]);
+
   // Statement Import PDF/Photo OCR states
   const [showImportModal, setShowImportModal] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -1100,10 +1116,19 @@ export default function FastClosingView({
             onChange={(e) => setSelectedMonthYear(e.target.value)}
             className="text-xs font-black bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2 text-indigo-800 focus:outline-hidden"
           >
-            <option value="current">Luglio 2026 (Mese Corrente)</option>
-            <option value="2026-06">Giugno 2026 (Archiviato)</option>
-            <option value="2026-05">Maggio 2026 (Archiviato)</option>
-            <option value="2026-04">Aprile 2026 (Archiviato)</option>
+            <option value="current">{currentFastClosingLabel.replace("Fast Closing ", "")} (Mese Corrente)</option>
+            {/* CORREZIONE BG — bug critico corretto: prima l'elenco dei mesi archiviati era
+                scritto fisso (solo fino a giugno 2026) — dopo aver chiuso un mese reale, non
+                c'era modo di rivederlo come archivio. Ora l'elenco si genera dai mesi
+                effettivamente presenti nei dati, escluso il mese attivo. */}
+            {archivedMonthOptions.map(monthKey => {
+              const [y, m] = monthKey.split("-").map(Number);
+              return (
+                <option key={monthKey} value={monthKey}>
+                  {italianMonthsFull[m - 1]} {y} (Archiviato)
+                </option>
+              );
+            })}
           </select>
         </div>
 
@@ -1601,22 +1626,37 @@ export default function FastClosingView({
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Seleziona Movimento Bancario Ricevuto *
                 </label>
-                <select
-                  required
-                  value={cumulativeMovementId}
-                  onChange={(e) => {
-                    setCumulativeMovementId(e.target.value);
-                    setReconciliationError("");
-                  }}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500 font-semibold text-slate-800"
-                >
-                  <option value="">-- Seleziona il bonifico d'accredito unico --</option>
+                {/* CORREZIONE BF — stesso elenco leggibile al posto del <select> */}
+                <div className="max-h-64 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-2 bg-slate-50/50">
+                  {movements.filter(m => !m.reconciled).length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-4">Nessun bonifico non riconciliato disponibile.</p>
+                  )}
                   {movements.filter(m => !m.reconciled).map(m => (
-                    <option key={m.id} value={m.id}>
-                      📅 {new Date(m.date).toLocaleDateString("it-IT")} - {m.description} (+€{m.amount.toFixed(2)})
-                    </option>
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        setCumulativeMovementId(m.id);
+                        setReconciliationError("");
+                      }}
+                      className={`w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border transition-colors ${
+                        cumulativeMovementId === m.id
+                          ? "bg-indigo-600 border-indigo-600 text-white"
+                          : "bg-white border-slate-200 hover:border-indigo-300 text-slate-800"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className={`text-[10px] font-bold ${cumulativeMovementId === m.id ? "text-indigo-200" : "text-slate-400"}`}>
+                          📅 {new Date(m.date).toLocaleDateString("it-IT")}
+                        </div>
+                        <div className="text-xs font-semibold truncate">{m.description}</div>
+                      </div>
+                      <div className={`text-sm font-black font-mono shrink-0 ${cumulativeMovementId === m.id ? "text-white" : "text-emerald-600"}`}>
+                        +€{m.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                      </div>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
               )}
 
@@ -1770,19 +1810,36 @@ export default function FastClosingView({
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Seleziona Bonifico Disponibile *
                 </label>
-                <select
-                  required
-                  value={selectedMovementId}
-                  onChange={(e) => setSelectedMovementId(e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500"
-                >
-                  <option value="">-- Seleziona un bonifico non riconciliato --</option>
+                {/* CORREZIONE BF — sostituito il <select> (tagliava la descrizione e l'importo
+                    nei browser/telefoni con schermo stretto) con un elenco vero, leggibile per
+                    intero, con l'importo sempre ben visibile a destra */}
+                <div className="max-h-64 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-2 bg-slate-50/50">
+                  {movements.filter(m => !m.reconciled).length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-4">Nessun bonifico non riconciliato disponibile.</p>
+                  )}
                   {movements.filter(m => !m.reconciled).map(m => (
-                    <option key={m.id} value={m.id}>
-                      {new Date(m.date).toLocaleDateString("it-IT")} - {m.description} (+€{m.amount.toFixed(2)})
-                    </option>
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setSelectedMovementId(m.id)}
+                      className={`w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border transition-colors ${
+                        selectedMovementId === m.id
+                          ? "bg-indigo-600 border-indigo-600 text-white"
+                          : "bg-white border-slate-200 hover:border-indigo-300 text-slate-800"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className={`text-[10px] font-bold ${selectedMovementId === m.id ? "text-indigo-200" : "text-slate-400"}`}>
+                          {new Date(m.date).toLocaleDateString("it-IT")}
+                        </div>
+                        <div className="text-xs font-semibold truncate">{m.description}</div>
+                      </div>
+                      <div className={`text-sm font-black font-mono shrink-0 ${selectedMovementId === m.id ? "text-white" : "text-emerald-600"}`}>
+                        +€{m.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                      </div>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
             </div>
 
