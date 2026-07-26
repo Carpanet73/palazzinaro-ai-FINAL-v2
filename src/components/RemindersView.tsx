@@ -737,20 +737,69 @@ export default function RemindersView({
         groupedReminders.map((group, groupIdx) => {
           const borderColors = ["border-indigo-400", "border-emerald-400", "border-violet-400", "border-amber-400", "border-rose-400"];
           const colorClass = borderColors[groupIdx % borderColors.length];
+          // CORREZIONE BA — un solo tasto di passaggio per gruppo, non uno per riga: si
+          // calcola sulla voce "attiva" del gruppo (non Saldata/Chiusa/Annullata), che
+          // rappresenta lo stato reale della sequenza per questo debitore.
+          const activeReminderForGroup = group.items.find(
+            r => r.status !== "Paid" && r.status !== "Closed" && r.status !== "Cancelled"
+          );
           return (
             <div key={group.debtorName} className={`bg-white rounded-2xl border-2 ${colorClass} overflow-hidden shadow-2xs mb-5`}>
-              {/* Group header bar — nome debitore + subtotale, stile Fast Closing */}
+              {/* Group header bar — nome debitore + subtotale + UNICO tasto di passaggio */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
                 <div className="flex items-center gap-2">
                   <span className="text-base">👤</span>
                   <h4 className="font-black text-sm text-slate-900">{group.debtorName}</h4>
                 </div>
-                {group.subtotal > 0 && (
-                  <div className="text-right">
-                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold">Totale Sollecitato</span>
-                    <span className="text-sm font-black text-rose-600 font-mono">€{group.subtotal.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  {group.subtotal > 0 && (
+                    <div className="text-right">
+                      <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold">Totale Sollecitato</span>
+                      <span className="text-sm font-black text-rose-600 font-mono">€{group.subtotal.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {activeReminderForGroup && (
+                    <>
+                      {(!activeReminderForGroup.step || activeReminderForGroup.step === 1) && (
+                        <button
+                          onClick={() => handleOpenStepWizard(activeReminderForGroup)}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-black tracking-wide"
+                        >
+                          1° Sollecito
+                        </button>
+                      )}
+                      {activeReminderForGroup.step === 2 && (
+                        <button
+                          onClick={() => handleOpenStepWizard(activeReminderForGroup)}
+                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10px] font-black tracking-wide"
+                        >
+                          2° Sollecito
+                        </button>
+                      )}
+                      {activeReminderForGroup.step === 3 && (
+                        <button
+                          onClick={() => handleOpenStepWizard(activeReminderForGroup)}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[10px] font-black tracking-wide"
+                        >
+                          Messa in Mora
+                        </button>
+                      )}
+                      {activeReminderForGroup.step === 4 && (
+                        <button
+                          onClick={() => handleOpenStepWizard(activeReminderForGroup)}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[10px] font-black tracking-wide"
+                        >
+                          → Area Legale
+                        </button>
+                      )}
+                      {activeReminderForGroup.step === 5 && (
+                        <span className="px-3 py-1.5 bg-slate-200 text-slate-500 rounded-lg text-[10px] font-bold">
+                          In Legale
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -817,43 +866,6 @@ export default function RemindersView({
                             <div className="flex flex-wrap items-center justify-center gap-1">
                               {!isPaidReminder && (
                                 <>
-                                  {(!reminder.step || reminder.step === 1) && (
-                                    <button
-                                      onClick={() => handleOpenStepWizard(reminder)}
-                                      className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-sm text-[9px] font-black tracking-wide"
-                                    >
-                                      1° Sollecito
-                                    </button>
-                                  )}
-                                  {reminder.step === 2 && (
-                                    <button
-                                      onClick={() => handleOpenStepWizard(reminder)}
-                                      className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-sm text-[9px] font-black tracking-wide"
-                                    >
-                                      2° Sollecito
-                                    </button>
-                                  )}
-                                  {reminder.step === 3 && (
-                                    <button
-                                      onClick={() => handleOpenStepWizard(reminder)}
-                                      className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-sm text-[9px] font-black tracking-wide"
-                                    >
-                                      Messa in Mora
-                                    </button>
-                                  )}
-                                  {reminder.step === 4 && (
-                                    <button
-                                      onClick={() => handleOpenStepWizard(reminder)}
-                                      className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-sm text-[9px] font-black tracking-wide"
-                                    >
-                                      → Area Legale
-                                    </button>
-                                  )}
-                                  {reminder.step === 5 && (
-                                    <span className="px-2 py-1 bg-slate-200 text-slate-500 rounded-sm text-[9px] font-bold">
-                                      In Legale
-                                    </span>
-                                  )}
                                   <button
                                     onClick={() => handleOpenReconcileReminder(reminder)}
                                     className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-sm text-[9px] font-black tracking-wide"
