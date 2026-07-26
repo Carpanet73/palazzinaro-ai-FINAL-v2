@@ -726,6 +726,37 @@ export default function OwnersView({
                     Composto da: {selectedOwner.individualNames.join(", ")}
                   </p>
                 )}
+                {/* CORREZIONE AV — "Vedi anche": se questo proprietario fa parte di una o più
+                    comproprietà (come comproprietario collegato in un altro Owner reale), lo
+                    segnala qui con un rimando diretto al conto unico — senza duplicare nulla,
+                    il conto/mastrino resta unico su quell'altra anagrafica. */}
+                {!selectedOwner.isCompound && (() => {
+                  const jointAccounts = owners.filter(o =>
+                    (o.coOwners || []).some(co =>
+                      (co.linkedOwnerId && owners.find(x => x.name === selectedOwner.name)?.id === co.linkedOwnerId) ||
+                      co.name.toLowerCase().trim() === selectedOwner.name.toLowerCase().trim()
+                    )
+                  );
+                  if (jointAccounts.length === 0) return null;
+                  return (
+                    <div className="mt-2 space-y-1">
+                      {jointAccounts.map(joint => (
+                        <button
+                          key={joint.id}
+                          onClick={() => {
+                            // CORREZIONE AV — porta al conto REALE del proprietario principale
+                            // (dove l'immobile in comproprietà è davvero registrato), non a una
+                            // vista sintetica che rischierebbe di risultare vuota.
+                            setSelectedOwner({ name: joint.name, isCompound: false, individualNames: [joint.name] });
+                          }}
+                          className="w-full text-left text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+                        >
+                          🔗 Vedi anche: comproprietà con {joint.name} — conto unico, registrato lì
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
                 {/* CORREZIONE U — Modifica dati anagrafici reali (email, telefono, C.F., IBAN) */}
                 {selectedOwner.isCompound ? (
                   <div className="flex flex-wrap gap-1.5 mt-2">
