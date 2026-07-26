@@ -45,6 +45,7 @@ interface DashboardViewProps {
   userName: string;
   onSeedDemoData?: () => Promise<void>;
   onSeedSimulationData?: () => Promise<void>;
+  onSeedTwoTestProperties?: () => Promise<void>;
   onEditContract?: (id: string, data: any) => Promise<void>;
   onUpdateReminderStatus?: (id: string, status: string, notes?: string, extraFields?: any) => Promise<void>;
   onAddLegalCase?: (data: any) => Promise<void>;
@@ -69,6 +70,7 @@ export default function DashboardView({
   userName,
   onSeedDemoData,
   onSeedSimulationData,
+  onSeedTwoTestProperties,
   onEditContract,
   onUpdateReminderStatus,
   onAddLegalCase,
@@ -1632,6 +1634,18 @@ export default function DashboardView({
             >
               <span>🏟️</span>
               <span>Simula Locazione Meloni</span>
+            </button>
+          )}
+
+          {onSeedTwoTestProperties && (
+            <button
+              onClick={onSeedTwoTestProperties}
+              id="seed-two-test-properties-btn"
+              className="inline-flex items-center space-x-2 bg-rose-700 hover:bg-rose-600 text-white font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md active:shadow-xs hover:scale-[1.02] active:scale-[0.98] transition-transform"
+              title="ATTENZIONE: cancella tutti i dati attuali e li sostituisce con due sole case di prova"
+            >
+              <span>🧪</span>
+              <span>Test: 2 Case (Condominio + Comproprietà)</span>
             </button>
           )}
 

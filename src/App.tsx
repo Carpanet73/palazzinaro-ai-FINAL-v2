@@ -467,6 +467,257 @@ export default function App() {
   // DATABASE MUTATION CALLBACKS (CRUD)
   // ==========================================
 
+  // CORREZIONE BH — Test dedicato richiesto il 26/07: ripulisce TUTTI i dati e ricarica
+  // esattamente due immobili di prova, per testare tutto il lavoro fatto in questa sessione:
+  // 1) un immobile con Condominio Costituito (con amministratore), proprietario singolo
+  // 2) un immobile SENZA condominio, con un proprietario che ha un comproprietario
+  const handleSeedTwoTestProperties = async () => {
+    if (!user) return;
+    const confirmed = confirm(
+      "⚠️ ATTENZIONE: questa azione CANCELLA TUTTI i dati attuali (immobili, inquilini, contratti, Fast Closing, Solleciti, tutto) e li sostituisce con due sole case di prova.\n\nÈ irreversibile. Procedere?"
+    );
+    if (!confirmed) return;
+    const confirmedAgain = confirm("Confermi DEFINITIVAMENTE di voler cancellare tutti i dati attuali?");
+    if (!confirmedAgain) return;
+
+    try {
+      showSuccess("Pulizia dati in corso... 🧹");
+      const deleteCollectionDocs = async (collectionName: string) => {
+        try {
+          const colRef = collection(db, collectionName);
+          const q = query(colRef, where("userId", "==", user.uid));
+          const querySnapshot = await getDocs(q);
+          for (const docSnap of querySnapshot.docs) {
+            await deleteDoc(doc(db, collectionName, docSnap.id));
+          }
+        } catch (e) {
+          console.error(`Error purging collection ${collectionName}:`, e);
+        }
+      };
+
+      // Ripulisce TUTTE le collezioni, comprese quelle aggiunte più di recente
+      await Promise.all([
+        deleteCollectionDocs("properties"),
+        deleteCollectionDocs("tenants"),
+        deleteCollectionDocs("contracts"),
+        deleteCollectionDocs("condominiums"),
+        deleteCollectionDocs("fastClosing"),
+        deleteCollectionDocs("movements"),
+        deleteCollectionDocs("reminders"),
+        deleteCollectionDocs("maintenance"),
+        deleteCollectionDocs("legalCases"),
+        deleteCollectionDocs("communications"),
+        deleteCollectionDocs("lawyers"),
+        deleteCollectionDocs("owners"),
+        deleteCollectionDocs("administrators"),
+        deleteCollectionDocs("deliveryReports"),
+        deleteCollectionDocs("creditInstitutions"),
+        deleteCollectionDocs("bankAccounts"),
+        deleteCollectionDocs("insurancePolicies")
+      ]);
+
+      showSuccess("Dati puliti. Creazione delle due case di prova... 🏗️");
+
+      // ── PROPRIETARIO SINGOLO (per la Casa A, con Condominio) ──
+      const ownerA = await addDoc(collection(db, "owners"), {
+        userId: user.uid,
+        name: "Mario Rossi",
+        fiscalCode: "RSSMRA75A01F205X",
+        email: "mario.rossi.test@esempio.it",
+        phone: "3331234567",
+        address: "Via Roma 10, 20100 Milano (MI)",
+        structuredAddress: { via: "Via Roma", civico: "10", citta: "Milano", provincia: "MI", cap: "20100" },
+        iban: "IT60X0542811101000000123456",
+        isCompany: false,
+        createdAt: serverTimestamp()
+      });
+
+      // ── PROPRIETARIO CON COMPROPRIETARIO (per la Casa B, senza Condominio) ──
+      const ownerB = await addDoc(collection(db, "owners"), {
+        userId: user.uid,
+        name: "Anna Bianchi",
+        fiscalCode: "BNCNNA80A41F205Y",
+        email: "anna.bianchi.test@esempio.it",
+        phone: "3339876543",
+        address: "Via Torino 5, 20100 Milano (MI)",
+        structuredAddress: { via: "Via Torino", civico: "5", citta: "Milano", provincia: "MI", cap: "20100" },
+        iban: "IT60X0542811101000000654321",
+        isCompany: false,
+        coOwners: [
+          { name: "Luca Verdi", fiscalCode: "VRDLCU78A01F205Z", phone: "3335551122", email: "luca.verdi.test@esempio.it" }
+        ],
+        createdAt: serverTimestamp()
+      });
+
+      // ── AMMINISTRATORE (per il Condominio della Casa A) ──
+      const admin = await addDoc(collection(db, "administrators"), {
+        userId: user.uid,
+        name: "Studio Amministrazione Test",
+        phone: "0212345678",
+        email: "admin.test@esempio.it",
+        createdAt: serverTimestamp()
+      });
+
+      // ── CASA A — Condominio Costituito, proprietario singolo ──
+      const propA = await addDoc(collection(db, "properties"), {
+        userId: user.uid,
+        name: "🏢 Casa A — Con Condominio (Test)",
+        address: "Via Roma 10, Scala B, Interno 4, 20100 Milano (MI)",
+        type: "Appartamento",
+        status: "Rented",
+        owner: ownerA.id ? "Mario Rossi" : "Mario Rossi",
+        ownerId: ownerA.id,
+        isCondoConstituted: true,
+        notes: "Immobile di prova con Condominio costituito e amministratore reale.",
+        createdAt: serverTimestamp()
+      });
+
+      const condoA = await addDoc(collection(db, "condominiums"), {
+        userId: user.uid,
+        name: "Condominio Via Roma 10 (Test)",
+        address: "Via Roma 10, 20100 Milano (MI)",
+        administratorId: admin.id,
+        administrator: "Studio Amministrazione Test",
+        createdAt: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, "properties", propA.id), { condominiumId: condoA.id });
+
+      const tenantA = await addDoc(collection(db, "tenants"), {
+        userId: user.uid,
+        name: "Giulia Ferrari",
+        email: "giulia.ferrari.test@esempio.it",
+        phone: "3401112233",
+        fiscalCode: "FRRGLI90A41F205W",
+        propertyId: propA.id,
+        createdAt: serverTimestamp()
+      });
+
+      const startA = new Date();
+      const endA = new Date();
+      endA.setFullYear(endA.getFullYear() + 4);
+      const contractA = await addDoc(collection(db, "contracts"), {
+        userId: user.uid,
+        propertyId: propA.id,
+        propertyName: "🏢 Casa A — Con Condominio (Test)",
+        tenantId: tenantA.id,
+        tenantName: "Giulia Ferrari",
+        startDate: startA.toISOString().split("T")[0],
+        endDate: endA.toISOString().split("T")[0],
+        rentAmount: 750,
+        frequency: "Mensile",
+        status: "Active",
+        ownerName: "Mario Rossi",
+        createdAt: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, "properties", propA.id), { status: "Rented" });
+      await updateDoc(doc(db, "tenants", tenantA.id), { contractId: contractA.id });
+
+      // Genera le rate del canone per l'intera durata del contratto (Correzione AM)
+      {
+        let currentDueDate = new Date(startA);
+        let monthIndex = 1;
+        while (currentDueDate <= endA) {
+          await addDoc(collection(db, "fastClosing"), {
+            userId: user.uid,
+            title: `Canone Affitto Mese ${monthIndex} - Giulia Ferrari`,
+            description: `Riferimento Contratto Locazione su 🏢 Casa A — Con Condominio (Test)`,
+            amount: 750,
+            dueDate: currentDueDate.toISOString().split("T")[0],
+            source: "contract",
+            sourceId: contractA.id,
+            status: "Pending",
+            debtorId: tenantA.id,
+            debtorType: "tenant",
+            createdAt: serverTimestamp()
+          });
+          currentDueDate.setMonth(currentDueDate.getMonth() + 1);
+          monthIndex++;
+        }
+      }
+
+      // ── CASA B — SENZA Condominio, proprietario con comproprietario ──
+      const propB = await addDoc(collection(db, "properties"), {
+        userId: user.uid,
+        name: "🏠 Casa B — Senza Condominio, Comproprietà (Test)",
+        address: "Via Torino 5, 20100 Milano (MI)",
+        type: "Appartamento",
+        status: "Rented",
+        owner: "Anna Bianchi",
+        ownerId: ownerB.id,
+        isCondoConstituted: false,
+        notes: "Immobile di prova SENZA Condominio costituito, con proprietario in comproprietà (Anna Bianchi + Luca Verdi).",
+        createdAt: serverTimestamp()
+      });
+
+      const tenantB = await addDoc(collection(db, "tenants"), {
+        userId: user.uid,
+        name: "Marco Colombo",
+        email: "marco.colombo.test@esempio.it",
+        phone: "3405556677",
+        fiscalCode: "CLMMRC85A01F205Q",
+        propertyId: propB.id,
+        createdAt: serverTimestamp()
+      });
+
+      const startB = new Date();
+      const endB = new Date();
+      endB.setFullYear(endB.getFullYear() + 4);
+      const contractB = await addDoc(collection(db, "contracts"), {
+        userId: user.uid,
+        propertyId: propB.id,
+        propertyName: "🏠 Casa B — Senza Condominio, Comproprietà (Test)",
+        tenantId: tenantB.id,
+        tenantName: "Marco Colombo",
+        startDate: startB.toISOString().split("T")[0],
+        endDate: endB.toISOString().split("T")[0],
+        rentAmount: 650,
+        frequency: "Mensile",
+        status: "Active",
+        ownerName: "Anna Bianchi",
+        createdAt: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, "properties", propB.id), { status: "Rented" });
+      await updateDoc(doc(db, "tenants", tenantB.id), { contractId: contractB.id });
+
+      {
+        let currentDueDate = new Date(startB);
+        let monthIndex = 1;
+        while (currentDueDate <= endB) {
+          await addDoc(collection(db, "fastClosing"), {
+            userId: user.uid,
+            title: `Canone Affitto Mese ${monthIndex} - Marco Colombo`,
+            description: `Riferimento Contratto Locazione su 🏠 Casa B — Senza Condominio, Comproprietà (Test)`,
+            amount: 650,
+            dueDate: currentDueDate.toISOString().split("T")[0],
+            source: "contract",
+            sourceId: contractB.id,
+            status: "Pending",
+            debtorId: tenantB.id,
+            debtorType: "tenant",
+            createdAt: serverTimestamp()
+          });
+          currentDueDate.setMonth(currentDueDate.getMonth() + 1);
+          monthIndex++;
+        }
+      }
+
+      // Reimposta anche il periodo attivo del Fast Closing sul mese reale corrente
+      await setDoc(doc(db, "appState", user.uid), {
+        fastClosingActivePeriod: getRealCurrentPeriod(),
+        userId: user.uid,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      showSuccess("✅ Fatto! Create le due case di prova: Casa A (con Condominio, proprietario singolo) e Casa B (senza Condominio, comproprietà).");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.CREATE, "test-seed");
+      showError("Errore durante la creazione dei dati di prova: " + errInfo.error);
+    }
+  };
+
   const handleSeedSimulationData = async () => {
     if (!user) return;
     try {
@@ -2570,6 +2821,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             userName={user?.displayName || "Gestore Immobili"}
             onSeedDemoData={handleSeedDemoData}
             onSeedSimulationData={handleSeedSimulationData}
+            onSeedTwoTestProperties={handleSeedTwoTestProperties}
             onEditContract={handleEditContract}
             onUpdateReminderStatus={handleUpdateReminderStatus}
             onAddLegalCase={handleAddLegalCase}
