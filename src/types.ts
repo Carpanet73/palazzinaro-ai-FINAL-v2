@@ -14,6 +14,44 @@ export interface UtilityMeter {
   activeFlag: "proprietario" | "conduttore"; // Indicatore di intestazione
 }
 
+// CORREZIONE AZ — Storico delle letture di un contatore nel tempo (non solo l'ultima), per
+// poter calcolare il consumo reale in un intervallo di date quando arriva la bolletta.
+export interface MeterReadingLog {
+  id: string;
+  userId: string;
+  propertyId: string;
+  meterType: "luce" | "gas" | "acqua";
+  readingValue: number;
+  readingDate: string; // YYYY-MM-DD
+  notes?: string;
+  createdAt: string;
+}
+
+// CORREZIONE AZ — Ripartizione di una bolletta comune (es. luce scale, acqua) tra più
+// immobili dello stesso "Stabile", in proporzione al consumo reale nel periodo di
+// competenza della bolletta (non a caso, non in parti sempre uguali).
+export interface SharedUtilityBill {
+  id: string;
+  userId: string;
+  stabile: string; // etichetta che raggruppa più immobili senza bisogno di un Condominio formale
+  meterType: "luce" | "gas" | "acqua";
+  totalAmount: number;
+  periodStart: string; // YYYY-MM-DD
+  periodEnd: string; // YYYY-MM-DD
+  splits: Array<{
+    propertyId: string;
+    propertyName: string;
+    tenantId?: string;
+    tenantName: string;
+    startReading: number | null;
+    endReading: number | null;
+    consumption: number; // delta calcolato in questo periodo
+    shareAmount: number; // quota di importo attribuita
+  }>;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Property {
   id: string;
   userId: string;
@@ -27,6 +65,10 @@ export interface Property {
   isBareOwnership?: boolean; // if true, it's "Nuda Proprietà"
   isCondoConstituted?: boolean; // if true, "Condominio Costituito"
   condominiumId?: string; // Associated Condominium ID
+  // CORREZIONE AZ — etichetta leggera per raggruppare più immobili nello stesso stabile
+  // fisico, quando NON esiste un Condominio formale costituito (es. palazzo intero di un
+  // solo proprietario con più inquilini) — serve per la ripartizione delle bollette comuni.
+  stabile?: string;
   millesimi?: number; // Quota millesimale (modificabile)
   luceMeter?: UtilityMeter;
   gasMeter?: UtilityMeter;
