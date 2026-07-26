@@ -42,128 +42,140 @@ service cloud.firestore {
 
     // ───────────────────────────────────────────────────────────────────────
     // User-scoped domain collections (every doc carries a `userId` field)
+    //
+    // CORREZIONE — bug critico: prima "delete" era raggruppato con "update" nella
+    // stessa regola, che controllava anche `request.resource.data.userId`. Ma in
+    // una cancellazione non esiste nessun `request.resource` (non si manda nessun
+    // dato nuovo) — quella condizione falliva SEMPRE, e Firestore rifiutava ogni
+    // cancellazione in silenzio, senza che l'app se ne accorgesse. Ora "delete" è
+    // una regola a sé, che richiede solo di essere il proprietario del dato.
     // ───────────────────────────────────────────────────────────────────────
 
     match /properties/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /contracts/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /tenants/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
-    // CORREZIONE M — mancavano "owners" e "administrators": senza queste regole,
-    // Firestore rifiutava in silenzio ogni scrittura su queste due collezioni,
-    // anche se il codice dell'app era corretto.
     match /owners/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /administrators/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /condominiums/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /movements/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /fastClosing/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /reminders/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /maintenance/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /legalCases/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /communications/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /lawyers/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /creditInstitutions/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /bankAccounts/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /insurancePolicies/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
     }
 
     match /deliveryReports/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
-      allow update, delete: if isOwner()
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // Documento singolo per utente (chiave = userId), es. periodo attivo Fast Closing
+    // ───────────────────────────────────────────────────────────────────────
+
+    match /appState/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
     // ───────────────────────────────────────────────────────────────────────
