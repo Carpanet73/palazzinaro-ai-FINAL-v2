@@ -23,7 +23,7 @@ import {
   Image as ImageIcon,
   Sparkles
 } from "lucide-react";
-import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner, Contract, DeliveryReport } from "../types";
+import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner, Contract, DeliveryReport, Lawyer } from "../types";
 
 interface FastClosingViewProps {
   fastClosing: FastClosingItem[];
@@ -36,6 +36,8 @@ interface FastClosingViewProps {
   fastClosingActivePeriod?: string; // CORREZIONE AP — "YYYY-MM" del mese attivo, dato vero persistito
   onAdvanceFastClosingPeriod?: () => Promise<void>; // CORREZIONE AP — avanza al mese successivo alla chiusura
   legalCases?: LegalCase[];
+  lawyers?: Lawyer[]; // CORREZIONE AU
+  onSendItemDirectlyToLawyer?: (item: FastClosingItem, legalCase: LegalCase, lawyer: Lawyer) => Promise<void>; // CORREZIONE AU
   reminders?: Reminder[];
   onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">) => Promise<void>;
   onUpdateClosingItemStatus: (id: string, status: "Pending" | "Paid" | "Overdue" | "Cancelled") => Promise<void>;
@@ -58,6 +60,8 @@ export default function FastClosingView({
   fastClosingActivePeriod,
   onAdvanceFastClosingPeriod,
   legalCases = [],
+  lawyers = [],
+  onSendItemDirectlyToLawyer,
   reminders = [],
   onAddClosingItem,
   onUpdateClosingItemStatus,
@@ -1226,27 +1230,37 @@ export default function FastClosingView({
                                             descLower.includes("affitto");
 
                         // Check if this item is associated with a tenant undergoing active legal action
-                        const isCriticalTenantItem = tenants.some(t => {
+                        const matchedTenantForLegal = tenants.find(t => {
                           const tName = (t.name || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
                           const itemTitle = (item.title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
                           const itemDesc = (item.description || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                          
-                          const matches = itemTitle.includes(tName) || tName.includes(itemTitle) || itemDesc.includes(tName);
-                          if (!matches) return false;
-                          
-                          return (legalCases || []).some(lc => {
-                            if (lc.status === "Closed") return false;
-                            const lcTenantName = (lc.tenantName || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
-                            return lcTenantName.includes(tName) || tName.includes(lcTenantName);
-                          });
+                          return tName && (itemTitle.includes(tName) || tName.includes(itemTitle) || itemDesc.includes(tName));
                         });
+                        const activeLegalCaseForItem = matchedTenantForLegal
+                          ? (legalCases || []).find(lc => {
+                              if (lc.status === "Closed") return false;
+                              const lcTenantName = (lc.tenantName || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+                              const tName = (matchedTenantForLegal.name || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+                              return lcTenantName.includes(tName) || tName.includes(lcTenantName);
+                            })
+                          : undefined;
+                        const isCriticalTenantItem = !!activeLegalCaseForItem;
+
+                        // CORREZIONE AU — questa voce va inviata direttamente all'avvocato assegnato
+                        // (lampeggia), solo se: la pratica è già affidata, la voce è Insoluta, e non
+                        // è già stata inviata (né nel lotto originale né via invio diretto precedente)
+                        const assignedLawyerForItem = activeLegalCaseForItem?.assignedLawyerId
+                          ? lawyers.find(l => l.id === activeLegalCaseForItem.assignedLawyerId)
+                          : undefined;
+                        const alreadySentDirectly = (activeLegalCaseForItem?.additionalSentItems || []).some(ai => ai.itemId === item.id);
+                        const needsDirectLawyerSend = !!assignedLawyerForItem && item.status === "Overdue" && !alreadySentDirectly;
 
                         return (
                           <tr 
                             key={item.id} 
                             className={`group hover:bg-slate-50 transition-colors ${
                               isCriticalTenantItem ? "bg-rose-50/20" : ""
-                            }`}
+                            } ${needsDirectLawyerSend ? "animate-pulse ring-2 ring-inset ring-rose-400" : ""}`}
                           >
                             {/* Stato Cell */}
                             <td className={`p-2.5 border border-slate-300 text-center font-bold transition-opacity ${isHandled ? "opacity-40 group-hover:opacity-90 group-active:opacity-90" : ""}`}>
@@ -1360,6 +1374,18 @@ export default function FastClosingView({
                                           title="Rinvia scadenza"
                                         >
                                           Rinvia
+                                        </button>
+                                      )}
+
+                                      {/* CORREZIONE AU — pratica già affidata all'avvocato: invio diretto,
+                                          niente Solleciti da rifare */}
+                                      {needsDirectLawyerSend && assignedLawyerForItem && activeLegalCaseForItem && (
+                                        <button
+                                          onClick={() => onSendItemDirectlyToLawyer?.(item, activeLegalCaseForItem, assignedLawyerForItem)}
+                                          className="px-2 py-1 bg-rose-800 hover:bg-rose-700 text-white rounded-sm text-[9px] font-black tracking-wide cursor-pointer animate-pulse"
+                                          title={`Invia direttamente a ${assignedLawyerForItem.studioName}, senza rifare i Solleciti`}
+                                        >
+                                          ⚖️ Invia all'Avvocato
                                         </button>
                                       )}
                                     </>

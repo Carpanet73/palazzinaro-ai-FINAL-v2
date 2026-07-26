@@ -1876,6 +1876,20 @@ export default function App() {
           if (debtorName) {
             const todayStr = new Date().toISOString().split("T")[0];
 
+            // CORREZIONE AU — Se questo debitore ha già una pratica legale ATTIVA e AFFIDATA
+            // a un avvocato, non si riparte da zero con i Solleciti: la voce nuova resta
+            // semplicemente "Insoluta" in Fast Closing (lampeggiante), pronta per l'invio
+            // diretto all'avvocato dal pulsante dedicato, senza creare/gonfiare un Sollecito.
+            const activeLegalCase = legalCases.find(
+              lc => lc.tenantName === debtorName && lc.status !== "Closed" && !!lc.assignedLawyerId
+            );
+
+            if (activeLegalCase) {
+              showSuccess(
+                `Voce marcata come insoluta. "${debtorName}" ha già una pratica affidata all'avvocato: usa il tasto dedicato in Fast Closing per inviargliela direttamente, senza rifare i Solleciti.`
+              );
+            } else {
+
             // Cerca sollecito attivo esistente per questo debitore (stesso nome, sequenza non conclusa)
             const existingActiveReminder = reminders.find((r) =>
               r.tenantName === debtorName &&
@@ -1931,6 +1945,7 @@ export default function App() {
                 `Voce marcata come insoluta e nuovo sollecito creato per ${debtorName}.`
               );
             }
+            } // chiude il ramo "else" di activeLegalCase
           } else {
             showSuccess("Stato scadenza aggiornato (debitore non identificato, nessun sollecito creato).");
           }
@@ -2121,6 +2136,66 @@ export default function App() {
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.UPDATE, `legalCases/${id}`);
       showError("Impossibile aggiornare la pratica: " + errInfo.error);
+    }
+  };
+
+  // CORREZIONE AU — invia direttamente all'avvocato già assegnato una voce insoluta nata
+  // DOPO che la pratica è già in Area Legale: niente Solleciti da rifare, un'unica mail
+  // leggera con solo quella voce. Il fascicolo tracciato a sistema resta sempre aggiornato
+  // e completo, così se si cambia avvocato non manca nulla.
+  const handleSendItemDirectlyToLawyer = async (
+    item: FastClosingItem,
+    legalCase: LegalCase,
+    lawyer: Lawyer
+  ) => {
+    if (!lawyer.email || !lawyer.email.includes("@")) {
+      showError(`Lo studio legale "${lawyer.studioName}" non ha un'email valida in anagrafica.`);
+      return;
+    }
+    const confirmed = confirm(
+      `Vuoi inviare direttamente a ${lawyer.studioName} (${lawyer.email}) questa nuova voce insoluta di ${legalCase.tenantName}?\n\n"${item.title}" — €${item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}\n\nNon verrà rifatta la sequenza Solleciti: è un aggiornamento diretto al fascicolo già affidato.`
+    );
+    if (!confirmed) return;
+
+    const itemTitleClean = item.title.split(" - ")[1] || item.title;
+    const emailBody = `Egregio Studio ${lawyer.studioName}, alla cortese attenzione dell'Avv. ${lawyer.name},
+
+Con la presente si integra il fascicolo già affidato relativo a ${legalCase.tenantName} con una nuova voce risultata insoluta:
+
+- ${itemTitleClean}: €${item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+
+Si prega di considerarla parte integrante della pratica in corso.
+
+Cordiali saluti.
+
+---
+La presente email è stata generata automaticamente dal sistema di intelligenza artificiale Palazzinaro AI, in nome e per conto del proprietario. La firma del proprietario è raccolta digitalmente.`;
+
+    const subject = encodeURIComponent(`Aggiornamento Fascicolo — ${legalCase.tenantName}`);
+    const body = encodeURIComponent(emailBody);
+    window.location.href = `mailto:${lawyer.email}?subject=${subject}&body=${body}`;
+
+    const nowIso = new Date().toISOString();
+    const newAdditionalItems = [
+      ...(legalCase.additionalSentItems || []),
+      {
+        itemId: item.id,
+        title: itemTitleClean,
+        amount: item.amount,
+        sentAt: nowIso,
+        sentToLawyerId: lawyer.id,
+        sentToLawyerName: `${lawyer.studioName} - ${lawyer.name}`
+      }
+    ];
+    try {
+      await updateDoc(doc(db, "legalCases", legalCase.id), {
+        additionalSentItems: newAdditionalItems,
+        unpaidBalance: (legalCase.unpaidBalance || 0) + item.amount
+      });
+      showSuccess(`Voce inviata direttamente a ${lawyer.studioName} e aggiunta al fascicolo di ${legalCase.tenantName}.`);
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `legalCases/${legalCase.id}`);
+      showError("Voce inviata via email, ma non sono riuscito ad aggiornare il fascicolo a sistema: " + errInfo.error);
     }
   };
 
@@ -2604,6 +2679,8 @@ export default function App() {
             fastClosingActivePeriod={fastClosingActivePeriod}
             onAdvanceFastClosingPeriod={handleAdvanceFastClosingPeriod}
             legalCases={legalCases}
+            lawyers={lawyers}
+            onSendItemDirectlyToLawyer={handleSendItemDirectlyToLawyer}
             reminders={reminders}
             onAddClosingItem={handleAddClosingItem}
             onUpdateClosingItemStatus={handleUpdateClosingItemStatus}

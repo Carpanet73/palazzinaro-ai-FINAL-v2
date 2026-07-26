@@ -380,9 +380,21 @@ export interface LegalCase {
   contractDetails?: any;
   pastRequests?: any[];
   futureExpirations?: any[];
-  // CORREZIONE Q — traccia quando e a quale email è stato inviato il fascicolo allo studio legale
+  // CORREZIONE AU — traccia quando e a quale email è stato inviato il fascicolo allo studio legale
   dossierSentAt?: string;
   dossierSentToEmail?: string;
+  // CORREZIONE AU — voci insolute nate DOPO che la pratica è già in Area Legale: bypassano i
+  // Solleciti e vengono inviate direttamente all'avvocato assegnato, una alla volta. Restano
+  // tracciate qui in modo che il fascicolo "ufficiale" sia sempre completo — se si cambia
+  // avvocato, il nuovo riceve tutto, non solo il lotto originale.
+  additionalSentItems?: Array<{
+    itemId: string;
+    title: string;
+    amount: number;
+    sentAt: string;
+    sentToLawyerId: string;
+    sentToLawyerName: string;
+  }>;
 }
 
 export interface Communication {
