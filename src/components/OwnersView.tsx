@@ -281,6 +281,22 @@ export default function OwnersView({
       return ticket.chargedTo !== "tenant";
     });
 
+    // CORREZIONE AX — Totali: quanto c'è ancora da incassare (Pendente + Insoluto) e quanto
+    // già incassato, per categoria e nel complesso. Il canone è per definizione a carico
+    // dell'inquilino: il totale pendente di quella voce È "quanto deve l'inquilino".
+    const sumLedger = (ledger: any[]) => ({
+      pending: ledger.filter(l => l.status === "Pending" || l.status === "Overdue").reduce((s, l) => s + l.amount, 0),
+      paid: ledger.filter(l => l.status === "Paid").reduce((s, l) => s + l.amount, 0)
+    });
+    const totals = {
+      rent: sumLedger(rentPayments),
+      condo: sumLedger(condoPayments),
+      taxes: sumLedger(taxPayments),
+      other: sumLedger(otherPayments)
+    };
+    const grandTotalPending = totals.rent.pending + totals.condo.pending + totals.taxes.pending + totals.other.pending;
+    const grandTotalPaid = totals.rent.paid + totals.condo.paid + totals.taxes.paid + totals.other.paid;
+
     return {
       activeContract,
       tenant,
@@ -289,7 +305,10 @@ export default function OwnersView({
       condoPayments,
       taxPayments,
       otherPayments,
-      ownerMaintenance
+      ownerMaintenance,
+      totals,
+      grandTotalPending,
+      grandTotalPaid
     };
   }, [selectedProperty, contracts, tenants, condominiums, fastClosing, movements, maintenance]);
 
@@ -1344,7 +1363,41 @@ export default function OwnersView({
                     <Coins size={16} className="text-indigo-600" />
                     <span>Mastrino dei Pagamenti Perfezionati & Scadenze Contabili</span>
                   </h4>
-                  <span className="text-[10px] text-slate-400">Raggruppato per tipologia contabile</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400">Raggruppato per tipologia contabile</span>
+                    <button
+                      onClick={() => window.print()}
+                      className="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white px-2.5 py-1.5 rounded-lg transition-colors no-print"
+                      title="Stampa il mastrino di questo immobile"
+                    >
+                      🖨️ Stampa
+                    </button>
+                  </div>
+                </div>
+
+                {/* CORREZIONE AX — Barra dei Totali: sempre visibile, indipendentemente dalla
+                    scheda selezionata, per capire subito quanto c'è ancora da incassare */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div className="bg-rose-50 border border-rose-100 rounded-xl p-3">
+                    <span className="text-[9px] uppercase font-black text-rose-500 tracking-wider block">Totale da Incassare</span>
+                    <span className="text-lg font-black text-rose-700 font-mono">
+                      €{propertyModalData.grandTotalPending.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                    <span className="text-[9px] uppercase font-black text-emerald-600 tracking-wider block">Totale Già Incassato</span>
+                    <span className="text-lg font-black text-emerald-700 font-mono">
+                      €{propertyModalData.grandTotalPaid.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3">
+                    <span className="text-[9px] uppercase font-black text-indigo-600 tracking-wider block">
+                      Di cui, Canone — quanto deve l'Inquilino
+                    </span>
+                    <span className="text-lg font-black text-indigo-700 font-mono">
+                      €{propertyModalData.totals.rent.pending.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Ledger Navigation Tabs */}
