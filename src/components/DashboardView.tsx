@@ -289,7 +289,7 @@ export default function DashboardView({
       return;
     }
     const firstName = tenant.name.trim().split(" ")[0];
-    const message = `Buongiorno ${firstName}, dalla documentazione ho visto che oggi è il tuo compleanno, ti faccio i miei migliori auguri.`;
+    const message = `Buongiorno ${firstName}, dalla documentazione ho visto che oggi è il tuo compleanno, ti faccio i miei migliori auguri. 🥂`;
     const phoneClean = tenant.phone.replace(/[^0-9+]/g, "");
     window.open(`https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`, "_blank");
   };
