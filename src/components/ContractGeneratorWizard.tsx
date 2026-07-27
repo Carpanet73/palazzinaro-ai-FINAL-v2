@@ -62,8 +62,11 @@ export default function ContractGeneratorWizard({
   const [generatedBlob, setGeneratedBlob] = useState<Blob | null>(null);
   const [sendEmail, setSendEmail] = useState("");
 
-  if (!isOpen) return null;
-
+  // CORREZIONE BR — bug critico corretto: gli hook (useMemo) erano DOPO il controllo
+  // "if (!isOpen) return null" — questo viola le Regole degli Hook di React (il numero di
+  // hook chiamati deve essere sempre uguale ad ogni resa grafica) e mandava in crash
+  // l'intera pagina (schermo bianco) non appena il Wizard veniva aperto per la prima volta.
+  // Ora tutti gli hook vengono chiamati SEMPRE, prima di qualunque uscita anticipata.
   const selectedProperty = properties.find(p => p.id === propertyId);
   const selectedTenant = tenants.find(t => t.id === tenantId);
   const resolvedOwner = owners.find(o => o.id === selectedProperty?.ownerId || o.name === selectedProperty?.owner);
@@ -79,6 +82,8 @@ export default function ContractGeneratorWizard({
     d.setDate(d.getDate() - 1);
     return d.toISOString().split("T")[0];
   }, [startDate, durationYears]);
+
+  if (!isOpen) return null;
 
   const annualRent = monthlyRent * 12;
 
