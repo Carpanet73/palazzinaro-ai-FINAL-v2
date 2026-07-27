@@ -92,6 +92,10 @@ export default function ContractsView({
 
   // Selected details active state
   const [selectedContractId, setSelectedContractId] = useState<string>("");
+  // CORREZIONE BT — invio del contratto generato (documento gia' agli atti)
+  const [sendPanelOpenForId, setSendPanelOpenForId] = useState<string | null>(null);
+  const [sendEmailInput, setSendEmailInput] = useState("");
+  const [sendingContractId, setSendingContractId] = useState<string | null>(null);
   const [newDocName, setNewDocName] = useState("");
   const [newDocType, setNewDocType] = useState("APE (Classe Energetica)");
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -415,6 +419,44 @@ export default function ContractsView({
   };
 
   // Open "Create Relationship" wizard instead of generic new contract
+  // CORREZIONE BT — invia il documento del contratto (già agli atti su pCloud) via Resend
+  const handleSendContractDocument = async (contract: Contract, toEmail: string) => {
+    const doc = (contract as any).documents?.[0];
+    if (!doc?.pcloudLink) {
+      alert("Non risulta nessun documento generato per questo contratto.");
+      return;
+    }
+    if (!toEmail.trim() || !toEmail.includes("@")) {
+      alert("Inserisci un indirizzo email valido.");
+      return;
+    }
+    setSendingContractId(contract.id);
+    try {
+      const response = await fetch("/api/send-pcloud-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pcloudLink: doc.pcloudLink,
+          fileName: doc.fileName,
+          to: toEmail.trim(),
+          subject: `Contratto di Locazione — ${contract.propertyName}`,
+          html: `<p>In allegato il contratto di locazione relativo a "${contract.propertyName}".</p><p style="font-size:10px;color:#94a3b8;">Generato automaticamente dal sistema Palazzinaro AI®.</p>`
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Errore sconosciuto durante l'invio.");
+      }
+      alert(`✅ Contratto inviato con successo a ${toEmail.trim()}.`);
+      setSendPanelOpenForId(null);
+      setSendEmailInput("");
+    } catch (err: any) {
+      alert(`❌ Errore durante l'invio: ${err?.message || err}`);
+    } finally {
+      setSendingContractId(null);
+    }
+  };
+
   const handleOpenAddWizard = () => {
     setEditingContract(null);
     setWizardStep(0);
@@ -863,6 +905,64 @@ export default function ContractsView({
                               <span>👤 Inquilino</span>
                             </button>
                           </div>
+
+                          {/* CORREZIONE BT — Documento generato: vedi e invia */}
+                          {(contract as any).documents?.[0] && (
+                            <div className="pt-2 mt-1 border-t border-slate-100 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                              <a
+                                href={(contract as any).documents[0].pcloudLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline"
+                              >
+                                📄 Vedi Documento Generato
+                              </a>
+                              {sendPanelOpenForId !== contract.id ? (
+                                <button
+                                  onClick={() => {
+                                    setSendPanelOpenForId(contract.id);
+                                    setSendEmailInput(matchingTenant?.email || "");
+                                  }}
+                                  className="block text-[10px] font-bold text-emerald-700 hover:underline"
+                                >
+                                  📧 Invia Contratto
+                                </button>
+                              ) : (
+                                <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                                  <select
+                                    onChange={(e) => setSendEmailInput(e.target.value)}
+                                    className="text-[10px] border border-slate-200 rounded-md px-1.5 py-1"
+                                    defaultValue=""
+                                  >
+                                    <option value="" disabled>-- scegli o scrivi sotto --</option>
+                                    {matchingTenant?.email && <option value={matchingTenant.email}>Inquilino: {matchingTenant.email}</option>}
+                                  </select>
+                                  <input
+                                    type="email"
+                                    placeholder="oppure scrivi un'email diversa..."
+                                    value={sendEmailInput}
+                                    onChange={(e) => setSendEmailInput(e.target.value)}
+                                    className="text-[10px] border border-slate-200 rounded-md px-1.5 py-1"
+                                  />
+                                  <div className="flex gap-1.5">
+                                    <button
+                                      onClick={() => handleSendContractDocument(contract, sendEmailInput)}
+                                      disabled={sendingContractId === contract.id}
+                                      className="flex-1 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-md py-1"
+                                    >
+                                      {sendingContractId === contract.id ? "Invio..." : "Invia"}
+                                    </button>
+                                    <button
+                                      onClick={() => setSendPanelOpenForId(null)}
+                                      className="flex-1 text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-md py-1"
+                                    >
+                                      Annulla
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </td>
 

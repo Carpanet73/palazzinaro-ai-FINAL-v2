@@ -57,6 +57,13 @@ export default function ContractGeneratorWizard({
   const [monthlyRent, setMonthlyRent] = useState(0);
   const [taxRegime, setTaxRegime] = useState<"CedolareSecca" | "Ordinaria">("CedolareSecca");
 
+  // CORREZIONE BU — Il regime fiscale è la prima domanda (non l'ultima): la cedolare secca
+  // sui contratti liberi comporta di norma la durata 4+4 anni, proposta subito qui.
+  const handleSelectRegime = (regime: "CedolareSecca" | "Ordinaria") => {
+    setTaxRegime(regime);
+    if (regime === "CedolareSecca") setDurationYears(4);
+  };
+
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
   const [generatedBlob, setGeneratedBlob] = useState<Blob | null>(null);
@@ -87,8 +94,8 @@ export default function ContractGeneratorWizard({
 
   const annualRent = monthlyRent * 12;
 
-  const canGoToStep2 = !!propertyId;
-  const canGoToStep3 = !!tenantId;
+  const canGoToStep3 = !!propertyId;
+  const canGoToStep4 = !!tenantId;
   const canGenerate = monthlyRent > 0 && startDate;
 
   const buildContractGenData = (): ContractGenData => ({
@@ -227,14 +234,29 @@ export default function ContractGeneratorWizard({
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
       <div className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-100 max-h-[92vh] flex flex-col">
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
-          <h3 className="font-sans font-bold text-base">🪄 Genera Contratto Guidato — Passo {step} di 4</h3>
+          <h3 className="font-sans font-bold text-base">🪄 Genera Contratto Guidato — Passo {step} di 5</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-lg">✕</button>
         </div>
 
         <div className="p-6 overflow-y-auto space-y-4 flex-1">
           {step === 1 && (
             <>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">1. Seleziona l'Immobile</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">1. Regime Fiscale del Contratto</label>
+              <p className="text-[11px] text-slate-500 mb-2">Prima cosa da scegliere: determina la durata standard e le clausole fiscali del contratto.</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => handleSelectRegime("CedolareSecca")} className={`flex-1 py-3 rounded-xl text-xs font-bold ${taxRegime === "CedolareSecca" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+                  Cedolare Secca<br /><span className="text-[9px] font-normal opacity-80">(propone 4+4 anni)</span>
+                </button>
+                <button type="button" onClick={() => handleSelectRegime("Ordinaria")} className={`flex-1 py-3 rounded-xl text-xs font-bold ${taxRegime === "Ordinaria" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+                  Ordinaria<br /><span className="text-[9px] font-normal opacity-80">(registrazione + ISTAT)</span>
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">2. Seleziona l'Immobile</label>
               <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)} className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5">
                 <option value="">-- Seleziona --</option>
                 {properties.map(p => <option key={p.id} value={p.id}>{p.name} — {p.address}</option>)}
@@ -258,9 +280,9 @@ export default function ContractGeneratorWizard({
             </>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">2. Seleziona l'Inquilino</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">3. Seleziona l'Inquilino</label>
               <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5">
                 <option value="">-- Seleziona --</option>
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -283,11 +305,15 @@ export default function ContractGeneratorWizard({
             </>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <div className="space-y-3">
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 text-[11px] text-indigo-700 font-bold">
+                Regime scelto: {taxRegime === "CedolareSecca" ? "Cedolare Secca" : "Ordinaria"}
+              </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Durata (anni)</label>
                 <input type="number" value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value) || 4)} className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5" />
+                {taxRegime === "CedolareSecca" && <p className="text-[10px] text-slate-400 mt-1">Proposta automaticamente a 4 (contratto 4+4) — modificabile se serve.</p>}
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Data di Decorrenza</label>
@@ -299,17 +325,10 @@ export default function ContractGeneratorWizard({
                 <input type="number" value={monthlyRent || ""} onChange={(e) => setMonthlyRent(Number(e.target.value) || 0)} className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5" />
                 <p className="text-[10px] text-slate-400 mt-1">Annuo calcolato: € {annualRent.toFixed(2)}</p>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Regime Fiscale</label>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setTaxRegime("CedolareSecca")} className={`flex-1 py-2 rounded-xl text-xs font-bold ${taxRegime === "CedolareSecca" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"}`}>Cedolare Secca</button>
-                  <button type="button" onClick={() => setTaxRegime("Ordinaria")} className={`flex-1 py-2 rounded-xl text-xs font-bold ${taxRegime === "Ordinaria" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"}`}>Ordinaria</button>
-                </div>
-              </div>
             </div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <div className="space-y-3">
               <p className="text-xs text-slate-500">Genera il documento e controllalo prima di salvarlo e inviarlo.</p>
               <button
@@ -350,10 +369,10 @@ export default function ContractGeneratorWizard({
           >
             ← Indietro
           </button>
-          {step < 4 && (
+          {step < 5 && (
             <button
-              onClick={() => setStep(s => Math.min(4, s + 1))}
-              disabled={(step === 1 && !canGoToStep2) || (step === 2 && !canGoToStep3)}
+              onClick={() => setStep(s => Math.min(5, s + 1))}
+              disabled={(step === 2 && !canGoToStep3) || (step === 3 && !canGoToStep4)}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-xl text-xs font-bold"
             >
               Avanti →
