@@ -1,6 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
+import DocumentScanner from "./DocumentScanner";
+import { uploadDocumentToPCloud } from "../lib/documentUpload";
 import { 
   Plus, 
   Edit3, 
@@ -25,7 +27,7 @@ import {
   Copy,
   Check
 } from "lucide-react";
-import { Tenant, Property, FastClosingItem, Contract, Maintenance, LegalCase, Reminder } from "../types";
+import { Tenant, Property, FastClosingItem, Contract, Maintenance, LegalCase, Reminder, StoredDocument } from "../types";
 import { getTenantClassification as getTenantClassificationHelper } from "../lib/statusHelper";
 import Logo from "./Logo";
 
@@ -107,6 +109,13 @@ export default function TenantsView({
   // CORREZIONE AA — data di nascita e indirizzo strutturato
   const [birthDate, setBirthDate] = useState("");
   const [address, setAddress] = useState<AddressValue>({});
+  // CORREZIONE BO — documento d'identità e permesso di soggiorno, con scanner integrato
+  const [isForeign, setIsForeign] = useState(false);
+  const [identityDocument, setIdentityDocument] = useState<{ type?: string; number?: string; issuedDate?: string; expiryDate?: string }>({});
+  const [residencePermit, setResidencePermit] = useState<{ number?: string; issuedDate?: string; validity?: string }>({});
+  const [tenantDocuments, setTenantDocuments] = useState<StoredDocument[]>([]);
+  const [scannerOpenFor, setScannerOpenFor] = useState<"identity" | "permit" | null>(null);
+  const [processingScan, setProcessingScan] = useState(false);
   const [propertyId, setPropertyId] = useState("");
   const [notes, setNotes] = useState("");
   const [coTenants, setCoTenants] = useState<Array<{ name: string; fiscalCode?: string; phone?: string; email?: string }>>([]);
@@ -137,6 +146,10 @@ export default function TenantsView({
     setPhone("");
     setFiscalCode("");
     setBirthDate("");
+    setIsForeign(false);
+    setIdentityDocument({});
+    setResidencePermit({});
+    setTenantDocuments([]);
     setAddress({});
     // CORREZIONE F — il campo Immobile deve partire VUOTO ("Nessuno / Libero"), mai
     // precompilato con il primo immobile della lista: il collegamento è facoltativo
@@ -176,6 +189,10 @@ export default function TenantsView({
     setPhone(tenant.phone || "");
     setFiscalCode(tenant.fiscalCode || "");
     setBirthDate(tenant.birthDate || "");
+    setIsForeign(tenant.isForeign || false);
+    setIdentityDocument(tenant.identityDocument || {});
+    setResidencePermit(tenant.residencePermit || {});
+    setTenantDocuments(tenant.documents || []);
     setAddress(tenant.address || {});
     setPropertyId(tenant.propertyId || "");
     setNotes(tenant.notes || "");
@@ -211,6 +228,69 @@ export default function TenantsView({
 
   const handleRemoveGuarantorDocument = (id: string) => {
     setGuarantorDocuments(prev => prev.filter(d => d.id !== id));
+  };
+
+  // CORREZIONE BO — Riceve il PDF dallo scanner, lo fa leggere all'AI, precompila i campi,
+  // poi lo carica su pCloud e lo aggiunge ai documenti conservati agli atti dell'inquilino.
+  const handleScanComplete = async (pdfBlob: Blob, docKind: "identity" | "permit") => {
+    setScannerOpenFor(null);
+    setProcessingScan(true);
+    try {
+      const base64: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(pdfBlob);
+      });
+
+      const context = docKind === "identity" ? "identity_document" : "residence_permit";
+      const response = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: [`data:application/pdf;base64,${base64}`], context })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Errore durante la lettura del documento.");
+      }
+      const parsed = data.data || {};
+
+      if (docKind === "identity") {
+        if (!tName.trim() && parsed.name) setTName(parsed.name);
+        if (!fiscalCode.trim() && parsed.fiscalCode) setFiscalCode(parsed.fiscalCode);
+        if (!birthDate && parsed.birthDate) {
+          // converte GG.MM.AAAA in YYYY-MM-DD per il campo data
+          const m = String(parsed.birthDate).match(/(\d{2})\.(\d{2})\.(\d{4})/);
+          if (m) setBirthDate(`${m[3]}-${m[2]}-${m[1]}`);
+        }
+        setIdentityDocument({
+          type: parsed.documentType,
+          number: parsed.documentNumber,
+          issuedDate: parsed.issuedDate,
+          expiryDate: parsed.expiryDate
+        });
+      } else {
+        setResidencePermit({
+          number: parsed.number,
+          issuedDate: parsed.issuedDate,
+          validity: parsed.validity
+        });
+      }
+
+      const fileName = `${docKind === "identity" ? "documento_identita" : "permesso_soggiorno"}_${(tName || "inquilino").replace(/\s+/g, "_").toLowerCase()}.pdf`;
+      const storedDoc = await uploadDocumentToPCloud(
+        pdfBlob,
+        fileName,
+        docKind === "identity" ? "Documento d'Identità" : "Permesso di Soggiorno",
+        `Inquilini/${tName || "Nuovo Inquilino"}`
+      );
+      setTenantDocuments(prev => [...prev, storedDoc]);
+      alert("📄 Documento letto e salvato agli atti! Controlla i campi precompilati prima di salvare.");
+    } catch (err: any) {
+      alert(`❌ Errore durante la lettura/salvataggio del documento: ${err?.message || err}`);
+    } finally {
+      setProcessingScan(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -267,7 +347,11 @@ export default function TenantsView({
         documents: guarantorDocuments
       } : null,
       birthDate: birthDate || "",
-      address
+      address,
+      isForeign,
+      identityDocument,
+      residencePermit: isForeign ? residencePermit : {},
+      documents: tenantDocuments
     } as any;
 
     try {
@@ -1512,6 +1596,69 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                   </div>
 
                   <AddressFields value={address} onChange={setAddress} />
+
+                  {/* CORREZIONE BO — Documento d'identità e permesso di soggiorno, con scanner */}
+                  <div className="space-y-3 border border-slate-200 rounded-xl p-3.5 bg-slate-50/50">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isForeign}
+                        onChange={(e) => setIsForeign(e.target.checked)}
+                        className="w-4 h-4 accent-slate-900"
+                      />
+                      È un cittadino straniero (richiede permesso di soggiorno)
+                    </label>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setScannerOpenFor("identity")}
+                        disabled={processingScan}
+                        className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-3 py-1.5 rounded-lg"
+                      >
+                        {processingScan ? "⏳ Elaborazione..." : "📷 Fotografa Documento d'Identità"}
+                      </button>
+                      {isForeign && (
+                        <button
+                          type="button"
+                          onClick={() => setScannerOpenFor("permit")}
+                          disabled={processingScan}
+                          className="text-[10px] font-bold bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white px-3 py-1.5 rounded-lg"
+                        >
+                          {processingScan ? "⏳ Elaborazione..." : "📷 Fotografa Permesso di Soggiorno"}
+                        </button>
+                      )}
+                    </div>
+
+                    {identityDocument.number && (
+                      <p className="text-[10px] text-slate-500">
+                        ✓ {identityDocument.type || "Documento"} n. {identityDocument.number}
+                        {identityDocument.expiryDate ? ` — scade il ${new Date(identityDocument.expiryDate).toLocaleDateString("it-IT")}` : ""}
+                      </p>
+                    )}
+                    {isForeign && residencePermit.number && (
+                      <p className="text-[10px] text-slate-500">
+                        ✓ Permesso di soggiorno n. {residencePermit.number}
+                        {residencePermit.validity === "illimitata" ? " — validità illimitata" : (residencePermit.validity ? ` — scade il ${new Date(residencePermit.validity).toLocaleDateString("it-IT")}` : "")}
+                      </p>
+                    )}
+                    {tenantDocuments.length > 0 && (
+                      <div className="pt-1.5 border-t border-slate-200 space-y-1">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Documenti conservati agli atti</p>
+                        {tenantDocuments.map(doc => (
+                          <a
+                            key={doc.id}
+                            href={doc.pcloudLink || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block text-[10px] text-indigo-600 hover:underline truncate"
+                          >
+                            📎 {doc.category} — {doc.fileName}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 /* Company Tenant Fields */
@@ -1820,6 +1967,14 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
           </div>
         </div>
       )}
+
+      {/* CORREZIONE BO — Scanner per documento d'identità / permesso di soggiorno */}
+      <DocumentScanner
+        isOpen={scannerOpenFor !== null}
+        title={scannerOpenFor === "identity" ? "Fotografa Documento d'Identità" : "Fotografa Permesso di Soggiorno"}
+        onClose={() => setScannerOpenFor(null)}
+        onComplete={(pdfBlob) => handleScanComplete(pdfBlob, scannerOpenFor as "identity" | "permit")}
+      />
     </div>
   );
 }
