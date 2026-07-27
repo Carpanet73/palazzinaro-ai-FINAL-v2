@@ -69,11 +69,43 @@ export interface Property {
   // fisico, quando NON esiste un Condominio formale costituito (es. palazzo intero di un
   // solo proprietario con più inquilini) — serve per la ripartizione delle bollette comuni.
   stabile?: string;
+  // CORREZIONE BM — Dati catastali e classe energetica: servono per generare i contratti di
+  // locazione esattamente come nel modello reale. Restano per sempre sulla scheda
+  // dell'immobile (non cambiano a ogni contratto), fotografabili una sola volta.
+  cadastralData?: {
+    foglio?: string;
+    particella?: string;
+    subalterno?: string;
+    categoria?: string; // es. "A/3"
+    vaniCatastali?: string;
+    classe?: string;
+    renditaCatastale?: string; // es. "387.34"
+    piano?: string;
+  };
+  energyClass?: {
+    classe?: string; // es. "F"
+    ipeGlobale?: string; // es. "201.48 KWh/mq anno"
+    expiryDate?: string; // l'APE scade ogni 10 anni — serve per il promemoria
+  };
+  documents?: StoredDocument[]; // documenti fotografati (visura catastale, APE) conservati agli atti
   millesimi?: number; // Quota millesimale (modificabile)
   luceMeter?: UtilityMeter;
   gasMeter?: UtilityMeter;
   acquaMeter?: UtilityMeter;
   createdAt: string;
+}
+
+// CORREZIONE BM — Documento conservato "agli atti": il file vero sta su pCloud (mai nel
+// database), qui si tiene solo il riferimento. Si può agganciare a Inquilino, Immobile,
+// Contratto, Proprietario e Pratica Legale — la stessa identica struttura ovunque, così un
+// documento fotografato una volta si ritrova coerentemente in tutte le aree collegate.
+export interface StoredDocument {
+  id: string;
+  fileName: string;
+  category: string; // es. "Documento d'Identità", "Permesso di Soggiorno", "Visura Catastale", "APE"
+  pcloudLink: string;
+  pcloudFileId: number;
+  uploadedAt: string;
 }
 
 export interface Tenant {
@@ -92,6 +124,7 @@ export interface Tenant {
   // separati), servono per le comunicazioni formali (Messa in Mora, lettere) e per
   // funzioni come il promemoria di compleanno.
   birthDate?: string; // YYYY-MM-DD
+  birthPlace?: string; // "nato/a a ___" — serve per la generazione contratti
   address?: {
     via?: string;
     civico?: string;
@@ -100,6 +133,23 @@ export interface Tenant {
     provincia?: string; // sigla, es. "MI" — proposta automaticamente dalla città quando nota
     cap?: string;
   };
+  // CORREZIONE BM — Documento d'identità (sempre) e permesso di soggiorno (solo se
+  // straniero): servono per generare i contratti di locazione esattamente come nel modello
+  // reale fornito dall'utente. isForeign è una scelta esplicita, non dedotta automaticamente.
+  isForeign?: boolean;
+  identityDocument?: {
+    type?: "Carta d'Identità" | "Passaporto";
+    number?: string;
+    issuedDate?: string;
+    expiryDate?: string;
+  };
+  residencePermit?: {
+    number?: string;
+    issuedDate?: string; // "rilasciato il ___"
+    validity?: string; // es. "illimitata" oppure una data di scadenza YYYY-MM-DD
+    expiryDate?: string; // se non a validità illimitata — serve per il promemoria di scadenza
+  };
+  documents?: StoredDocument[]; // documenti fotografati conservati agli atti
   // Company optional fields
   isCompany?: boolean;
   companyName?: string;
@@ -232,6 +282,14 @@ export interface Contract {
   ownerName?: string;
   disdettaReceiptUploaded?: boolean;
   disdettaReceiptDate?: string;
+  // CORREZIONE BM/BN — Regime fiscale (per le registrazioni F24, quando verranno
+  // costruite) e documenti agli atti (il contratto generato stesso, e i documenti raccolti
+  // per generarlo: identità, permesso di soggiorno, visura, APE).
+  taxRegime?: "CedolareSecca" | "Ordinaria";
+  documents?: StoredDocument[];
+  // Testo completo del contratto generato (per poterlo rivedere/rigenerare senza dover
+  // rifare tutta la procedura guidata da capo)
+  generatedContractText?: string;
   disdettaReceiptFile?: string;
   isBareOwnership?: boolean;
   createdAt: string;
@@ -437,6 +495,10 @@ export interface LegalCase {
     sentToLawyerId: string;
     sentToLawyerName: string;
   }>;
+  // CORREZIONE BM — i documenti fotografati (identità, contratto, ecc.) collegati a questo
+  // inquilino/immobile restano visibili anche qui, nel fascicolo legale, quando la pratica
+  // viene passata all'avvocato — mai duplicati, solo lo stesso riferimento pCloud.
+  documents?: StoredDocument[];
 }
 
 export interface Communication {
