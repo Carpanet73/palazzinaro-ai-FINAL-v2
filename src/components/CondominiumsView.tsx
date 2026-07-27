@@ -119,6 +119,8 @@ export default function CondominiumsView({
 
   // Upload/Add expense fields for current selected property
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [processingExpensePhoto, setProcessingExpensePhoto] = useState(false); // CORREZIONE BJ
+  const expensePhotoInputRef = useRef<HTMLInputElement>(null);
   const [expenseTitle, setExpenseTitle] = useState("");
   const [expenseAmount, setExpenseAmount] = useState<number>(0);
   // CORREZIONE N — propone di default il mese/anno corrente, calcolato da new Date()
@@ -268,6 +270,45 @@ export default function CondominiumsView({
     onClearExpensePrefill?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expensePrefill]);
+
+  // CORREZIONE BJ — Fotografa il rendiconto direttamente da qui, senza dover passare
+  // dall'Area AI: stessa estrazione (context "condo_expenses"), ma precompila il modulo
+  // già aperto sull'immobile/condominio corrente, senza bisogno di indovinare a quale
+  // condominio si riferisce.
+  const handleExpensePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProcessingExpensePhoto(true);
+    try {
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const response = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: [dataUrl], context: "condo_expenses" })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Errore durante la lettura del documento.");
+      }
+      const parsed = data.data || {};
+      setExpenseTitle(parsed.title || "Spesa Condominiale");
+      setExpenseAmount(Number(parsed.amount) || 0);
+      if (parsed.date) setExpenseDueDate(parsed.date);
+      setShowAddExpense(true);
+      alert("📄 Documento letto! Controlla i dati precompilati prima di confermare la ripartizione.");
+    } catch (err: any) {
+      alert(`❌ Errore durante la lettura del documento: ${err?.message || err}`);
+    } finally {
+      setProcessingExpensePhoto(false);
+      if (expensePhotoInputRef.current) expensePhotoInputRef.current.value = "";
+    }
+  };
 
   const activeTenant = useMemo(() => {
     if (!activeProperty) return null;
@@ -1275,12 +1316,30 @@ export default function CondominiumsView({
                       <Receipt className="text-slate-500" size={18} />
                       <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Gestione Spese & Ripartizione Rata</h4>
                     </div>
-                    <button
-                      onClick={() => setShowAddExpense(!showAddExpense)}
-                      className="inline-flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer"
-                    >
-                      {showAddExpense ? "Nascondi Form" : "Ripartisci Nuova Spesa"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {/* CORREZIONE BJ — Fotografa il rendiconto direttamente qui */}
+                      <input
+                        ref={expensePhotoInputRef}
+                        type="file"
+                        accept="image/*,application/pdf"
+                        capture="environment"
+                        onChange={handleExpensePhotoSelected}
+                        className="hidden"
+                      />
+                      <button
+                        onClick={() => expensePhotoInputRef.current?.click()}
+                        disabled={processingExpensePhoto}
+                        className="inline-flex items-center space-x-1.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer"
+                      >
+                        {processingExpensePhoto ? "⏳ Lettura in corso..." : "📷 Fotografa Rendiconto"}
+                      </button>
+                      <button
+                        onClick={() => setShowAddExpense(!showAddExpense)}
+                        className="inline-flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer"
+                      >
+                        {showAddExpense ? "Nascondi Form" : "Ripartisci Nuova Spesa"}
+                      </button>
+                    </div>
                   </div>
 
                   {showAddExpense && (
