@@ -92,9 +92,21 @@ async function getPcloudAuthToken(): Promise<{ token: string; host: string }> {
       authexpire: 31536000 // 1 anno
     });
 
-    // Se le credenziali sono di un account europeo, l'host USA a volte risponde con un
-    // errore che indica di riprovare sull'host europeo (o viceversa).
-    if (authResp.result === 2000 || authResp.result === 4000) {
+    // CORREZIONE BS — bug corretto: il codice 2000 di pCloud significa letteralmente
+    // "Log in failed" (credenziali sbagliate), NON un problema di regione — riprovare su
+    // un altro host con le STESSE credenziali sbagliate non avrebbe mai funzionato, e
+    // mascherava l'errore vero con un messaggio fuorviante. Ora l'errore reale di pCloud
+    // viene mostrato subito, così si capisce se il problema è davvero nelle credenziali.
+    if (authResp.result === 2000) {
+      throw new Error(
+        `pCloud ha rifiutato le credenziali (Login failed). Controlla che PCLOUD_USERNAME e PCLOUD_PASSWORD su Vercel corrispondano esattamente alla tua email e password di pCloud (senza spazi involontari all'inizio o alla fine).`
+      );
+    }
+
+    // Alcuni account (soprattutto quelli creati su server europei) richiedono l'host
+    // eapi.pcloud.com — questo codice indica specificamente un problema di regione/host,
+    // non di credenziali: in quel caso sì che ha senso riprovare sull'altro host.
+    if (authResp.result === 4000 || authResp.result === 1000) {
       host = host === "api.pcloud.com" ? "eapi.pcloud.com" : "api.pcloud.com";
       continue;
     }
@@ -109,7 +121,7 @@ async function getPcloudAuthToken(): Promise<{ token: string; host: string }> {
     return { token: cachedAuthToken, host };
   }
 
-  throw new Error("Impossibile determinare la regione API di pCloud (USA/Europa) per queste credenziali.");
+  throw new Error("Impossibile completare l'autenticazione su pCloud dopo aver provato entrambi i server (USA/Europa) — riprova tra qualche minuto.");
 }
 
 // Crea (se non esiste già) la catena di sotto-cartelle indicata, partendo dalla cartella
