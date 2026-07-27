@@ -1,5 +1,7 @@
 
 import React, { useState } from "react";
+import DocumentScanner from "./DocumentScanner";
+import { uploadDocumentToPCloud } from "../lib/documentUpload";
 import { 
   Plus, 
   Edit3, 
@@ -23,7 +25,7 @@ import {
   Mail, 
   FileCheck
 } from "lucide-react";
-import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, Condominium, Maintenance, InsurancePolicy, DeliveryReport } from "../types";
+import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, Condominium, Maintenance, InsurancePolicy, DeliveryReport, StoredDocument } from "../types";
 import { getTenantClassification as getTenantClassificationHelper } from "../lib/statusHelper";
 
 interface PropertiesViewProps {
@@ -162,6 +164,22 @@ export default function PropertiesView({
   const [acquaReadingDate, setAcquaReadingDate] = useState("");
   const [acquaActiveFlag, setAcquaActiveFlag] = useState<"proprietario" | "conduttore">("proprietario");
 
+  // CORREZIONE BO — Dati catastali, classe energetica e documenti agli atti, con scanner
+  const [cadastralFoglio, setCadastralFoglio] = useState("");
+  const [cadastralParticella, setCadastralParticella] = useState("");
+  const [cadastralSubalterno, setCadastralSubalterno] = useState("");
+  const [cadastralCategoria, setCadastralCategoria] = useState("");
+  const [cadastralVani, setCadastralVani] = useState("");
+  const [cadastralClasse, setCadastralClasse] = useState("");
+  const [cadastralRendita, setCadastralRendita] = useState("");
+  const [cadastralPiano, setCadastralPiano] = useState("");
+  const [energyClasse, setEnergyClasse] = useState("");
+  const [energyIpe, setEnergyIpe] = useState("");
+  const [energyExpiry, setEnergyExpiry] = useState("");
+  const [propertyDocuments, setPropertyDocuments] = useState<StoredDocument[]>([]);
+  const [scannerOpenFor, setScannerOpenFor] = useState<"cadastral" | "energy" | null>(null);
+  const [processingScan, setProcessingScan] = useState(false);
+
   // Insurance Policy modal & form states
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
   const [editingInsurancePolicy, setEditingInsurancePolicy] = useState<any | null>(null);
@@ -240,6 +258,11 @@ export default function PropertiesView({
     // Reset millesimi and utility meters
     setMillesimi(120);
     setLuceMeterNo("");
+    setCadastralFoglio(""); setCadastralParticella(""); setCadastralSubalterno("");
+    setCadastralCategoria(""); setCadastralVani(""); setCadastralClasse("");
+    setCadastralRendita(""); setCadastralPiano("");
+    setEnergyClasse(""); setEnergyIpe(""); setEnergyExpiry("");
+    setPropertyDocuments([]);
     setLuceLastReading(0);
     setLuceReadingDate("");
     setLuceActiveFlag("proprietario");
@@ -281,6 +304,18 @@ export default function PropertiesView({
     setMillesimi(property.millesimi !== undefined ? property.millesimi : 120);
     
     setLuceMeterNo(property.luceMeter?.meterNumber || "");
+    setCadastralFoglio(property.cadastralData?.foglio || "");
+    setCadastralParticella(property.cadastralData?.particella || "");
+    setCadastralSubalterno(property.cadastralData?.subalterno || "");
+    setCadastralCategoria(property.cadastralData?.categoria || "");
+    setCadastralVani(property.cadastralData?.vaniCatastali || "");
+    setCadastralClasse(property.cadastralData?.classe || "");
+    setCadastralRendita(property.cadastralData?.renditaCatastale || "");
+    setCadastralPiano(property.cadastralData?.piano || "");
+    setEnergyClasse(property.energyClass?.classe || "");
+    setEnergyIpe(property.energyClass?.ipeGlobale || "");
+    setEnergyExpiry(property.energyClass?.expiryDate || "");
+    setPropertyDocuments(property.documents || []);
     setLuceLastReading(property.luceMeter?.lastReading || 0);
     setLuceReadingDate(property.luceMeter?.readingDate || "");
     setLuceActiveFlag(property.luceMeter?.activeFlag === "conduttore" ? "conduttore" : "proprietario");
@@ -332,6 +367,63 @@ export default function PropertiesView({
     setShowModal(true);
   };
 
+  // CORREZIONE BO — Riceve il PDF dallo scanner (visura catastale o APE), lo fa leggere
+  // all'AI, precompila i campi, poi lo carica su pCloud e lo aggiunge ai documenti
+  // conservati agli atti dell'immobile.
+  const handleScanComplete = async (pdfBlob: Blob, docKind: "cadastral" | "energy") => {
+    setScannerOpenFor(null);
+    setProcessingScan(true);
+    try {
+      const base64: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(pdfBlob);
+      });
+
+      const context = docKind === "cadastral" ? "cadastral_data" : "energy_certificate";
+      const response = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: [`data:application/pdf;base64,${base64}`], context })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Errore durante la lettura del documento.");
+      }
+      const parsed = data.data || {};
+
+      if (docKind === "cadastral") {
+        setCadastralFoglio(parsed.foglio || "");
+        setCadastralParticella(parsed.particella || "");
+        setCadastralSubalterno(parsed.subalterno || "");
+        setCadastralCategoria(parsed.categoria || "");
+        setCadastralVani(parsed.vaniCatastali || "");
+        setCadastralClasse(parsed.classe || "");
+        setCadastralRendita(parsed.renditaCatastale || "");
+        setCadastralPiano(parsed.piano || "");
+      } else {
+        setEnergyClasse(parsed.classe || "");
+        setEnergyIpe(parsed.ipeGlobale || "");
+        setEnergyExpiry(parsed.expiryDate || "");
+      }
+
+      const fileName = `${docKind === "cadastral" ? "visura_catastale" : "ape"}_${(name || "immobile").replace(/\s+/g, "_").toLowerCase()}.pdf`;
+      const storedDoc = await uploadDocumentToPCloud(
+        pdfBlob,
+        fileName,
+        docKind === "cadastral" ? "Visura Catastale" : "Attestato APE",
+        `Immobili/${name || "Nuovo Immobile"}`
+      );
+      setPropertyDocuments(prev => [...prev, storedDoc]);
+      alert("📄 Documento letto e salvato agli atti! Controlla i campi precompilati prima di salvare.");
+    } catch (err: any) {
+      alert(`❌ Errore durante la lettura/salvataggio del documento: ${err?.message || err}`);
+    } finally {
+      setProcessingScan(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !address.trim()) {
@@ -367,6 +459,13 @@ export default function PropertiesView({
       activeFlag: acquaActiveFlag
     };
 
+    const cadastralData = {
+      foglio: cadastralFoglio, particella: cadastralParticella, subalterno: cadastralSubalterno,
+      categoria: cadastralCategoria, vaniCatastali: cadastralVani, classe: cadastralClasse,
+      renditaCatastale: cadastralRendita, piano: cadastralPiano
+    };
+    const energyClass = { classe: energyClasse, ipeGlobale: energyIpe, expiryDate: energyExpiry };
+
     try {
       if (editingProperty) {
         await onEditProperty(editingProperty.id, {
@@ -382,7 +481,10 @@ export default function PropertiesView({
           millesimi: Number(millesimi) || 0,
           luceMeter,
           gasMeter,
-          acquaMeter
+          acquaMeter,
+          cadastralData,
+          energyClass,
+          documents: propertyDocuments
         });
       } else {
         await onAddProperty({
@@ -398,7 +500,10 @@ export default function PropertiesView({
           millesimi: Number(millesimi) || 0,
           luceMeter,
           gasMeter,
-          acquaMeter
+          acquaMeter,
+          cadastralData,
+          energyClass,
+          documents: propertyDocuments
         });
       }
       setShowModal(false);
@@ -2421,6 +2526,89 @@ export default function PropertiesView({
                     </div>
 
                   </div>
+
+                  {/* CORREZIONE BO — Dati Catastali e Classe Energetica, con scanner */}
+                  <div className="mt-5 pt-4 border-t border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h5 className="text-xs font-black text-slate-700 uppercase tracking-wider">Dati Catastali & Classe Energetica</h5>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setScannerOpenFor("cadastral")}
+                          disabled={processingScan}
+                          className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-2.5 py-1.5 rounded-lg"
+                        >
+                          {processingScan ? "⏳..." : "📷 Fotografa Visura Catastale"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setScannerOpenFor("energy")}
+                          disabled={processingScan}
+                          className="text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white px-2.5 py-1.5 rounded-lg"
+                        >
+                          {processingScan ? "⏳..." : "📷 Fotografa APE"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Foglio</label>
+                        <input type="text" value={cadastralFoglio} onChange={(e) => setCadastralFoglio(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Particella</label>
+                        <input type="text" value={cadastralParticella} onChange={(e) => setCadastralParticella(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Subalterno</label>
+                        <input type="text" value={cadastralSubalterno} onChange={(e) => setCadastralSubalterno(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Categoria</label>
+                        <input type="text" placeholder="A/3" value={cadastralCategoria} onChange={(e) => setCadastralCategoria(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Vani Catastali</label>
+                        <input type="text" value={cadastralVani} onChange={(e) => setCadastralVani(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Classe</label>
+                        <input type="text" value={cadastralClasse} onChange={(e) => setCadastralClasse(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Rendita Catastale €</label>
+                        <input type="text" value={cadastralRendita} onChange={(e) => setCadastralRendita(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Piano</label>
+                        <input type="text" value={cadastralPiano} onChange={(e) => setCadastralPiano(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Classe Energetica</label>
+                        <input type="text" placeholder="F" value={energyClasse} onChange={(e) => setEnergyClasse(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">IPE Globale</label>
+                        <input type="text" placeholder="201.48 KWh/mq anno" value={energyIpe} onChange={(e) => setEnergyIpe(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Scadenza APE</label>
+                        <input type="date" value={energyExpiry} onChange={(e) => setEnergyExpiry(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                    </div>
+                    {propertyDocuments.length > 0 && (
+                      <div className="pt-1.5 border-t border-slate-200 space-y-1">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Documenti conservati agli atti</p>
+                        {propertyDocuments.map(doc => (
+                          <a key={doc.id} href={doc.pcloudLink || "#"} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-indigo-600 hover:underline truncate">
+                            📎 {doc.category} — {doc.fileName}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2456,6 +2644,14 @@ export default function PropertiesView({
           </div>
         </div>
       )}
+
+      {/* CORREZIONE BO — Scanner per Visura Catastale / APE */}
+      <DocumentScanner
+        isOpen={scannerOpenFor !== null}
+        title={scannerOpenFor === "cadastral" ? "Fotografa Visura Catastale" : "Fotografa Attestato APE"}
+        onClose={() => setScannerOpenFor(null)}
+        onComplete={(pdfBlob) => handleScanComplete(pdfBlob, scannerOpenFor as "cadastral" | "energy")}
+      />
     </div>
   );
 }
