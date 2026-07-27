@@ -5,13 +5,15 @@ import {
   Sparkles, X, AlertCircle, ArrowRight, ArrowLeft, Check, 
   Upload, RefreshCw, FileCheck, Building, User, Info, MapPin
 } from "lucide-react";
-import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport } from "../types";
+import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner } from "../types";
+import ContractGeneratorWizard from "./ContractGeneratorWizard";
 
 interface ContractsViewProps {
   contracts: Contract[];
   properties: Property[];
   tenants: Tenant[];
   condominiums: Condominium[];
+  owners?: Owner[]; // CORREZIONE BQ — per il Wizard di generazione contratti
   deliveryReports?: DeliveryReport[];
   onAddContract: (
     contract: Omit<Contract, "id" | "userId" | "createdAt"> & { newProperty?: any; newTenant?: any }
@@ -32,6 +34,7 @@ export default function ContractsView({
   properties,
   tenants,
   condominiums,
+  owners = [],
   deliveryReports = [],
   onAddContract,
   onEditContract,
@@ -45,6 +48,7 @@ export default function ContractsView({
   setSelectedTenantIdForLedger
 }: ContractsViewProps) {
   const [showModal, setShowModal] = useState(false);
+  const [showGeneratorWizard, setShowGeneratorWizard] = useState(false); // CORREZIONE BQ
   const [editingContract, setEditingContract] = useState<Contract | null>(null);
   
   // Standard Form fields (for edit/manual adjustments)
@@ -698,15 +702,33 @@ export default function ContractsView({
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Relazioni & Contratti di Locazione</h2>
           <p className="text-xs text-slate-500 mt-0.5">La centralina delle locazioni. Crea relazioni unificate tra immobili, inquilini e contratti con l'AI.</p>
         </div>
-        <button
-          onClick={handleOpenAddWizard}
-          id="add-contract-btn"
-          className="inline-flex items-center space-x-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-4.5 py-2.5 rounded-xl text-xs active:transition-all shadow-sm"
-        >
-          <Plus size={15} className="stroke-[3]" />
-          <span>🤝 Crea Nuova Relazione</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowGeneratorWizard(true)}
+            className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4.5 py-2.5 rounded-xl text-xs active:transition-all shadow-sm"
+          >
+            <span>🪄 Genera Contratto Guidato</span>
+          </button>
+          <button
+            onClick={handleOpenAddWizard}
+            id="add-contract-btn"
+            className="inline-flex items-center space-x-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-4.5 py-2.5 rounded-xl text-xs active:transition-all shadow-sm"
+          >
+            <Plus size={15} className="stroke-[3]" />
+            <span>🤝 Crea Nuova Relazione</span>
+          </button>
+        </div>
       </div>
+
+      {/* CORREZIONE BQ — Wizard di generazione contratto reale (.docx, identico al modello) */}
+      <ContractGeneratorWizard
+        isOpen={showGeneratorWizard}
+        onClose={() => setShowGeneratorWizard(false)}
+        properties={properties}
+        tenants={tenants}
+        owners={owners}
+        onAddContract={onAddContract}
+      />
 
       {/* Contracts table with integrated RELATIONSHIPS */}
       {contracts.length === 0 ? (

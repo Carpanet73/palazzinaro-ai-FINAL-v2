@@ -2884,6 +2884,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             properties={properties}
             tenants={tenants}
             condominiums={condominiums}
+            owners={owners}
             deliveryReports={deliveryReports}
             onAddDeliveryReport={handleAddDeliveryReport}
             onEditDeliveryReport={handleEditDeliveryReport}
