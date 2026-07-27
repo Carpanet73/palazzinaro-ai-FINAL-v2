@@ -16,6 +16,7 @@ import {
   Camera,
   Upload,
   Trash2,
+  Receipt,
   Image,
   X,
   Plus
@@ -26,6 +27,7 @@ interface AIAreaViewProps {
   onAddProperty: (property: any) => Promise<void>;
   onAddContract: (contract: any) => Promise<void>;
   onOpenWizardWithPrefill?: (data: any) => void; // CORREZIONE AR
+  onOpenCondoExpensePrefilled?: (data: { condoName: string; title: string; amount: number; date: string }) => void; // CORREZIONE BI
   onAddTenant: (tenant: any) => Promise<void>;
   onAddCondominium: (condo: any) => Promise<void>;
   onAddMovement: (movement: any) => Promise<void>;
@@ -40,6 +42,7 @@ export default function AIAreaView({
   onAddProperty,
   onAddContract,
   onOpenWizardWithPrefill,
+  onOpenCondoExpensePrefilled,
   onAddTenant,
   onAddCondominium,
   onAddMovement,
@@ -142,7 +145,8 @@ export default function AIAreaView({
 
   const contextButtons = [
     { id: "contracts", label: "Contratti", icon: FileText, color: "text-indigo-600 bg-indigo-50 border-indigo-200" },
-    { id: "condominiums", label: "Condomini", icon: Building, color: "text-amber-600 bg-amber-50 border-amber-200" },
+    { id: "condominiums", label: "Nuovo Condominio", icon: Building, color: "text-amber-600 bg-amber-50 border-amber-200" },
+    { id: "condo_expenses", label: "Spese Condominio (Rendiconto)", icon: Receipt, color: "text-rose-600 bg-rose-50 border-rose-200" },
     { id: "banks", label: "Banche", icon: Landmark, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
     { id: "tenants", label: "Inquilini", icon: Users, color: "text-blue-600 bg-blue-50 border-blue-200" },
     { id: "properties", label: "Immobili", icon: Home, color: "text-purple-600 bg-purple-50 border-purple-200" },
@@ -273,6 +277,19 @@ export default function AIAreaView({
             email: parsedResult.email || "",
             notes: parsedResult.notes || "Caricato tramite l'Area AI",
             rates: parsedResult.rates || []
+          });
+          targetSection = "condominiums";
+          break;
+
+        case "condo_expenses":
+          // CORREZIONE BI — non salva più nulla in automatico: apre il modulo di
+          // ripartizione spesa già precompilato con i dati letti dal rendiconto/bolletta,
+          // così restano sempre correggibili prima di generare davvero le righe.
+          onOpenCondoExpensePrefilled?.({
+            condoName: parsedResult.condoName || parsedResult.name || "",
+            title: parsedResult.title || parsedResult.description || "Spesa Condominiale",
+            amount: Number(parsedResult.amount || parsedResult.totalAmount) || 0,
+            date: parsedResult.date || new Date().toISOString().split("T")[0]
           });
           targetSection = "condominiums";
           break;

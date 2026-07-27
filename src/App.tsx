@@ -180,6 +180,7 @@ export default function App() {
   // (solo Proprietario / Inquilino / Condominio, senza creare un immobile)
   const [wizardStandaloneEntity, setWizardStandaloneEntity] = useState<"owner" | "tenant" | "condominium" | undefined>(undefined);
   const [wizardPrefillData, setWizardPrefillData] = useState<any>(null); // CORREZIONE AR
+  const [condoExpensePrefill, setCondoExpensePrefill] = useState<any>(null); // CORREZIONE BI
 
   const handleOpenWizardWithPrefill = (data: any) => {
     setWizardStandaloneEntity(undefined);
@@ -2901,6 +2902,8 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
           <CondominiumsView 
             condominiums={condominiums}
             properties={properties}
+            expensePrefill={condoExpensePrefill}
+            onClearExpensePrefill={() => setCondoExpensePrefill(null)}
             tenants={tenants}
             fastClosing={fastClosing}
             administrators={administrators}
@@ -3041,6 +3044,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             onAddReminder={handleAddReminder}
             onAddClosingItem={handleAddClosingItem}
             onOpenWizardWithPrefill={handleOpenWizardWithPrefill}
+            onOpenCondoExpensePrefilled={(data) => { setCondoExpensePrefill(data); setCurrentSection("condominiums"); }}
             setCurrentSection={setCurrentSection}
           />
         )}

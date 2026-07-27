@@ -12,6 +12,9 @@ import { Condominium, CondoRate, Property, Tenant, FastClosingItem, Administrato
 interface CondominiumsViewProps {
   condominiums: Condominium[];
   properties: Property[];
+  // CORREZIONE BI — dati precompilati dalla fotografia AI del rendiconto condominiale
+  expensePrefill?: { condoName: string; title: string; amount: number; date: string } | null;
+  onClearExpensePrefill?: () => void;
   tenants: Tenant[];
   fastClosing: FastClosingItem[];
   administrators?: Administrator[]; // CORREZIONE L
@@ -44,6 +47,8 @@ function PersonAvatarIcon({ className = "" }: { className?: string }) {
 export default function CondominiumsView({
   condominiums,
   properties,
+  expensePrefill,
+  onClearExpensePrefill,
   tenants,
   fastClosing,
   administrators = [],
@@ -234,6 +239,35 @@ export default function CondominiumsView({
     if (!activeProperty) return null;
     return condominiums.find(c => c.id === activeProperty.condominiumId);
   }, [activeProperty, condominiums]);
+
+  // CORREZIONE BI — Applica la precompilazione arrivata dalla fotografia AI del rendiconto:
+  // cerca un immobile collegato al condominio indicato (per nome), lo seleziona, apre il
+  // modulo "Ripartisci Nuova Spesa" già riempito — mai un salvataggio automatico, resta
+  // sempre da controllare e confermare prima di generare le righe vere.
+  useEffect(() => {
+    if (!expensePrefill) return;
+    const matchedCondo = expensePrefill.condoName
+      ? condominiums.find(c => c.name.toLowerCase().includes(expensePrefill.condoName.toLowerCase()) || expensePrefill.condoName.toLowerCase().includes(c.name.toLowerCase()))
+      : (condominiums.length === 1 ? condominiums[0] : undefined);
+
+    if (matchedCondo) {
+      const matchedProperty = properties.find(p => p.condominiumId === matchedCondo.id);
+      if (matchedProperty) {
+        setSelectedPropertyId(matchedProperty.id);
+      } else {
+        alert(`Trovato il condominio "${matchedCondo.name}", ma nessun immobile collegato: aggiungilo prima di poter ripartire la spesa.`);
+      }
+    } else if (condominiums.length > 1) {
+      alert(`Non sono riuscito a capire da solo a quale condominio si riferisce "${expensePrefill.condoName || "il documento"}" — selezionalo tu manualmente, poi apri "Ripartisci Nuova Spesa" e ricontrolla i dati precompilati.`);
+    }
+
+    setExpenseTitle(expensePrefill.title || "");
+    setExpenseAmount(expensePrefill.amount || 0);
+    if (expensePrefill.date) setExpenseDueDate(expensePrefill.date);
+    setShowAddExpense(true);
+    onClearExpensePrefill?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expensePrefill]);
 
   const activeTenant = useMemo(() => {
     if (!activeProperty) return null;

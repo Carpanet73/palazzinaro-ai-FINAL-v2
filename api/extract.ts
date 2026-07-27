@@ -130,6 +130,29 @@ Estrai tutte le rate rilevate. Se non ci sono rate esplicite, creane una fittizi
         },
       };
 
+    case "condo_expenses":
+      return {
+        systemInstruction: `Sei un assistente specializzato in contabilità condominiale. Analizza il documento (rendiconto, bolletta comune, richiesta di pagamento) inviato dall'amministratore di condominio ed estrai UNA SOLA spesa/rata da ripartire.
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con la seguente struttura:
+{
+  "condoName": "Nome del Condominio se indicato sul documento (altrimenti stringa vuota)",
+  "title": "Causale della spesa (es: Riscaldamento Centralizzato 1° Rata, Manutenzione Ascensore)",
+  "amount": 350.00,
+  "date": "Data del documento o scadenza, formato YYYY-MM-DD"
+}
+Se il documento contiene più voci, somma il totale complessivo in "amount" e riassumi le voci in "title". Restituisci ESCLUSIVAMENTE il JSON.`,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            condoName: { type: Type.STRING, description: "Nome del Condominio, se indicato" },
+            title: { type: Type.STRING, description: "Causale della spesa" },
+            amount: { type: Type.NUMBER, description: "Importo totale della spesa" },
+            date: { type: Type.STRING, description: "Data del documento, YYYY-MM-DD" },
+          },
+          required: ["condoName", "title", "amount", "date"],
+        },
+      };
+
     case "banks":
       return {
         systemInstruction: `Sei un assistente di riconciliazione bancaria specializzato in entrate. Analizza la lista di movimenti bancari forniti (estratti conto, righe incollate, tabelle, CSV o immagine di ricevute/estratti conto).
