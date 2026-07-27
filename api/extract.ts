@@ -153,6 +153,116 @@ Se il documento contiene più voci, somma il totale complessivo in "amount" e ri
         },
       };
 
+    case "identity_document":
+      return {
+        systemInstruction: `Sei un assistente specializzato nella lettura di documenti d'identità italiani (Carta d'Identità o Passaporto). Analizza la fotografia ed estrai i dati anagrafici.
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con la seguente struttura:
+{
+  "name": "Nome e Cognome completi",
+  "gender": "M oppure F, dedotto dal documento (sesso/sex)",
+  "birthPlace": "Comune (Provincia) di nascita, es: Prato (PO)",
+  "birthDate": "Data di nascita nel formato GG.MM.AAAA",
+  "fiscalCode": "Codice Fiscale se presente sul documento, altrimenti stringa vuota",
+  "documentType": "Carta d'Identità oppure Passaporto",
+  "documentNumber": "Numero del documento",
+  "issuedDate": "Data di rilascio, formato YYYY-MM-DD",
+  "expiryDate": "Data di scadenza, formato YYYY-MM-DD",
+  "residenceAddress": "Indirizzo di residenza se presente sul documento, altrimenti stringa vuota"
+}
+Restituisci ESCLUSIVAMENTE il JSON.`,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            gender: { type: Type.STRING },
+            birthPlace: { type: Type.STRING },
+            birthDate: { type: Type.STRING },
+            fiscalCode: { type: Type.STRING },
+            documentType: { type: Type.STRING },
+            documentNumber: { type: Type.STRING },
+            issuedDate: { type: Type.STRING },
+            expiryDate: { type: Type.STRING },
+            residenceAddress: { type: Type.STRING },
+          },
+          required: ["name", "gender", "birthPlace", "birthDate", "fiscalCode", "documentType", "documentNumber", "issuedDate", "expiryDate", "residenceAddress"],
+        },
+      };
+
+    case "residence_permit":
+      return {
+        systemInstruction: `Sei un assistente specializzato nella lettura di permessi di soggiorno italiani. Analizza la fotografia ed estrai i dati.
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con la seguente struttura:
+{
+  "number": "Numero del permesso di soggiorno",
+  "issuedDate": "Data di rilascio, formato YYYY-MM-DD",
+  "validity": "Se il permesso è a validità illimitata scrivi esattamente 'illimitata', altrimenti scrivi la data di scadenza nel formato YYYY-MM-DD"
+}
+Restituisci ESCLUSIVAMENTE il JSON.`,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            number: { type: Type.STRING },
+            issuedDate: { type: Type.STRING },
+            validity: { type: Type.STRING },
+          },
+          required: ["number", "issuedDate", "validity"],
+        },
+      };
+
+    case "cadastral_data":
+      return {
+        systemInstruction: `Sei un assistente specializzato nella lettura di visure catastali italiane. Analizza il documento ed estrai i dati catastali dell'immobile.
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con la seguente struttura:
+{
+  "foglio": "Numero di Foglio",
+  "particella": "Numero di Particella",
+  "subalterno": "Numero di Subalterno",
+  "categoria": "Categoria catastale, es: A/3",
+  "vaniCatastali": "Numero di vani catastali",
+  "classe": "Classe catastale",
+  "renditaCatastale": "Rendita catastale in euro, solo il numero es: 387.34",
+  "piano": "Piano dell'immobile, se indicato"
+}
+Restituisci ESCLUSIVAMENTE il JSON.`,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            foglio: { type: Type.STRING },
+            particella: { type: Type.STRING },
+            subalterno: { type: Type.STRING },
+            categoria: { type: Type.STRING },
+            vaniCatastali: { type: Type.STRING },
+            classe: { type: Type.STRING },
+            renditaCatastale: { type: Type.STRING },
+            piano: { type: Type.STRING },
+          },
+          required: ["foglio", "particella", "subalterno", "categoria", "vaniCatastali", "classe", "renditaCatastale", "piano"],
+        },
+      };
+
+    case "energy_certificate":
+      return {
+        systemInstruction: `Sei un assistente specializzato nella lettura di Attestati di Prestazione Energetica (APE) italiani. Analizza il documento ed estrai i dati.
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con la seguente struttura:
+{
+  "classe": "Classe energetica, es: F",
+  "ipeGlobale": "Indice di Prestazione Energetica globale, con unità di misura, es: 201.48 KWh/mq anno",
+  "issuedDate": "Data di emissione dell'attestato, formato YYYY-MM-DD",
+  "expiryDate": "Data di scadenza dell'attestato (di norma 10 anni dopo l'emissione), formato YYYY-MM-DD"
+}
+Restituisci ESCLUSIVAMENTE il JSON.`,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            classe: { type: Type.STRING },
+            ipeGlobale: { type: Type.STRING },
+            issuedDate: { type: Type.STRING },
+            expiryDate: { type: Type.STRING },
+          },
+          required: ["classe", "ipeGlobale", "issuedDate", "expiryDate"],
+        },
+      };
+
     case "banks":
       return {
         systemInstruction: `Sei un assistente di riconciliazione bancaria specializzato in entrate. Analizza la lista di movimenti bancari forniti (estratti conto, righe incollate, tabelle, CSV o immagine di ricevute/estratti conto).
