@@ -1724,6 +1724,13 @@ export default function App() {
           email: o.email,
           phone: o.phone,
           address: o.address,
+          // CORREZIONE BS — questi tre campi venivano scartati qui: un Owner creato dal
+          // wizard immobile perdeva silenziosamente indirizzo strutturato, comproprietari
+          // e dati di nascita, lasciando poi i trattini nel contratto generato.
+          birthDate: o.birthDate,
+          birthPlace: o.birthPlace,
+          structuredAddress: o.structuredAddress,
+          coOwners: o.coOwners,
           iban: o.iban,
           isCompany: o.isCompany,
           notes: o.notes,

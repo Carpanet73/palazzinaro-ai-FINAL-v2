@@ -240,6 +240,10 @@ export interface Owner {
   // CORREZIONE AA — indirizzo strutturato reale, e data di nascita: servono per le
   // comunicazioni formali (Messa in Mora con il proprietario come mittente/firmatario).
   birthDate?: string; // YYYY-MM-DD
+  // CORREZIONE BS — mancava completamente: senza questo campo il generatore di contratti
+  // non ha MAI potuto scrivere "nato/a a ___" per il locatore, lasciando sempre il
+  // segnaposto vuoto nel documento generato.
+  birthPlace?: string; // "nato/a a ___" — per la formula anagrafica nel contratto di locazione
   structuredAddress?: {
     via?: string;
     civico?: string;

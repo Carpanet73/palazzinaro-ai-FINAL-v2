@@ -79,8 +79,15 @@ export default function ContractGeneratorWizard({
   const resolvedOwner = owners.find(o => o.id === selectedProperty?.ownerId || o.name === selectedProperty?.owner);
   const allOwnerPeople = useMemo(() => {
     if (!resolvedOwner) return [];
-    return [resolvedOwner, ...(resolvedOwner.coOwners || []).map(co => ({ ...co, id: co.linkedOwnerId || co.name } as any))];
-  }, [resolvedOwner]);
+    const resolvedCoOwners = (resolvedOwner.coOwners || []).map(co => {
+      // CORREZIONE BS — se il comproprietario è collegato a un'anagrafica Owner reale
+      // già esistente, usa TUTTI i suoi dati (nascita, indirizzo) invece dei soli
+      // nome/CF salvati sul comproprietario, che lasciavano il resto vuoto nel contratto.
+      const linked = co.linkedOwnerId ? owners.find(ow => ow.id === co.linkedOwnerId) : undefined;
+      return linked ? { ...linked, id: linked.id } : ({ ...co, id: co.linkedOwnerId || co.name } as any);
+    });
+    return [resolvedOwner, ...resolvedCoOwners];
+  }, [resolvedOwner, owners]);
 
   const endDate = useMemo(() => {
     if (!startDate) return "";
@@ -99,16 +106,29 @@ export default function ContractGeneratorWizard({
   const canGenerate = monthlyRent > 0 && startDate;
 
   const buildContractGenData = (): ContractGenData => ({
-    owners: allOwnerPeople.map(o => ({
-      name: o.name,
-      gender: ownerGenders[o.id] || "M",
-      birthPlace: (o as Owner).birthPlace,
-      birthDate: (o as Owner).birthDate ? formatDateDots((o as Owner).birthDate!) : undefined,
-      fiscalCode: (o as Owner).fiscalCode,
-      residenceAddressFormatted: (o as Owner).structuredAddress
-        ? `residente in via ${(o as Owner).structuredAddress?.via || ""} n. ${(o as Owner).structuredAddress?.civico || ""}, ${(o as Owner).structuredAddress?.citta || ""}`
-        : undefined
-    })),
+    owners: allOwnerPeople.map(o => {
+      const owner = o as Owner;
+      const sa = owner.structuredAddress;
+      let residenceAddressFormatted: string | undefined;
+      if (sa?.via) {
+        // CORREZIONE BS — stesso formato pieno usato per l'inquilino ("residente a
+        // Città (PROV), via X n. Y"), invece del formato ridotto precedente che ometteva
+        // la provincia.
+        residenceAddressFormatted = `residente a ${sa.citta || ""}${sa.provincia ? ` (${sa.provincia})` : ""}, via ${sa.via}${sa.civico ? ` n. ${sa.civico}` : ""}`;
+      } else if (owner.address) {
+        // Fallback al campo indirizzo libero (legacy) invece di lasciare un vuoto:
+        // meglio un dato reale anche se non strutturato, che un trattino.
+        residenceAddressFormatted = `residente in ${owner.address}`;
+      }
+      return {
+        name: o.name,
+        gender: ownerGenders[o.id] || "M",
+        birthPlace: owner.birthPlace,
+        birthDate: owner.birthDate ? formatDateDots(owner.birthDate) : undefined,
+        fiscalCode: owner.fiscalCode,
+        residenceAddressFormatted
+      };
+    }),
     tenant: {
       name: selectedTenant?.name || "",
       gender: tenantGender,
@@ -141,7 +161,7 @@ export default function ContractGeneratorWizard({
       monthlyRent: monthlyRent.toFixed(2),
       monthlyRentWords: amountToItalianWords(monthlyRent),
       taxRegime,
-      signPlace: (resolvedOwner?.structuredAddress?.citta) || "___________",
+      signPlace: resolvedOwner?.structuredAddress?.citta || selectedProperty?.address?.split(",")[0]?.trim() || "___________",
       signDateFormatted: formatDateItalian(new Date().toISOString().split("T")[0])
     }
   });

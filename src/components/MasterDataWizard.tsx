@@ -96,6 +96,12 @@ export interface MasterDataPayload {
     email: string;
     phone: string;
     address?: string;
+    // CORREZIONE BS — questi campi erano già usati nel codice più sotto ma mancavano
+    // qui nel tipo: birthDate/birthPlace servono al generatore di contratti.
+    birthDate?: string;
+    birthPlace?: string;
+    structuredAddress?: { via?: string; civico?: string; interno?: string; citta?: string; provincia?: string; cap?: string };
+    coOwners?: Array<{ name: string; fiscalCode?: string; phone?: string; email?: string; linkedOwnerId?: string }>;
     iban?: string;
     isCompany?: boolean;
     notes?: string;
@@ -207,6 +213,11 @@ export default function MasterDataWizard({
   const [newOwnerEmail, setNewOwnerEmail] = useState("");
   const [newOwnerPhone, setNewOwnerPhone] = useState("");
   const [newOwnerAddress, setNewOwnerAddress] = useState("");
+  // CORREZIONE BS — mancavano qui (esistevano solo nel modulo di modifica in OwnersView):
+  // stesso flusso, stessi campi, per non lasciare mai un proprietario creato dal wizard
+  // senza i dati anagrafici che servono al generatore di contratti.
+  const [newOwnerBirthDate, setNewOwnerBirthDate] = useState("");
+  const [newOwnerBirthPlace, setNewOwnerBirthPlace] = useState("");
   const [newOwnerIban, setNewOwnerIban] = useState("");
   const [newOwnerIsCompany, setNewOwnerIsCompany] = useState(false);
   // CORREZIONE AJ — indirizzo strutturato e comproprietari, disponibili subito in fase di
@@ -380,6 +391,8 @@ export default function MasterDataWizard({
           email: newOwnerEmail.trim(),
           phone: newOwnerPhone.trim(),
           address: newOwnerAddress.trim() || undefined,
+          birthDate: newOwnerBirthDate || undefined,
+          birthPlace: newOwnerBirthPlace.trim() || undefined,
           structuredAddress: newOwnerStructuredAddress,
           coOwners: ownershipType === "multiple" ? newOwnerCoOwners : undefined,
           iban: newOwnerIban.trim() || undefined,
@@ -497,6 +510,8 @@ export default function MasterDataWizard({
         email: newOwnerEmail.trim(),
         phone: newOwnerPhone.trim(),
         address: newOwnerAddress.trim() || undefined,
+        birthDate: newOwnerBirthDate || undefined,
+        birthPlace: newOwnerBirthPlace.trim() || undefined,
         structuredAddress: newOwnerStructuredAddress,
         coOwners: ownershipType === "multiple" ? newOwnerCoOwners : undefined,
         iban: newOwnerIban.trim() || undefined,
@@ -1184,6 +1199,27 @@ export default function MasterDataWizard({
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
                     />
                   </Field>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Data di Nascita (facoltativo)">
+                      <input
+                        type="date"
+                        value={newOwnerBirthDate}
+                        onChange={(e) => setNewOwnerBirthDate(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
+                    </Field>
+                    <Field label="Luogo di Nascita (facoltativo)">
+                      <input
+                        type="text"
+                        value={newOwnerBirthPlace}
+                        onChange={(e) => setNewOwnerBirthPlace(e.target.value)}
+                        placeholder="es. Prato (PO)"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
+                    </Field>
+                  </div>
+                  <p className="text-[10px] text-slate-400 -mt-2">Servono per la formula "nato/a a ___" nei contratti di locazione generati.</p>
 
                   <AddressFields value={newOwnerStructuredAddress} onChange={setNewOwnerStructuredAddress} />
 

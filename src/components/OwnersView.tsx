@@ -78,6 +78,7 @@ export default function OwnersView({
   const [ownerFormPhone, setOwnerFormPhone] = useState("");
   const [ownerFormAddress, setOwnerFormAddress] = useState("");
   const [ownerFormBirthDate, setOwnerFormBirthDate] = useState(""); // CORREZIONE AA
+  const [ownerFormBirthPlace, setOwnerFormBirthPlace] = useState(""); // CORREZIONE BS
   const [ownerFormStructuredAddress, setOwnerFormStructuredAddress] = useState<AddressValue>({});
   // CORREZIONE AJ — Comproprietari: stesso conto unico, con selezione smart tra i
   // proprietari già a sistema per evitare di ridigitare/duplicare dati
@@ -99,6 +100,7 @@ export default function OwnersView({
     setOwnerFormPhone(match?.phone || "");
     setOwnerFormAddress(match?.address || "");
     setOwnerFormBirthDate(match?.birthDate || "");
+    setOwnerFormBirthPlace(match?.birthPlace || "");
     setOwnerFormStructuredAddress(match?.structuredAddress || {});
     setOwnerFormCoOwners(match?.coOwners || []);
     setShowAddCoOwnerPicker(false);
@@ -119,6 +121,7 @@ export default function OwnersView({
       phone: ownerFormPhone.trim(),
       address: ownerFormAddress.trim(),
       birthDate: ownerFormBirthDate || "",
+      birthPlace: ownerFormBirthPlace.trim() || "",
       structuredAddress: ownerFormStructuredAddress,
       coOwners: ownerFormCoOwners,
       iban: ownerFormIban.trim()
@@ -1985,6 +1988,19 @@ export default function OwnersView({
                   onChange={(e) => setOwnerFormBirthDate(e.target.value)}
                   className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Luogo di Nascita
+                </label>
+                <input
+                  type="text"
+                  placeholder="es. Prato (PO)"
+                  value={ownerFormBirthPlace}
+                  onChange={(e) => setOwnerFormBirthPlace(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Serve per la formula "nato/a a ___" nei contratti di locazione generati.</p>
               </div>
               <AddressFields value={ownerFormStructuredAddress} onChange={setOwnerFormStructuredAddress} />
 
