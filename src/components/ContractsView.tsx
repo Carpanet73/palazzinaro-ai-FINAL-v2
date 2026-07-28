@@ -5,7 +5,7 @@ import {
   Sparkles, X, AlertCircle, ArrowRight, ArrowLeft, Check, 
   Upload, RefreshCw, FileCheck, Building, User, Info, MapPin
 } from "lucide-react";
-import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner } from "../types";
+import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner, FastClosingItem } from "../types";
 import ContractGeneratorWizard from "./ContractGeneratorWizard";
 
 interface ContractsViewProps {
@@ -15,6 +15,8 @@ interface ContractsViewProps {
   condominiums: Condominium[];
   owners?: Owner[]; // CORREZIONE BQ — per il Wizard di generazione contratti
   deliveryReports?: DeliveryReport[];
+  // CORREZIONE BX — per il Mastrino Contabile (canoni e scadenze) nella pagina di dettaglio
+  fastClosing?: FastClosingItem[];
   onAddContract: (
     contract: Omit<Contract, "id" | "userId" | "createdAt"> & { newProperty?: any; newTenant?: any }
   ) => Promise<void>;
@@ -36,6 +38,7 @@ export default function ContractsView({
   condominiums,
   owners = [],
   deliveryReports = [],
+  fastClosing = [],
   onAddContract,
   onEditContract,
   onDeleteContract,
@@ -92,6 +95,10 @@ export default function ContractsView({
 
   // Selected details active state
   const [selectedContractId, setSelectedContractId] = useState<string>("");
+  // CORREZIONE BW — nuovo stato per la vista dettaglio a pagina intera (badge + sottopagina),
+  // separato da selectedContractId (che resta per la logica pre-esistente invariata dei
+  // pannelli/modali già collegati ad esso, es. Verbale di Consegna).
+  const [selectedContractDetails, setSelectedContractDetails] = useState<Contract | null>(null);
   // CORREZIONE BT — invio del contratto generato (documento gia' agli atti)
   const [sendPanelOpenForId, setSendPanelOpenForId] = useState<string | null>(null);
   const [sendEmailInput, setSendEmailInput] = useState("");
@@ -735,317 +742,42 @@ export default function ContractsView({
     }
   };
 
-  return (
-    <div className="space-y-6" id="contracts-view-container">
-      
-      {/* View Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Relazioni & Contratti di Locazione</h2>
-          <p className="text-xs text-slate-500 mt-0.5">La centralina delle locazioni. Crea relazioni unificate tra immobili, inquilini e contratti con l'AI.</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowGeneratorWizard(true)}
-            className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4.5 py-2.5 rounded-xl text-xs active:transition-all shadow-sm"
-          >
-            <span>🪄 Genera Contratto Guidato</span>
-          </button>
-          <button
-            onClick={handleOpenAddWizard}
-            id="add-contract-btn"
-            className="inline-flex items-center space-x-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-4.5 py-2.5 rounded-xl text-xs active:transition-all shadow-sm"
-          >
-            <Plus size={15} className="stroke-[3]" />
-            <span>🤝 Crea Nuova Relazione</span>
-          </button>
-        </div>
-      </div>
+  // CORREZIONE BW — Vista dettaglio a pagina intera (badge + sottopagina a schermo
+  // intero), stesso pattern identico di PropertiesView.tsx: cliccando il badge di
+  // stato o il titolo della relazione in elenco si apre questa vista dedicata, al
+  // posto del vecchio pannello inline sempre visibile sotto la tabella.
+  if (selectedContractDetails) {
+    const selectedContract = selectedContractDetails;
+    // CORREZIONE BX — Mastrino Contabile: le rate del canone generate da handleAddContract
+    // in Fast Closing sono collegate a questo contratto tramite sourceId (source: "contract").
+    // Prima non venivano mostrate da nessuna parte nel dettaglio contratto.
+    const contractLedger = fastClosing
+      .filter(fc => fc.source === "contract" && fc.sourceId === selectedContract.id)
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    const contractDocuments = selectedContract.documents || [];
+    const matchedDocs = propertyDocs[selectedContract.propertyId] || [];
 
-      {/* CORREZIONE BQ — Wizard di generazione contratto reale (.docx, identico al modello) */}
-      <ContractGeneratorWizard
-        isOpen={showGeneratorWizard}
-        onClose={() => setShowGeneratorWizard(false)}
-        properties={properties}
-        tenants={tenants}
-        owners={owners}
-        onAddContract={onAddContract}
-      />
+            const matchingProperty = properties.find(p => p.id === selectedContract.propertyId);
+            const matchingTenant = tenants.find(t => t.id === selectedContract.tenantId);
+            const condoConstituted = condominiums.find(c => 
+              (matchingProperty?.address || "").toLowerCase().includes((c.name || "").toLowerCase()) || 
+              (c.name || "").toLowerCase().includes((matchingProperty?.name || "").toLowerCase()) ||
+              (c.notes && (c.notes || "").toLowerCase().includes((matchingProperty?.name || "").toLowerCase()))
+            );
 
-      {/* Contracts table with integrated RELATIONSHIPS */}
-      {contracts.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto mt-8">
-          <div className="bg-amber-50 text-amber-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-amber-200/50">
-            <Link2 size={28} />
-          </div>
-          <h3 className="font-sans font-bold text-slate-800 text-base">Nessuna Relazione Attiva</h3>
-          <p className="text-xs text-slate-500 mt-2">
-            Non ci sono relazioni d'affitto inserite. Crea una nuova relazione guidata oppure carica la scansione di un contratto cartaceo per far compilare tutto all'AI.
-          </p>
+    return (
+      <div className="space-y-6 animate-fade-in" id="contract-detail-subpage-container">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <button
-            onClick={handleOpenAddWizard}
-            className="mt-5 inline-flex items-center space-x-2 bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold px-4 py-2 rounded-lg text-xs transition-colors border border-amber-200"
+            onClick={() => setSelectedContractDetails(null)}
+            className="inline-flex items-center space-x-2 bg-white hover:bg-slate-50 text-slate-800 font-extrabold px-4 py-2.5 rounded-xl text-xs transition-colors border-2 border-slate-100 shadow-sm cursor-pointer self-start"
           >
-            <Plus size={14} />
-            <span>Crea prima relazione d'affitto</span>
+            <ArrowLeft size={14} />
+            <span>Torna ai Contratti</span>
           </button>
         </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse border border-slate-300 text-xs font-mono">
-              <thead>
-                <tr className="bg-slate-100 text-[10px] font-mono uppercase text-slate-700 tracking-wider font-extrabold border border-slate-300">
-                  <th className="py-2.5 px-4 border border-slate-300">Relazione Principale (Immobile & Inquilino)</th>
-                  <th className="py-2.5 px-4 border border-slate-300">Regime Temporale</th>
-                  <th className="py-2.5 px-4 border border-slate-300">Flusso Finanziario</th>
-                  <th className="py-2.5 px-4 border border-slate-300 text-right">Azioni</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white">
-                {contracts.map((contract) => {
-                  const daysLeft = Math.ceil((new Date(contract.endDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24));
-                  const isSelected = selectedContractId === contract.id;
 
-                  // Find relations
-                  const matchingProperty = properties.find(p => p.id === contract.propertyId);
-                  const matchingTenant = tenants.find(t => t.id === contract.tenantId);
-                  const condoConstituted = condominiums.find(c => 
-                    (matchingProperty?.address || "").toLowerCase().includes((c.name || "").toLowerCase()) || 
-                    (c.name || "").toLowerCase().includes((matchingProperty?.name || "").toLowerCase()) ||
-                    (c.notes && (c.notes || "").toLowerCase().includes((matchingProperty?.name || "").toLowerCase()))
-                  );
-                  
-                  return (
-                    <tr 
-                      key={contract.id} 
-                      className={`hover:bg-slate-50 transition-colors ${isSelected ? "bg-amber-50/15" : ""}`} 
-                      id={`contract-row-${contract.id}`}
-                    >
-                      <td className="p-4 border border-slate-300 max-w-sm">
-                        {/* UNIFIED RELATIONSHIP CARD (SAME AS DASHBOARD STYLE) */}
-                        <div 
-                          onClick={(e) => {
-                            // Prevent selection on nav buttons
-                            if ((e.target as HTMLElement).closest('.btn-nav-badge') || (e.target as HTMLElement).closest('button')) return;
-                            setSelectedContractId(contract.id);
-                          }}
-                          className={`p-4 rounded-2xl border transition-all text-left space-y-3 cursor-pointer ${
-                            isSelected 
-                              ? "bg-amber-50/50 border-amber-300 shadow-xs ring-1 ring-amber-300/40" 
-                              : "bg-slate-50/30 border-slate-100 hover:border-slate-200 hover:bg-slate-50"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <h4 className="font-sans font-black text-xs text-slate-900 flex items-center space-x-1.5">
-                                <span className="text-base shrink-0">🏠</span>
-                                <span className="truncate max-w-[200px]" title={contract.propertyName}>{contract.propertyName}</span>
-                              </h4>
-                              {matchingProperty?.address && (
-                                <p className="text-[10px] text-slate-500 mt-1 ml-5 truncate max-w-[180px]">
-                                  {matchingProperty.address}
-                                </p>
-                              )}
-                            </div>
-                            <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100/80 text-amber-800 border border-amber-200">
-                              Relazione Unica
-                            </span>
-                          </div>
-
-                          <div className="space-y-1 bg-white/85 p-2.5 rounded-xl border border-slate-100 text-[10px]">
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-400 font-medium">Conduttore / Inquilino:</span>
-                              <span className="font-extrabold text-slate-800">
-                                👤 {contract.tenantName}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-400 font-medium">Canone Affitto:</span>
-                              <span className="font-extrabold text-indigo-700">
-                                €{contract.rentAmount.toLocaleString("it-IT")}/{contract.frequency === "Mensile" ? "mese" : contract.frequency}
-                              </span>
-                            </div>
-
-                            {condoConstituted && (
-                              <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[9px]">
-                                <span className="text-slate-400">Condominio:</span>
-                                <span className="font-extrabold text-slate-700 truncate max-w-[120px]">
-                                  🏢 {condoConstituted.name}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Navigation Buttons to dedicated areas */}
-                          <div className="flex items-center gap-2 pt-0.5">
-                            <button
-                              onClick={() => {
-                                if (setCurrentSection) {
-                                  setCurrentSection("properties");
-                                }
-                              }}
-                              className="btn-nav-badge inline-flex items-center space-x-1 bg-amber-50/60 hover:bg-amber-100 text-amber-900 border border-amber-200/50 px-2 py-1 rounded-md text-[9px] font-black transition-all shadow-3xs"
-                              title="Vai ai dettagli dell'immobile"
-                            >
-                              <span>🏠 Immobile</span>
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                if (setSelectedTenantIdForLedger && setCurrentSection) {
-                                  setSelectedTenantIdForLedger(contract.tenantId);
-                                  setCurrentSection("tenants");
-                                }
-                              }}
-                              className="btn-nav-badge inline-flex items-center space-x-1 bg-amber-50/60 hover:bg-amber-100 text-amber-900 border border-amber-200/50 px-2 py-1 rounded-md text-[9px] font-black transition-all shadow-3xs"
-                              title="Vai ai dettagli del conduttore"
-                            >
-                              <span>👤 Inquilino</span>
-                            </button>
-                          </div>
-
-                          {/* CORREZIONE BT — Documento generato: vedi e invia */}
-                          {(contract as any).documents?.[0] && (
-                            <div className="pt-2 mt-1 border-t border-slate-100 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                              <a
-                                href={(contract as any).documents[0].storageLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline"
-                              >
-                                📄 Vedi Documento Generato
-                              </a>
-                              {sendPanelOpenForId !== contract.id ? (
-                                <button
-                                  onClick={() => {
-                                    setSendPanelOpenForId(contract.id);
-                                    setSendEmailInput(matchingTenant?.email || "");
-                                  }}
-                                  className="block text-[10px] font-bold text-emerald-700 hover:underline"
-                                >
-                                  📧 Invia Contratto
-                                </button>
-                              ) : (
-                                <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                                  <select
-                                    onChange={(e) => setSendEmailInput(e.target.value)}
-                                    className="text-[10px] border border-slate-200 rounded-md px-1.5 py-1"
-                                    defaultValue=""
-                                  >
-                                    <option value="" disabled>-- scegli o scrivi sotto --</option>
-                                    {matchingTenant?.email && <option value={matchingTenant.email}>Inquilino: {matchingTenant.email}</option>}
-                                  </select>
-                                  <input
-                                    type="email"
-                                    placeholder="oppure scrivi un'email diversa..."
-                                    value={sendEmailInput}
-                                    onChange={(e) => setSendEmailInput(e.target.value)}
-                                    className="text-[10px] border border-slate-200 rounded-md px-1.5 py-1"
-                                  />
-                                  <div className="flex gap-1.5">
-                                    <button
-                                      onClick={() => handleSendContractDocument(contract, sendEmailInput)}
-                                      disabled={sendingContractId === contract.id}
-                                      className="flex-1 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-md py-1"
-                                    >
-                                      {sendingContractId === contract.id ? "Invio..." : "Invia"}
-                                    </button>
-                                    <button
-                                      onClick={() => setSendPanelOpenForId(null)}
-                                      className="flex-1 text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-md py-1"
-                                    >
-                                      Annulla
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="p-4 border border-slate-300 vertical-middle">
-                        <div className="space-y-1.5 text-xs text-slate-600">
-                          <div className="flex items-center space-x-1.5">
-                            <Calendar size={13} className="text-slate-400 shrink-0" />
-                            <span className="font-semibold">{new Date(contract.startDate).toLocaleDateString("it-IT")} - {new Date(contract.endDate).toLocaleDateString("it-IT")}</span>
-                          </div>
-                          {daysLeft > 0 && daysLeft < 90 ? (
-                            <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-bold inline-block">
-                              ⚠️ Scade tra {daysLeft} gg
-                            </span>
-                          ) : daysLeft <= 0 ? (
-                            <span className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded font-bold inline-block">
-                              ❌ Scaduto
-                            </span>
-                          ) : (
-                            <span className="text-[9px] text-slate-400 font-semibold block">
-                              Regolare (scadenza tra {Math.ceil(daysLeft / 30)} mesi)
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="p-4 border border-slate-300 vertical-middle">
-                        <div className="space-y-1">
-                          <div className="text-slate-900 font-black text-sm">
-                            €{contract.rentAmount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-                          </div>
-                          <div className="flex items-center space-x-1 text-[10px] text-slate-500 capitalize">
-                            <Wallet size={10} className="text-slate-400" />
-                            <span>Locazione {contract.frequency}</span>
-                          </div>
-                          <span className="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase bg-amber-50 text-amber-800 border border-amber-200/50">
-                            {contract.status === "Active" ? "Attivo" : contract.status === "Draft" ? "Bozza" : contract.status === "Expired" ? "Scaduto" : "Cessato"}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="p-4 border border-slate-300 text-right vertical-middle space-x-1.5">
-                        <button
-                          onClick={() => handleOpenEditModal(contract)}
-                          className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors inline-block border border-slate-100 bg-white shadow-3xs"
-                          title="Modifica parametri di locazione"
-                        >
-                          <Edit3 size={13} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(contract.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors inline-block border border-slate-100 bg-white shadow-3xs"
-                          title="Elimina questa relazione"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* DETAILED AREA UNDERNEATH (NO TABS, STREAMLINED ACCORDING TO USER FLOW) */}
-      {(() => {
-        const targetId = selectedContractId || (contracts[0] ? contracts[0].id : "");
-        const selectedContract = contracts.find(c => c.id === targetId);
-        
-        if (!selectedContract) return null;
-        const matchedDocs = propertyDocs[selectedContract.propertyId] || [];
-
-        const matchingProperty = properties.find(p => p.id === selectedContract.propertyId);
-        const matchingTenant = tenants.find(t => t.id === selectedContract.tenantId);
-        const condoConstituted = condominiums.find(c => 
-          (matchingProperty?.address || "").toLowerCase().includes((c.name || "").toLowerCase()) || 
-          (c.name || "").toLowerCase().includes((matchingProperty?.name || "").toLowerCase()) ||
-          (c.notes && (c.notes || "").toLowerCase().includes((matchingProperty?.name || "").toLowerCase()))
-        );
-
-        return (
-          <div className="bg-amber-50/40 border-2 border-amber-200 rounded-3xl p-6 shadow-xs space-y-6 mt-8" id="contract-detail-area">
+        <div className="bg-amber-50/40 border-2 border-amber-200 rounded-3xl p-6 shadow-xs space-y-6" id="contract-detail-area">
             <div>
               <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-md">
                 🔍 Centralina di Riepilogo Relazione Locativa
@@ -1145,9 +877,108 @@ export default function ContractsView({
               </div>
             </div>
 
+            {/* CORREZIONE BX — NUOVA SEZIONE 2: MASTRINO CONTABILE (canoni e scadenze reali
+                generate in Fast Closing da questo contratto, prima non mostrate da nessuna
+                parte nella scheda contratto) */}
+            <div className="bg-white rounded-2xl border border-amber-100 p-6 space-y-4">
+              <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide pb-2.5 flex items-center space-x-1.5">
+                <span>🧮</span> <span>2. Mastrino Contabile — Canoni e Scadenze</span>
+              </h4>
+              {contractLedger.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">
+                  Nessuna riga contabile trovata in Fast Closing per questo contratto.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="text-[10px] uppercase font-mono font-bold text-slate-400">
+                        <th className="py-2.5">Data Scadenza</th>
+                        <th className="py-2.5">Descrizione</th>
+                        <th className="py-2.5 text-right">Importo Canone</th>
+                        <th className="py-2.5 text-right">Stato</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-xs">
+                      {contractLedger.map(item => (
+                        <tr key={item.id} className="hover:bg-slate-50/50">
+                          <td className="py-2.5 font-mono text-slate-500">
+                            {new Date(item.dueDate).toLocaleDateString("it-IT")}
+                          </td>
+                          <td className="py-2.5 font-medium text-slate-800">
+                            <div className="font-bold text-slate-900">{item.title}</div>
+                            {item.description && (
+                              <div className="text-[10px] text-slate-400 font-normal mt-0.5">{item.description}</div>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-right font-bold text-slate-900">
+                            €{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2.5 text-right font-black">
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider ${
+                              item.status === "Paid"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-150"
+                                : item.status === "Overdue"
+                                ? "bg-rose-50 text-rose-700 border border-rose-150 animate-pulse"
+                                : item.status === "Cancelled"
+                                ? "bg-slate-100 text-slate-500 border border-slate-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-150"
+                            }`}>
+                              {item.status === "Paid" ? "Pagato" : item.status === "Overdue" ? "Insoluto" : item.status === "Cancelled" ? "Annullato" : "Da Pagare"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* CORREZIONE BX — NUOVA SEZIONE 3: DOCUMENTI GENERATI E SALVATI AGLI ATTI
+                (il vero file del contratto generato dal Wizard, StoredDocument su Firebase
+                Storage — prima non veniva mostrato in nessuna vista, nonostante il tipo
+                Contract lo prevedesse esplicitamente) */}
+            <div className="bg-white rounded-2xl border border-amber-100 p-6 space-y-4">
+              <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide pb-2.5 flex items-center space-x-1.5">
+                <span>📑</span> <span>3. Documenti Generati e Salvati agli Atti ({contractDocuments.length})</span>
+              </h4>
+              {contractDocuments.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">
+                  Nessun documento generato salvato agli atti per questo contratto. Se il contratto è
+                  stato creato con il Wizard Generatore, il file .docx dovrebbe comparire qui.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {contractDocuments.map(doc => (
+                    <a
+                      key={doc.id}
+                      href={doc.storageLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:border-amber-200 hover:bg-amber-50/10 transition-all"
+                    >
+                      <div className="flex items-start space-x-3 truncate">
+                        <span className="text-lg shrink-0 mt-0.5">📄</span>
+                        <div className="truncate">
+                          <h5 className="text-xs font-bold text-slate-800 truncate" title={doc.fileName}>{doc.fileName}</h5>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <span className="text-[9px] bg-amber-50 text-amber-800 border border-amber-100 px-1 py-0.2 rounded font-semibold shrink-0">{doc.category}</span>
+                            <span className="text-[9px] text-slate-400 font-medium">{new Date(doc.uploadedAt).toLocaleDateString("it-IT")}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-amber-700 text-xs font-bold shrink-0 ml-2">⬇️</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* SECOND AREA: PHYSICAL DOCUMENTATION OF THE DWELLING (APE, PLANIMETRY, ETC.) */}
             <div 
               id="physical-docs-container"
+
               className={`bg-white rounded-2xl border border-amber-100 p-6 space-y-6 transition-all duration-1000 ${
                 localStorage.getItem("highlight_registration_contract_id") === selectedContract.id 
                   ? "border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.25)] bg-amber-50/5" 
@@ -1155,7 +986,7 @@ export default function ContractsView({
               }`}
             >
               <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide pb-2.5 flex items-center space-x-1.5">
-                <span>📂</span> <span>2. Documentazione Fisica dell'Alloggio & Certificazioni</span>
+                <span>📂</span> <span>4. Documentazione Fisica dell'Alloggio & Certificazioni</span>
               </h4>
               
               {localStorage.getItem("highlight_registration_contract_id") === selectedContract.id && (
@@ -1311,7 +1142,7 @@ export default function ContractsView({
             <div className="bg-white rounded-2xl border border-amber-100 p-6 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
                 <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide flex items-center space-x-1.5">
-                  <span className="text-base">📋</span> <span>3. Verbali di Consegna & Riconsegna Immobile</span>
+                  <span className="text-base">📋</span> <span>5. Verbali di Consegna & Riconsegna Immobile</span>
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -1504,9 +1335,310 @@ export default function ContractsView({
                 );
               })()}
             </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" id="contracts-view-container">
+      
+      {/* View Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Relazioni & Contratti di Locazione</h2>
+          <p className="text-xs text-slate-500 mt-0.5">La centralina delle locazioni. Crea relazioni unificate tra immobili, inquilini e contratti con l'AI.</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowGeneratorWizard(true)}
+            className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4.5 py-2.5 rounded-xl text-xs active:transition-all shadow-sm"
+          >
+            <span>🪄 Genera Contratto Guidato</span>
+          </button>
+          <button
+            onClick={handleOpenAddWizard}
+            id="add-contract-btn"
+            className="inline-flex items-center space-x-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-4.5 py-2.5 rounded-xl text-xs active:transition-all shadow-sm"
+          >
+            <Plus size={15} className="stroke-[3]" />
+            <span>🤝 Crea Nuova Relazione</span>
+          </button>
+        </div>
+      </div>
+
+      {/* CORREZIONE BQ — Wizard di generazione contratto reale (.docx, identico al modello) */}
+      <ContractGeneratorWizard
+        isOpen={showGeneratorWizard}
+        onClose={() => setShowGeneratorWizard(false)}
+        properties={properties}
+        tenants={tenants}
+        owners={owners}
+        onAddContract={onAddContract}
+      />
+
+      {/* Contracts table with integrated RELATIONSHIPS */}
+      {contracts.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto mt-8">
+          <div className="bg-amber-50 text-amber-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-amber-200/50">
+            <Link2 size={28} />
           </div>
-        );
-      })()}
+          <h3 className="font-sans font-bold text-slate-800 text-base">Nessuna Relazione Attiva</h3>
+          <p className="text-xs text-slate-500 mt-2">
+            Non ci sono relazioni d'affitto inserite. Crea una nuova relazione guidata oppure carica la scansione di un contratto cartaceo per far compilare tutto all'AI.
+          </p>
+          <button
+            onClick={handleOpenAddWizard}
+            className="mt-5 inline-flex items-center space-x-2 bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold px-4 py-2 rounded-lg text-xs transition-colors border border-amber-200"
+          >
+            <Plus size={14} />
+            <span>Crea prima relazione d'affitto</span>
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse border border-slate-300 text-xs font-mono">
+              <thead>
+                <tr className="bg-slate-100 text-[10px] font-mono uppercase text-slate-700 tracking-wider font-extrabold border border-slate-300">
+                  <th className="py-2.5 px-4 border border-slate-300">Relazione Principale (Immobile & Inquilino)</th>
+                  <th className="py-2.5 px-4 border border-slate-300">Regime Temporale</th>
+                  <th className="py-2.5 px-4 border border-slate-300">Flusso Finanziario</th>
+                  <th className="py-2.5 px-4 border border-slate-300 text-right">Azioni</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {contracts.map((contract) => {
+                  const daysLeft = Math.ceil((new Date(contract.endDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+                  const isSelected = selectedContractId === contract.id;
+
+                  // Find relations
+                  const matchingProperty = properties.find(p => p.id === contract.propertyId);
+                  const matchingTenant = tenants.find(t => t.id === contract.tenantId);
+                  const condoConstituted = condominiums.find(c => 
+                    (matchingProperty?.address || "").toLowerCase().includes((c.name || "").toLowerCase()) || 
+                    (c.name || "").toLowerCase().includes((matchingProperty?.name || "").toLowerCase()) ||
+                    (c.notes && (c.notes || "").toLowerCase().includes((matchingProperty?.name || "").toLowerCase()))
+                  );
+                  
+                  return (
+                    <tr 
+                      key={contract.id} 
+                      className={`hover:bg-slate-50 transition-colors ${isSelected ? "bg-amber-50/15" : ""}`} 
+                      id={`contract-row-${contract.id}`}
+                    >
+                      <td className="p-4 border border-slate-300 max-w-sm">
+                        {/* UNIFIED RELATIONSHIP CARD (SAME AS DASHBOARD STYLE) */}
+                        <div 
+                          onClick={(e) => {
+                            // Prevent selection on nav buttons
+                            if ((e.target as HTMLElement).closest('.btn-nav-badge') || (e.target as HTMLElement).closest('button')) return;
+                            setSelectedContractId(contract.id);
+                            // CORREZIONE BW — badge/card cliccabile apre la sottopagina di dettaglio
+                            // a schermo intero, stesso pattern di PropertiesView.tsx
+                            setSelectedContractDetails(contract);
+                          }}
+                          className={`p-4 rounded-2xl border transition-all text-left space-y-3 cursor-pointer ${
+                            isSelected 
+                              ? "bg-amber-50/50 border-amber-300 shadow-xs ring-1 ring-amber-300/40" 
+                              : "bg-slate-50/30 border-slate-100 hover:border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="font-sans font-black text-xs text-slate-900 flex items-center space-x-1.5">
+                                <span className="text-base shrink-0">🏠</span>
+                                <span className="truncate max-w-[200px]" title={contract.propertyName}>{contract.propertyName}</span>
+                              </h4>
+                              {matchingProperty?.address && (
+                                <p className="text-[10px] text-slate-500 mt-1 ml-5 truncate max-w-[180px]">
+                                  {matchingProperty.address}
+                                </p>
+                              )}
+                            </div>
+                            <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100/80 text-amber-800 border border-amber-200">
+                              Relazione Unica
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 bg-white/85 p-2.5 rounded-xl border border-slate-100 text-[10px]">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-400 font-medium">Conduttore / Inquilino:</span>
+                              <span className="font-extrabold text-slate-800">
+                                👤 {contract.tenantName}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-400 font-medium">Canone Affitto:</span>
+                              <span className="font-extrabold text-indigo-700">
+                                €{contract.rentAmount.toLocaleString("it-IT")}/{contract.frequency === "Mensile" ? "mese" : contract.frequency}
+                              </span>
+                            </div>
+
+                            {condoConstituted && (
+                              <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[9px]">
+                                <span className="text-slate-400">Condominio:</span>
+                                <span className="font-extrabold text-slate-700 truncate max-w-[120px]">
+                                  🏢 {condoConstituted.name}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Navigation Buttons to dedicated areas */}
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <button
+                              onClick={() => {
+                                if (setCurrentSection) {
+                                  setCurrentSection("properties");
+                                }
+                              }}
+                              className="btn-nav-badge inline-flex items-center space-x-1 bg-amber-50/60 hover:bg-amber-100 text-amber-900 border border-amber-200/50 px-2 py-1 rounded-md text-[9px] font-black transition-all shadow-3xs"
+                              title="Vai ai dettagli dell'immobile"
+                            >
+                              <span>🏠 Immobile</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                if (setSelectedTenantIdForLedger && setCurrentSection) {
+                                  setSelectedTenantIdForLedger(contract.tenantId);
+                                  setCurrentSection("tenants");
+                                }
+                              }}
+                              className="btn-nav-badge inline-flex items-center space-x-1 bg-amber-50/60 hover:bg-amber-100 text-amber-900 border border-amber-200/50 px-2 py-1 rounded-md text-[9px] font-black transition-all shadow-3xs"
+                              title="Vai ai dettagli del conduttore"
+                            >
+                              <span>👤 Inquilino</span>
+                            </button>
+                          </div>
+
+                          {/* CORREZIONE BT — Documento generato: vedi e invia */}
+                          {(contract as any).documents?.[0] && (
+                            <div className="pt-2 mt-1 border-t border-slate-100 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                              <a
+                                href={(contract as any).documents[0].storageLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline"
+                              >
+                                📄 Vedi Documento Generato
+                              </a>
+                              {sendPanelOpenForId !== contract.id ? (
+                                <button
+                                  onClick={() => {
+                                    setSendPanelOpenForId(contract.id);
+                                    setSendEmailInput(matchingTenant?.email || "");
+                                  }}
+                                  className="block text-[10px] font-bold text-emerald-700 hover:underline"
+                                >
+                                  📧 Invia Contratto
+                                </button>
+                              ) : (
+                                <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                                  <select
+                                    onChange={(e) => setSendEmailInput(e.target.value)}
+                                    className="text-[10px] border border-slate-200 rounded-md px-1.5 py-1"
+                                    defaultValue=""
+                                  >
+                                    <option value="" disabled>-- scegli o scrivi sotto --</option>
+                                    {matchingTenant?.email && <option value={matchingTenant.email}>Inquilino: {matchingTenant.email}</option>}
+                                  </select>
+                                  <input
+                                    type="email"
+                                    placeholder="oppure scrivi un'email diversa..."
+                                    value={sendEmailInput}
+                                    onChange={(e) => setSendEmailInput(e.target.value)}
+                                    className="text-[10px] border border-slate-200 rounded-md px-1.5 py-1"
+                                  />
+                                  <div className="flex gap-1.5">
+                                    <button
+                                      onClick={() => handleSendContractDocument(contract, sendEmailInput)}
+                                      disabled={sendingContractId === contract.id}
+                                      className="flex-1 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-md py-1"
+                                    >
+                                      {sendingContractId === contract.id ? "Invio..." : "Invia"}
+                                    </button>
+                                    <button
+                                      onClick={() => setSendPanelOpenForId(null)}
+                                      className="flex-1 text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-md py-1"
+                                    >
+                                      Annulla
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="p-4 border border-slate-300 vertical-middle">
+                        <div className="space-y-1.5 text-xs text-slate-600">
+                          <div className="flex items-center space-x-1.5">
+                            <Calendar size={13} className="text-slate-400 shrink-0" />
+                            <span className="font-semibold">{new Date(contract.startDate).toLocaleDateString("it-IT")} - {new Date(contract.endDate).toLocaleDateString("it-IT")}</span>
+                          </div>
+                          {daysLeft > 0 && daysLeft < 90 ? (
+                            <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-bold inline-block">
+                              ⚠️ Scade tra {daysLeft} gg
+                            </span>
+                          ) : daysLeft <= 0 ? (
+                            <span className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded font-bold inline-block">
+                              ❌ Scaduto
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-slate-400 font-semibold block">
+                              Regolare (scadenza tra {Math.ceil(daysLeft / 30)} mesi)
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="p-4 border border-slate-300 vertical-middle">
+                        <div className="space-y-1">
+                          <div className="text-slate-900 font-black text-sm">
+                            €{contract.rentAmount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="flex items-center space-x-1 text-[10px] text-slate-500 capitalize">
+                            <Wallet size={10} className="text-slate-400" />
+                            <span>Locazione {contract.frequency}</span>
+                          </div>
+                          <span 
+                            onClick={() => { setSelectedContractId(contract.id); setSelectedContractDetails(contract); }}
+                            className="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase bg-amber-50 text-amber-800 border border-amber-200/50 cursor-pointer hover:opacity-80"
+                          >
+                            {contract.status === "Active" ? "Attivo" : contract.status === "Draft" ? "Bozza" : contract.status === "Expired" ? "Scaduto" : "Cessato"}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="p-4 border border-slate-300 text-right vertical-middle space-x-1.5">
+                        <button
+                          onClick={() => handleOpenEditModal(contract)}
+                          className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors inline-block border border-slate-100 bg-white shadow-3xs"
+                          title="Modifica parametri di locazione"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(contract.id)}
+                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors inline-block border border-slate-100 bg-white shadow-3xs"
+                          title="Elimina questa relazione"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
 
       {/* Guided Relationship Wizard Modal */}
       {showModal && (

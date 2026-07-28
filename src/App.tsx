@@ -2919,6 +2919,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             condominiums={condominiums}
             owners={owners}
             deliveryReports={deliveryReports}
+            fastClosing={fastClosing}
             onAddDeliveryReport={handleAddDeliveryReport}
             onEditDeliveryReport={handleEditDeliveryReport}
             onDeleteDeliveryReport={handleDeleteDeliveryReport}
