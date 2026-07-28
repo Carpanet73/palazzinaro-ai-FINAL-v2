@@ -1510,10 +1510,24 @@ export default function App() {
       let finalTenantName = data.tenantName;
       let finalOwnerName = data.ownerName;
 
+      // CORREZIONE BT — bug reale: Firestore rifiuta categoricamente qualunque campo con
+      // valore "undefined" nella scrittura (non lo ignora, lancia un errore e l'intera
+      // addDoc fallisce). Il Wizard Generatore Contratti non passa "notes", quindi
+      // "data.notes" valeva undefined e l'intero salvataggio del contratto falliva con
+      // "Errore di Sincronizzazione". Stesso identico pattern di pulizia già usato in
+      // handleAddOwner, applicato qui a newProperty/newTenant/contratto.
+      const stripUndefined = (obj: any) => {
+        const clean: any = {};
+        Object.keys(obj || {}).forEach((key) => {
+          if (obj[key] !== undefined) clean[key] = obj[key];
+        });
+        return clean;
+      };
+
       // 1. Create Property inline if requested by the guided relationship flow
       if (data.newProperty) {
         const propDoc = await addDoc(collection(db, "properties"), {
-          ...data.newProperty,
+          ...stripUndefined(data.newProperty),
           userId: user.uid,
           createdAt: serverTimestamp()
         });
@@ -1525,7 +1539,7 @@ export default function App() {
       // 2. Create Tenant inline if requested by the guided relationship flow
       if (data.newTenant) {
         const tenantDoc = await addDoc(collection(db, "tenants"), {
-          ...data.newTenant,
+          ...stripUndefined(data.newTenant),
           propertyId: finalPropertyId, // link newly created property
           userId: user.uid,
           createdAt: serverTimestamp()
@@ -1535,7 +1549,12 @@ export default function App() {
       }
 
       // 3. Create Contract
-      const contractDoc = await addDoc(collection(db, "contracts"), {
+      // CORREZIONE BU — bug reale separato: taxRegime e documents (il riferimento al
+      // contratto generato stesso, quello che deve restare "agli atti") venivano scartati
+      // silenziosamente perché non elencati qui, nonostante il tipo Contract li preveda
+      // esplicitamente per questo scopo. Ora vengono scritti, e il resto dei campi passa
+      // dalla stessa pulizia undefined→omesso di cui sopra.
+      const contractDoc = await addDoc(collection(db, "contracts"), stripUndefined({
         propertyId: finalPropertyId,
         propertyName: finalPropertyName,
         tenantId: finalTenantId,
@@ -1548,9 +1567,11 @@ export default function App() {
         notes: data.notes,
         ownerName: finalOwnerName || "Proprietario",
         isBareOwnership: data.isBareOwnership || false,
+        taxRegime: data.taxRegime,
+        documents: data.documents,
         userId: user.uid,
         createdAt: serverTimestamp()
-      });
+      }));
 
       // Auto-generate rental installments inside Fast Closing!
       const rentAmount = Number(data.rentAmount);
@@ -1595,7 +1616,12 @@ export default function App() {
 
   const handleEditContract = async (id: string, data: any) => {
     try {
-      await updateDoc(doc(db, "contracts", id), data);
+      // Stesso bug di handleAddContract: Firestore rifiuta i campi undefined anche in updateDoc.
+      const cleanData: any = {};
+      Object.keys(data || {}).forEach((key) => {
+        if (data[key] !== undefined) cleanData[key] = data[key];
+      });
+      await updateDoc(doc(db, "contracts", id), cleanData);
       showSuccess("Contratto aggiornato con successo!");
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.UPDATE, `contracts/${id}`);
