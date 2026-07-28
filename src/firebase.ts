@@ -2,6 +2,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // ============================================================================
 // FIREBASE CONFIGURATION
@@ -66,5 +67,11 @@ const db = getFirestore(
     : undefined
 );
 
-export { app, auth, googleProvider, db };
+// CORREZIONE BV — Firebase Storage: usato per conservare i documenti fotografati/scansionati
+// (visure catastali, APE, documenti d'identità, permessi di soggiorno, contratti generati),
+// al posto di pCloud (credenziali esterne che continuavano a essere rifiutate senza causa
+// individuabile). Usa lo stesso progetto/autenticazione già configurati sopra.
+const storage = getStorage(app);
+
+export { app, auth, googleProvider, db, storage };
 

@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
 import DocumentScanner from "./DocumentScanner";
-import { uploadDocumentToPCloud } from "../lib/documentUpload";
+import { uploadDocumentToStorage } from "../lib/documentUpload";
 import { 
   Plus, 
   Edit3, 
@@ -231,7 +231,7 @@ export default function TenantsView({
   };
 
   // CORREZIONE BO — Riceve il PDF dallo scanner, lo fa leggere all'AI, precompila i campi,
-  // poi lo carica su pCloud e lo aggiunge ai documenti conservati agli atti dell'inquilino.
+  // poi lo carica su Firebase Storage e lo aggiunge ai documenti conservati agli atti dell'inquilino.
   const handleScanComplete = async (pdfBlob: Blob, docKind: "identity" | "permit") => {
     setScannerOpenFor(null);
     setProcessingScan(true);
@@ -278,7 +278,7 @@ export default function TenantsView({
       }
 
       const fileName = `${docKind === "identity" ? "documento_identita" : "permesso_soggiorno"}_${(tName || "inquilino").replace(/\s+/g, "_").toLowerCase()}.pdf`;
-      const storedDoc = await uploadDocumentToPCloud(
+      const storedDoc = await uploadDocumentToStorage(
         pdfBlob,
         fileName,
         docKind === "identity" ? "Documento d'Identità" : "Permesso di Soggiorno",
@@ -1648,7 +1648,7 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                         {tenantDocuments.map(doc => (
                           <a
                             key={doc.id}
-                            href={doc.pcloudLink || "#"}
+                            href={doc.storageLink || "#"}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="block text-[10px] text-indigo-600 hover:underline truncate"

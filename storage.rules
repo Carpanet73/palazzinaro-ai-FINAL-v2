@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// CORREZIONE BV — Regole di sicurezza per Firebase Storage (documenti conservati agli atti:
+// visure catastali, APE, documenti d'identità, permessi di soggiorno, contratti generati).
+// Stesso principio già usato in firestore.rules: ogni utente vede e scrive solo i propri file,
+// mai quelli di altri utenti (isolamento per userId nel percorso).
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Ogni file vive sotto /users/{uid}/... — solo il proprietario (uid corrispondente)
+    // può leggere o scrivere i propri documenti.
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Tutto il resto è negato per default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

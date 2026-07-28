@@ -15,7 +15,7 @@ import React, { useState, useMemo } from "react";
 import { Property, Tenant, Owner, Contract } from "../types";
 import { generateContractDocx, ContractGenData } from "../lib/contractGenerator";
 import { amountToItalianWords } from "../lib/numberToItalianWords";
-import { uploadDocumentToPCloud } from "../lib/documentUpload";
+import { uploadDocumentToStorage } from "../lib/documentUpload";
 
 interface ContractGeneratorWizardProps {
   isOpen: boolean;
@@ -174,7 +174,7 @@ export default function ContractGeneratorWizard({
     if (!generatedBlob || !selectedProperty || !selectedTenant) return;
     setSending(true);
     try {
-      const storedDoc = await uploadDocumentToPCloud(
+      const storedDoc = await uploadDocumentToStorage(
         generatedBlob,
         `Contratto_${selectedTenant.name.replace(/\s+/g, "_")}.docx`,
         "Contratto di Locazione",

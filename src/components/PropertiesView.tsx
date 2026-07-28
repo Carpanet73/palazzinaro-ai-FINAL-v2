@@ -1,7 +1,7 @@
 
 import React, { useState } from "react";
 import DocumentScanner from "./DocumentScanner";
-import { uploadDocumentToPCloud } from "../lib/documentUpload";
+import { uploadDocumentToStorage } from "../lib/documentUpload";
 import { 
   Plus, 
   Edit3, 
@@ -368,7 +368,7 @@ export default function PropertiesView({
   };
 
   // CORREZIONE BO — Riceve il PDF dallo scanner (visura catastale o APE), lo fa leggere
-  // all'AI, precompila i campi, poi lo carica su pCloud e lo aggiunge ai documenti
+  // all'AI, precompila i campi, poi lo carica su Firebase Storage e lo aggiunge ai documenti
   // conservati agli atti dell'immobile.
   const handleScanComplete = async (pdfBlob: Blob, docKind: "cadastral" | "energy") => {
     setScannerOpenFor(null);
@@ -409,7 +409,7 @@ export default function PropertiesView({
       }
 
       const fileName = `${docKind === "cadastral" ? "visura_catastale" : "ape"}_${(name || "immobile").replace(/\s+/g, "_").toLowerCase()}.pdf`;
-      const storedDoc = await uploadDocumentToPCloud(
+      const storedDoc = await uploadDocumentToStorage(
         pdfBlob,
         fileName,
         docKind === "cadastral" ? "Visura Catastale" : "Attestato APE",
@@ -2602,7 +2602,7 @@ export default function PropertiesView({
                       <div className="pt-1.5 border-t border-slate-200 space-y-1">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Documenti conservati agli atti</p>
                         {propertyDocuments.map(doc => (
-                          <a key={doc.id} href={doc.pcloudLink || "#"} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-indigo-600 hover:underline truncate">
+                          <a key={doc.id} href={doc.storageLink || "#"} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-indigo-600 hover:underline truncate">
                             📎 {doc.category} — {doc.fileName}
                           </a>
                         ))}

@@ -95,16 +95,16 @@ export interface Property {
   createdAt: string;
 }
 
-// CORREZIONE BM — Documento conservato "agli atti": il file vero sta su pCloud (mai nel
-// database), qui si tiene solo il riferimento. Si può agganciare a Inquilino, Immobile,
+// CORREZIONE BV — Documento conservato "agli atti": il file vero sta su Firebase Storage (mai
+// nel database), qui si tiene solo il riferimento. Si può agganciare a Inquilino, Immobile,
 // Contratto, Proprietario e Pratica Legale — la stessa identica struttura ovunque, così un
 // documento fotografato una volta si ritrova coerentemente in tutte le aree collegate.
 export interface StoredDocument {
   id: string;
   fileName: string;
   category: string; // es. "Documento d'Identità", "Permesso di Soggiorno", "Visura Catastale", "APE"
-  pcloudLink: string;
-  pcloudFileId: number;
+  storageLink: string; // URL di download diretto (Firebase Storage)
+  storagePath: string; // percorso interno nel bucket, usato per eventuale cancellazione
   uploadedAt: string;
 }
 
@@ -497,7 +497,7 @@ export interface LegalCase {
   }>;
   // CORREZIONE BM — i documenti fotografati (identità, contratto, ecc.) collegati a questo
   // inquilino/immobile restano visibili anche qui, nel fascicolo legale, quando la pratica
-  // viene passata all'avvocato — mai duplicati, solo lo stesso riferimento pCloud.
+  // viene passata all'avvocato — mai duplicati, solo lo stesso riferimento Firebase Storage.
   documents?: StoredDocument[];
 }
 

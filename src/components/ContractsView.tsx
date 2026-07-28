@@ -419,10 +419,10 @@ export default function ContractsView({
   };
 
   // Open "Create Relationship" wizard instead of generic new contract
-  // CORREZIONE BT — invia il documento del contratto (già agli atti su pCloud) via Resend
+  // CORREZIONE BV — invia il documento del contratto (già agli atti su Firebase Storage) via Resend
   const handleSendContractDocument = async (contract: Contract, toEmail: string) => {
     const doc = (contract as any).documents?.[0];
-    if (!doc?.pcloudLink) {
+    if (!doc?.storageLink) {
       alert("Non risulta nessun documento generato per questo contratto.");
       return;
     }
@@ -432,11 +432,11 @@ export default function ContractsView({
     }
     setSendingContractId(contract.id);
     try {
-      const response = await fetch("/api/send-pcloud-document", {
+      const response = await fetch("/api/send-stored-document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pcloudLink: doc.pcloudLink,
+          documentLink: doc.storageLink,
           fileName: doc.fileName,
           to: toEmail.trim(),
           subject: `Contratto di Locazione — ${contract.propertyName}`,
@@ -910,7 +910,7 @@ export default function ContractsView({
                           {(contract as any).documents?.[0] && (
                             <div className="pt-2 mt-1 border-t border-slate-100 space-y-1.5" onClick={(e) => e.stopPropagation()}>
                               <a
-                                href={(contract as any).documents[0].pcloudLink}
+                                href={(contract as any).documents[0].storageLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline"

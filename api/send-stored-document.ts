@@ -1,15 +1,18 @@
 
 /**
- * Vercel Serverless Function — /api/send-pcloud-document
+ * Vercel Serverless Function — /api/send-stored-document
  *
- * CORREZIONE BT — invia via Resend, con allegato vero, un documento GIÀ salvato su pCloud
- * (es. un contratto generato in precedenza). Il recupero del file avviene lato server (mai
- * dal browser, per evitare blocchi di sicurezza incrociati tra siti diversi), poi viene
+ * CORREZIONE BV — invia via Resend, con allegato vero, un documento già salvato su Firebase
+ * Storage (es. un contratto generato in precedenza). Il recupero del file avviene lato server
+ * (mai dal browser, per evitare blocchi di sicurezza incrociati tra siti diversi), poi viene
  * allegato all'email esattamente come un file nuovo.
+ *
+ * Sostituisce la precedente /api/send-pcloud-document (stessa logica, solo la fonte del file
+ * è cambiata da pCloud a Firebase Storage).
  *
  * Corpo della richiesta atteso (POST, JSON):
  * {
- *   "pcloudLink": "https://...",
+ *   "documentLink": "https://firebasestorage.googleapis.com/...",
  *   "fileName": "Contratto_Mario_Rossi.docx",
  *   "to": "destinatario@esempio.it",
  *   "subject": "Oggetto dell'email",
@@ -38,18 +41,18 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { pcloudLink, fileName, to, subject, html } = req.body || {};
-    if (!pcloudLink || !fileName || !to || !subject) {
+    const { documentLink, fileName, to, subject, html } = req.body || {};
+    if (!documentLink || !fileName || !to || !subject) {
       return res.status(400).json({
         success: false,
-        error: "Campi obbligatori mancanti: servono 'pcloudLink', 'fileName', 'to', 'subject'."
+        error: "Campi obbligatori mancanti: servono 'documentLink', 'fileName', 'to', 'subject'."
       });
     }
 
     // Recupera il file direttamente dal server (mai dal browser dell'utente)
-    const fileResponse = await fetch(pcloudLink);
+    const fileResponse = await fetch(documentLink);
     if (!fileResponse.ok) {
-      throw new Error(`Impossibile recuperare il documento da pCloud (status ${fileResponse.status}).`);
+      throw new Error(`Impossibile recuperare il documento da Firebase Storage (status ${fileResponse.status}).`);
     }
     const arrayBuffer = await fileResponse.arrayBuffer();
     const base64Content = Buffer.from(arrayBuffer).toString("base64");
@@ -82,7 +85,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({ success: true, id: data?.id });
   } catch (error: any) {
-    console.error("Errore /api/send-pcloud-document:", error);
+    console.error("Errore /api/send-stored-document:", error);
     return res.status(500).json({
       success: false,
       error: error?.message || "Errore interno del server durante l'invio del documento."
