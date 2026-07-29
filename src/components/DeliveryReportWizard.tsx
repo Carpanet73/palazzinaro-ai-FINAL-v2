@@ -63,14 +63,29 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
   // Recupero verbale di consegna iniziale (TASK 2a): prima contractId, fallback
   // propertyId (legacy). Filtro type client-side per evitare indici compositi.
   useEffect(() => {
-    if (!isRiconsegna) return;
+    if (!isRiconsegna || !user) return;
     let cancelled = false;
     (async () => {
       try {
-        let snap = await getDocs(query(collection(db, "deliveryReports"), where("contractId", "==", contract.id)));
+        // CORREZIONE CD — BUG REALE: Firestore rifiuta una query (list) se non può
+        // verificare A PRIORI, dalla struttura stessa della query, che ogni possibile
+        // risultato rispetti le regole di sicurezza (isOwner() controlla userId). Senza
+        // il filtro esplicito su userId qui, Firestore nega l'intera query per prudenza
+        // — anche se i dati in pratica sarebbero sempre e solo i tuoi. A differenza di
+        // un get() su un documento noto (dove basta il controllo su resource.data), una
+        // list query deve includere il filtro nella query stessa.
+        let snap = await getDocs(query(
+          collection(db, "deliveryReports"),
+          where("userId", "==", user.uid),
+          where("contractId", "==", contract.id)
+        ));
         let found = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as DeliveryReport).find((r) => r.type === "consegna") || null;
         if (!found && contract.propertyId) {
-          snap = await getDocs(query(collection(db, "deliveryReports"), where("propertyId", "==", contract.propertyId)));
+          snap = await getDocs(query(
+            collection(db, "deliveryReports"),
+            where("userId", "==", user.uid),
+            where("propertyId", "==", contract.propertyId)
+          ));
           found = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as DeliveryReport).find((r) => r.type === "consegna") || null;
         }
         if (!cancelled) setConsegnaIniziale(found);
@@ -78,7 +93,7 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
       finally { if (!cancelled) setLoadingRef(false); }
     })();
     return () => { cancelled = true; };
-  }, [isRiconsegna, contract.id, contract.propertyId]);
+  }, [isRiconsegna, contract.id, contract.propertyId, user?.uid]);
 
   // Calcolo deposito cauzionale (TASK 3b) — solo informativo
   const deposito = contract.securityDepositAmount || 0;
@@ -180,7 +195,13 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
         // Data di riferimento per cancellare le righe future: usa la data di
         // terminazione REALE già esistente se c'era, altrimenti la data della riconsegna.
         const cutoffDate = contract.earlyTerminationDate || reportDate;
-        const fcSnap = await getDocs(query(collection(db, "fastClosing"), where("sourceId", "==", contract.id)));
+        // CORREZIONE CD — stesso bug delle due query sopra: serve il filtro userId
+        // nella query stessa, altrimenti Firestore nega l'intera list per prudenza.
+        const fcSnap = await getDocs(query(
+          collection(db, "fastClosing"),
+          where("userId", "==", user.uid),
+          where("sourceId", "==", contract.id)
+        ));
         const rowsToCancel = fcSnap.docs
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
           .filter((fc: any) => fc.source === "contract" && (fc.status === "Pending" || fc.status === "Overdue") && new Date(fc.dueDate) > new Date(cutoffDate));
