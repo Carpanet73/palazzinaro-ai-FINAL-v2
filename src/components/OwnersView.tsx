@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
+import GenderToggle from "./GenderToggle";
 import { 
   ArrowLeft, 
   Building2, 
@@ -79,6 +80,9 @@ export default function OwnersView({
   const [ownerFormAddress, setOwnerFormAddress] = useState("");
   const [ownerFormBirthDate, setOwnerFormBirthDate] = useState(""); // CORREZIONE AA
   const [ownerFormBirthPlace, setOwnerFormBirthPlace] = useState(""); // CORREZIONE BS
+  // CORREZIONE CC — genere persistente, serve al generatore contratti per le forme
+  // corrette (nato/a, locatore/locatrice) senza doverlo riselezionare ogni volta.
+  const [ownerFormGender, setOwnerFormGender] = useState<"M" | "F" | undefined>(undefined);
   const [ownerFormStructuredAddress, setOwnerFormStructuredAddress] = useState<AddressValue>({});
   // CORREZIONE AJ — Comproprietari: stesso conto unico, con selezione smart tra i
   // proprietari già a sistema per evitare di ridigitare/duplicare dati
@@ -101,6 +105,7 @@ export default function OwnersView({
     setOwnerFormAddress(match?.address || "");
     setOwnerFormBirthDate(match?.birthDate || "");
     setOwnerFormBirthPlace(match?.birthPlace || "");
+    setOwnerFormGender(match?.gender);
     setOwnerFormStructuredAddress(match?.structuredAddress || {});
     setOwnerFormCoOwners(match?.coOwners || []);
     setShowAddCoOwnerPicker(false);
@@ -122,6 +127,7 @@ export default function OwnersView({
       address: ownerFormAddress.trim(),
       birthDate: ownerFormBirthDate || "",
       birthPlace: ownerFormBirthPlace.trim() || "",
+      gender: ownerFormGender,
       structuredAddress: ownerFormStructuredAddress,
       coOwners: ownerFormCoOwners,
       iban: ownerFormIban.trim()
@@ -2002,6 +2008,7 @@ export default function OwnersView({
                 />
                 <p className="text-[10px] text-slate-400 mt-1">Serve per la formula "nato/a a ___" nei contratti di locazione generati.</p>
               </div>
+              <GenderToggle value={ownerFormGender} onChange={setOwnerFormGender} className="-mt-1" />
               <AddressFields value={ownerFormStructuredAddress} onChange={setOwnerFormStructuredAddress} />
 
               {/* CORREZIONE AJ — Comproprietari: stesso conto unico, ricerca smart tra i

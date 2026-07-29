@@ -152,6 +152,10 @@ export interface Tenant {
   documents?: StoredDocument[]; // documenti fotografati conservati agli atti
   // Company optional fields
   isCompany?: boolean;
+  // CORREZIONE CC — genere persistente (M/F), serve al generatore contratti per le
+  // forme corrette (nato/a, conduttore/conduttrice) senza doverlo riselezionare ogni
+  // volta. Solo per persone fisiche (nullo/non mostrato se isCompany).
+  gender?: "M" | "F";
   companyName?: string;
   companyFiscalCode?: string;
   vatNumber?: string;
@@ -265,6 +269,8 @@ export interface Owner {
   }>;
   iban?: string;           // IBAN del proprietario per accrediti (facoltativo)
   isCompany?: boolean;     // true se persona giuridica
+  // CORREZIONE CC — genere persistente (M/F), stesso scopo del campo su Tenant.
+  gender?: "M" | "F";
   notes?: string;
   createdAt: string;
   updatedAt?: string;

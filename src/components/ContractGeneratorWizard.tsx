@@ -5,17 +5,18 @@
  * contratto → anteprima e generazione vera del documento .docx (identico nella forma al
  * modello fornito dall'utente), con invio via Resend in allegato.
  *
- * NOTA PER MASSIMO: il campo "genere" (M/F, per scegliere tra locatore/locatrice,
- * nato/nata, ecc.) non esiste ancora nelle anagrafiche Owner/Tenant — per ora lo si
- * seleziona qui nel Wizard stesso, ad ogni generazione. Se preferisci, possiamo spostarlo
- * stabilmente nelle anagrafiche in futuro, così non va riselezionato ogni volta.
+ * CORREZIONE CC (29/07/2026): il campo "genere" (M/F) ora esiste stabilmente nelle
+ * anagrafiche Owner/Tenant ed è precompilato qui automaticamente dal dato salvato. Il
+ * toggle manuale resta comunque disponibile come stopgap per i record più vecchi senza
+ * questo campo, e per poterlo comunque correggere al volo in caso di errore.
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Property, Tenant, Owner, Contract } from "../types";
 import { generateContractDocx, ContractGenData } from "../lib/contractGenerator";
 import { amountToItalianWords } from "../lib/numberToItalianWords";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
+import GenderToggle from "./GenderToggle";
 
 interface ContractGeneratorWizardProps {
   isOpen: boolean;
@@ -97,6 +98,28 @@ export default function ContractGeneratorWizard({
     return d.toISOString().split("T")[0];
   }, [startDate, durationYears]);
 
+  // CORREZIONE CC — precompila il genere dal dato ora persistente in anagrafica
+  // (Owner.gender / Tenant.gender), invece di partire sempre da "M" di default.
+  // Precompila SOLO i valori non ancora impostati manualmente in questa sessione
+  // del wizard (next[id] === undefined), per non pestare una scelta fatta a mano.
+  useEffect(() => {
+    setOwnerGenders((prev) => {
+      const next = { ...prev };
+      allOwnerPeople.forEach((o: any) => {
+        if (!o.isCompany && o.gender && next[o.id] === undefined) next[o.id] = o.gender;
+      });
+      return next;
+    });
+    // Dipendenza su id+gender+isCompany stabili (stringa), non sul riferimento
+    // dell'array: evita di rieseguire ad ogni render e di cancellare scelte manuali.
+  }, [allOwnerPeople.map((o: any) => `${o.id}:${o.gender || ""}:${o.isCompany ? 1 : 0}`).join("|")]);
+
+  useEffect(() => {
+    if (!selectedTenant) return;
+    if (selectedTenant.isCompany) return; // azienda: il toggle resta nascosto
+    setTenantGender(selectedTenant.gender || "M");
+  }, [selectedTenant?.id]);
+
   if (!isOpen) return null;
 
   const annualRent = monthlyRent * 12;
@@ -122,7 +145,8 @@ export default function ContractGeneratorWizard({
       }
       return {
         name: o.name,
-        gender: ownerGenders[o.id] || "M",
+        gender: owner.isCompany ? undefined : (ownerGenders[o.id] || owner.gender || "M"),
+        isCompany: !!owner.isCompany,
         birthPlace: owner.birthPlace,
         birthDate: owner.birthDate ? formatDateDots(owner.birthDate) : undefined,
         fiscalCode: owner.fiscalCode,
@@ -131,7 +155,8 @@ export default function ContractGeneratorWizard({
     }),
     tenant: {
       name: selectedTenant?.name || "",
-      gender: tenantGender,
+      gender: selectedTenant?.isCompany ? undefined : tenantGender,
+      isCompany: !!selectedTenant?.isCompany,
       birthPlace: selectedTenant?.birthPlace,
       birthDate: selectedTenant?.birthDate ? formatDateDots(selectedTenant.birthDate) : undefined,
       fiscalCode: selectedTenant?.fiscalCode,
@@ -285,11 +310,15 @@ export default function ContractGeneratorWizard({
               {selectedProperty && (
                 <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
                   <p className="font-bold text-slate-700">Proprietario/i risolto/i: {allOwnerPeople.map(o => o.name).join(", ") || "Nessuno collegato"}</p>
-                  {allOwnerPeople.map(o => (
+                  {allOwnerPeople.map((o: any) => (
                     <div key={o.id} className="flex items-center gap-2">
                       <span className="text-slate-500">{o.name} è:</span>
-                      <button type="button" onClick={() => setOwnerGenders(prev => ({ ...prev, [o.id]: "M" }))} className={`px-2 py-0.5 rounded text-[10px] font-bold ${(ownerGenders[o.id] || "M") === "M" ? "bg-indigo-600 text-white" : "bg-slate-200"}`}>Uomo</button>
-                      <button type="button" onClick={() => setOwnerGenders(prev => ({ ...prev, [o.id]: "F" }))} className={`px-2 py-0.5 rounded text-[10px] font-bold ${ownerGenders[o.id] === "F" ? "bg-indigo-600 text-white" : "bg-slate-200"}`}>Donna</button>
+                      <GenderToggle
+                        value={ownerGenders[o.id] || (o.gender as "M" | "F") || undefined}
+                        onChange={(g) => setOwnerGenders((prev) => ({ ...prev, [o.id]: (g as "M" | "F") || "M" }))}
+                        isCompany={!!o.isCompany}
+                        label=""
+                      />
                     </div>
                   ))}
                   {(!selectedProperty.cadastralData?.foglio) && (
@@ -311,8 +340,12 @@ export default function ContractGeneratorWizard({
                 <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500">{selectedTenant.name} è:</span>
-                    <button type="button" onClick={() => setTenantGender("M")} className={`px-2 py-0.5 rounded text-[10px] font-bold ${tenantGender === "M" ? "bg-indigo-600 text-white" : "bg-slate-200"}`}>Uomo</button>
-                    <button type="button" onClick={() => setTenantGender("F")} className={`px-2 py-0.5 rounded text-[10px] font-bold ${tenantGender === "F" ? "bg-indigo-600 text-white" : "bg-slate-200"}`}>Donna</button>
+                    <GenderToggle
+                      value={selectedTenant.isCompany ? undefined : tenantGender}
+                      onChange={(g) => setTenantGender((g as "M" | "F") || "M")}
+                      isCompany={!!selectedTenant.isCompany}
+                      label=""
+                    />
                   </div>
                   {selectedTenant.isForeign && !selectedTenant.residencePermit?.number && (
                     <p className="text-amber-600">⚠️ Risulta straniero ma manca il permesso di soggiorno — fotografalo dalla scheda Inquilino prima di continuare.</p>

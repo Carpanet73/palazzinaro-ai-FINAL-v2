@@ -26,6 +26,13 @@ import {
 export interface ContractGenPerson {
   name: string;
   gender?: "M" | "F"; // vedi nota sopra — default M se assente
+  // CORREZIONE CC — campo aggiunto per preparare un task dedicato futuro: quando la
+  // persona è una società (isCompany true), le forme dovrebbero essere societarie
+  // ("con sede in", "in persona del legale rappresentante") invece di "nato/a a" e
+  // locatore/locatrice a seconda del genere. Il ramo di generazione per questo caso
+  // NON è ancora implementato qui sotto — resta il limite noto finché non si fa
+  // quel task specifico (richiede di rivedere tutta la logica testuale del contratto).
+  isCompany?: boolean;
   birthPlace?: string;
   birthDate?: string; // formato leggibile, es. "03.03.1974" (già formattato, non YYYY-MM-DD)
   fiscalCode?: string;

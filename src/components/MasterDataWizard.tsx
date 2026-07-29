@@ -23,6 +23,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import AddressFields from "./AddressFields";
+import GenderToggle from "./GenderToggle";
 import {
   X,
   ChevronRight,
@@ -104,6 +105,8 @@ export interface MasterDataPayload {
     coOwners?: Array<{ name: string; fiscalCode?: string; phone?: string; email?: string; linkedOwnerId?: string }>;
     iban?: string;
     isCompany?: boolean;
+    // CORREZIONE CC — genere persistente, serve al generatore contratti
+    gender?: "M" | "F";
     notes?: string;
   };
   condominium?: {
@@ -122,6 +125,14 @@ export interface MasterDataPayload {
     isCompany?: boolean;
     companyName?: string;
     vatNumber?: string;
+    // CORREZIONE CC — TASK 2: parità con la pagina dedicata Inquilini (Regola 4)
+    gender?: "M" | "F";
+    birthDate?: string;
+    birthPlace?: string;
+    address?: { via?: string; civico?: string; interno?: string; citta?: string; provincia?: string; cap?: string };
+    isForeign?: boolean;
+    identityDocument?: { number?: string; expiryDate?: string };
+    residencePermit?: { number?: string; validity?: string };
   };
   contract?: {
     startDate: string;
@@ -218,6 +229,8 @@ export default function MasterDataWizard({
   // senza i dati anagrafici che servono al generatore di contratti.
   const [newOwnerBirthDate, setNewOwnerBirthDate] = useState("");
   const [newOwnerBirthPlace, setNewOwnerBirthPlace] = useState("");
+  // CORREZIONE CC — genere persistente proprietario
+  const [newOwnerGender, setNewOwnerGender] = useState<"M" | "F" | undefined>(undefined);
   const [newOwnerIban, setNewOwnerIban] = useState("");
   const [newOwnerIsCompany, setNewOwnerIsCompany] = useState(false);
   // CORREZIONE AJ — indirizzo strutturato e comproprietari, disponibili subito in fase di
@@ -240,6 +253,17 @@ export default function MasterDataWizard({
   const [tIsCompany, setTIsCompany] = useState(false);
   const [tCompanyName, setTCompanyName] = useState("");
   const [tVatNumber, setTVatNumber] = useState("");
+  // CORREZIONE CC — TASK 2: portare l'inquilino embedded alla parità con la pagina
+  // dedicata Inquilini (Regola 4 — un solo flusso, stessi campi obbligatori/disponibili)
+  const [tGender, setTGender] = useState<"M" | "F" | undefined>(undefined);
+  const [tBirthDate, setTBirthDate] = useState("");
+  const [tBirthPlace, setTBirthPlace] = useState("");
+  const [tAddress, setTAddress] = useState<{ via?: string; civico?: string; interno?: string; citta?: string; provincia?: string; cap?: string; }>({});
+  const [tIsForeign, setTIsForeign] = useState(false);
+  const [tIdentityDocNumber, setTIdentityDocNumber] = useState("");
+  const [tIdentityDocExpiry, setTIdentityDocExpiry] = useState("");
+  const [tPermitNumber, setTPermitNumber] = useState("");
+  const [tPermitValidity, setTPermitValidity] = useState("");
 
   // ── Step 5: Contratto ──────────────────────────────────────────────────
   const [hasContract, setHasContract] = useState(false);
@@ -280,6 +304,7 @@ export default function MasterDataWizard({
     setNewOwnerAddress("");
     setNewOwnerIban("");
     setNewOwnerIsCompany(false);
+    setNewOwnerGender(undefined);
     setIsRented(false);
     setTenantMode("new");
     setSelectedTenantId("");
@@ -291,6 +316,15 @@ export default function MasterDataWizard({
     setTIsCompany(false);
     setTCompanyName("");
     setTVatNumber("");
+    setTGender(undefined);
+    setTBirthDate("");
+    setTBirthPlace("");
+    setTAddress({});
+    setTIsForeign(false);
+    setTIdentityDocNumber("");
+    setTIdentityDocExpiry("");
+    setTPermitNumber("");
+    setTPermitValidity("");
     setHasContract(false);
     setCStartDate("");
     setCEndDate("");
@@ -397,10 +431,11 @@ export default function MasterDataWizard({
           coOwners: ownershipType === "multiple" ? newOwnerCoOwners : undefined,
           iban: newOwnerIban.trim() || undefined,
           isCompany: newOwnerIsCompany,
+          gender: newOwnerIsCompany ? undefined : newOwnerGender,
           notes: undefined,
         };
       } else if (standaloneEntity === "tenant" && tenantMode === "new") {
-        payload.tenant = {
+        payload.tenant = cleanDeep({
           name: tName.trim(),
           email: tEmail.trim() || undefined,
           phone: tPhone.trim() || undefined,
@@ -409,7 +444,18 @@ export default function MasterDataWizard({
           isCompany: tIsCompany,
           companyName: tIsCompany ? tCompanyName.trim() : undefined,
           vatNumber: tIsCompany ? tVatNumber.trim() : undefined,
-        };
+          gender: tIsCompany ? undefined : tGender,
+          birthDate: tBirthDate || undefined,
+          birthPlace: tBirthPlace.trim() || undefined,
+          address: tAddress,
+          isForeign: tIsForeign || undefined,
+          identityDocument: tIdentityDocNumber
+            ? { number: tIdentityDocNumber.trim(), expiryDate: tIdentityDocExpiry || undefined }
+            : undefined,
+          residencePermit: tIsForeign && tPermitNumber
+            ? { number: tPermitNumber.trim(), validity: tPermitValidity.trim() || undefined }
+            : undefined,
+        });
       }
 
       await onPersist(payload);
@@ -516,6 +562,7 @@ export default function MasterDataWizard({
         coOwners: ownershipType === "multiple" ? newOwnerCoOwners : undefined,
         iban: newOwnerIban.trim() || undefined,
         isCompany: newOwnerIsCompany,
+        gender: newOwnerIsCompany ? undefined : newOwnerGender,
         notes: undefined,
       };
     }
@@ -558,7 +605,7 @@ export default function MasterDataWizard({
 
     if (isRented) {
       if (tenantMode === "new") {
-        payload.tenant = {
+        payload.tenant = cleanDeep({
           name: tName.trim(),
           email: tEmail.trim() || undefined,
           phone: tPhone.trim() || undefined,
@@ -567,7 +614,18 @@ export default function MasterDataWizard({
           isCompany: tIsCompany,
           companyName: tIsCompany ? tCompanyName.trim() : undefined,
           vatNumber: tIsCompany ? tVatNumber.trim() : undefined,
-        };
+          gender: tIsCompany ? undefined : tGender,
+          birthDate: tBirthDate || undefined,
+          birthPlace: tBirthPlace.trim() || undefined,
+          address: tAddress,
+          isForeign: tIsForeign || undefined,
+          identityDocument: tIdentityDocNumber
+            ? { number: tIdentityDocNumber.trim(), expiryDate: tIdentityDocExpiry || undefined }
+            : undefined,
+          residencePermit: tIsForeign && tPermitNumber
+            ? { number: tPermitNumber.trim(), validity: tPermitValidity.trim() || undefined }
+            : undefined,
+        });
       }
       // tenantMode === "select" — we'll link the existing tenant by ID in App.tsx
     }
@@ -1025,7 +1083,7 @@ export default function MasterDataWizard({
                     <input
                       type="checkbox"
                       checked={newOwnerIsCompany}
-                      onChange={(e) => setNewOwnerIsCompany(e.target.checked)}
+                      onChange={(e) => { setNewOwnerIsCompany(e.target.checked); if (e.target.checked) setNewOwnerGender(undefined); }}
                       className="w-4 h-4 accent-slate-900"
                     />
                     È una <strong>società</strong> (persona giuridica)
@@ -1221,6 +1279,8 @@ export default function MasterDataWizard({
                   </div>
                   <p className="text-[10px] text-slate-400 -mt-2">Servono per la formula "nato/a a ___" nei contratti di locazione generati.</p>
 
+                  <GenderToggle value={newOwnerGender} onChange={setNewOwnerGender} isCompany={newOwnerIsCompany} />
+
                   <AddressFields value={newOwnerStructuredAddress} onChange={setNewOwnerStructuredAddress} />
 
                   <Field label="IBAN per accrediti (facoltativo)">
@@ -1325,7 +1385,7 @@ export default function MasterDataWizard({
                         <input
                           type="checkbox"
                           checked={tIsCompany}
-                          onChange={(e) => setTIsCompany(e.target.checked)}
+                          onChange={(e) => { setTIsCompany(e.target.checked); if (e.target.checked) setTGender(undefined); }}
                           className="w-4 h-4 accent-slate-900"
                         />
                         È un'<strong>azienda</strong> (persona giuridica)
@@ -1396,6 +1456,84 @@ export default function MasterDataWizard({
                           className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
                         />
                       </Field>
+
+                      {/* CORREZIONE CC — TASK 2: parità con TenantsView.tsx (Regola 4) */}
+                      <div className="space-y-3">
+                        <GenderToggle value={tGender} onChange={setTGender} isCompany={tIsCompany} />
+
+                        {!tIsCompany && (
+                          <>
+                            <div className="grid grid-cols-2 gap-3">
+                              <Field label="Data di Nascita (facoltativo)">
+                                <input
+                                  type="date"
+                                  value={tBirthDate}
+                                  onChange={(e) => setTBirthDate(e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                />
+                              </Field>
+                              <Field label="Luogo di Nascita (facoltativo)">
+                                <input
+                                  type="text"
+                                  value={tBirthPlace}
+                                  onChange={(e) => setTBirthPlace(e.target.value)}
+                                  placeholder="es. Prato (PO)"
+                                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                />
+                              </Field>
+                            </div>
+
+                            <AddressFields value={tAddress} onChange={setTAddress} />
+
+                            <label className="flex items-center gap-2 text-sm text-slate-700">
+                              <input type="checkbox" checked={tIsForeign} onChange={(e) => setTIsForeign(e.target.checked)} />
+                              È cittadino/a straniero/a
+                            </label>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <Field label="Documento (n°) — facoltativo">
+                                <input
+                                  type="text"
+                                  value={tIdentityDocNumber}
+                                  onChange={(e) => setTIdentityDocNumber(e.target.value)}
+                                  placeholder="es. CA12345AA"
+                                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                />
+                              </Field>
+                              <Field label="Documento — scadenza (facoltativo)">
+                                <input
+                                  type="date"
+                                  value={tIdentityDocExpiry}
+                                  onChange={(e) => setTIdentityDocExpiry(e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                />
+                              </Field>
+                            </div>
+
+                            {tIsForeign && (
+                              <div className="grid grid-cols-2 gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                <Field label="Permesso di soggiorno (n°)">
+                                  <input
+                                    type="text"
+                                    value={tPermitNumber}
+                                    onChange={(e) => setTPermitNumber(e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                  />
+                                </Field>
+                                <Field label="Validità permesso">
+                                  <input
+                                    type="text"
+                                    value={tPermitValidity}
+                                    onChange={(e) => setTPermitValidity(e.target.value)}
+                                    placeholder="es. illimitata oppure 31/12/2027"
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                  />
+                                </Field>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
 
                       <Field label="Note">
                         <textarea
@@ -1644,6 +1782,24 @@ function SectionTitle({
       </div>
     </div>
   );
+}
+
+// CORREZIONE CC — cleanDeep ricorsiva: Firestore rifiuta i campi undefined anche
+// quando sono ANNIDATI dentro un oggetto (es. address.civico === undefined), non
+// solo al primo livello. La pulizia "cleanData" usata altrove nel progetto opera
+// solo al primo livello e non basterebbe per campi come address/identityDocument/
+// residencePermit dell'inquilino, introdotti in questa correzione.
+function cleanDeep(obj: any): any {
+  if (Array.isArray(obj)) return obj.map(cleanDeep).filter((x) => x !== undefined);
+  if (obj && typeof obj === "object" && !(obj instanceof Date)) {
+    const out: any = {};
+    Object.keys(obj).forEach((k) => {
+      const v = cleanDeep(obj[k]);
+      if (v !== undefined) out[k] = v;
+    });
+    return Object.keys(out).length ? out : undefined;
+  }
+  return obj === "" ? undefined : obj;
 }
 
 function Field({

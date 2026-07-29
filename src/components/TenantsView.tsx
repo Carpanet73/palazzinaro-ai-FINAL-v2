@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
+import GenderToggle from "./GenderToggle";
 import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
 import { 
@@ -108,6 +109,12 @@ export default function TenantsView({
   const [fiscalCode, setFiscalCode] = useState("");
   // CORREZIONE AA — data di nascita e indirizzo strutturato
   const [birthDate, setBirthDate] = useState("");
+  // CORREZIONE CC — birthPlace mancava completamente anche qui (solo birthDate era
+  // raccolto): senza questo, il generatore contratti non ha mai potuto scrivere
+  // "nato/a a ___" per l'inquilino creato dalla pagina dedicata. gender: stesso
+  // discorso, serve per le forme corrette (nato/a, conduttore/conduttrice).
+  const [birthPlace, setBirthPlace] = useState("");
+  const [gender, setGender] = useState<"M" | "F" | undefined>(undefined);
   const [address, setAddress] = useState<AddressValue>({});
   // CORREZIONE BO — documento d'identità e permesso di soggiorno, con scanner integrato
   const [isForeign, setIsForeign] = useState(false);
@@ -146,6 +153,8 @@ export default function TenantsView({
     setPhone("");
     setFiscalCode("");
     setBirthDate("");
+    setBirthPlace("");
+    setGender(undefined);
     setIsForeign(false);
     setIdentityDocument({});
     setResidencePermit({});
@@ -189,6 +198,8 @@ export default function TenantsView({
     setPhone(tenant.phone || "");
     setFiscalCode(tenant.fiscalCode || "");
     setBirthDate(tenant.birthDate || "");
+    setBirthPlace(tenant.birthPlace || "");
+    setGender(tenant.gender);
     setIsForeign(tenant.isForeign || false);
     setIdentityDocument(tenant.identityDocument || {});
     setResidencePermit(tenant.residencePermit || {});
@@ -347,6 +358,8 @@ export default function TenantsView({
         documents: guarantorDocuments
       } : null,
       birthDate: birthDate || "",
+      birthPlace: birthPlace.trim() || "",
+      gender: isCompany ? undefined : gender,
       address,
       isForeign,
       identityDocument,
@@ -1482,7 +1495,7 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsCompany(true)}
+                    onClick={() => { setIsCompany(true); setGender(undefined); }}
                     className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
                       isCompany
                         ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
@@ -1594,6 +1607,22 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                       className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Luogo di Nascita
+                    </label>
+                    <input
+                      type="text"
+                      value={birthPlace}
+                      onChange={(e) => setBirthPlace(e.target.value)}
+                      placeholder="es. Prato (PO)"
+                      className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Serve per la formula "nato/a a ___" nei contratti di locazione generati.</p>
+                  </div>
+
+                  <GenderToggle value={gender} onChange={setGender} isCompany={isCompany} className="mt-1" />
 
                   <AddressFields value={address} onChange={setAddress} />
 
