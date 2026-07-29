@@ -1,0 +1,361 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { collection, addDoc, updateDoc, doc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase";
+import { Contract, DeliveryReport, DeliveryReportItem } from "../types";
+
+// Data nel fuso locale (NO UTC: in Italia dopo le 22 darebbe il giorno prima).
+function todayLocalISO(): string {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+function formatEuro(n: number): string {
+  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n || 0);
+}
+// NOTA: non esiste una stripUndefined condivisa nel progetto (verificato — ogni handler
+// in App.tsx la reimplementa localmente), quindi teniamo questa versione locale, coerente
+// con il pattern già in uso ovunque altrove nel codice.
+function stripUndef(obj: any): any {
+  const out: any = {};
+  Object.keys(obj).forEach((k) => { if (obj[k] !== undefined) out[k] = obj[k]; });
+  return out;
+}
+
+const DEFAULT_CHECKLIST: Omit<DeliveryReportItem, "id">[] = [
+  { item: "Stato pareti", status: "Buono", notes: "" },
+  { item: "Pavimenti", status: "Buono", notes: "" },
+  { item: "Elettrodomestici", status: "Buono", notes: "" },
+  { item: "Infissi e serramenti", status: "Buono", notes: "" },
+  { item: "Chiavi consegnate", status: "Ottimo", notes: "" },
+  { item: "Letture contatori", status: "Buono", notes: "" },
+];
+const newChecklist = (): DeliveryReportItem[] =>
+  DEFAULT_CHECKLIST.map((c, i) => ({ ...c, id: `item_${i}_${Date.now()}` }));
+
+const LABEL = "block text-[10px] font-black uppercase text-slate-600 mb-1";
+const INPUT = "w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden";
+
+interface Props {
+  mode: "consegna" | "riconsegna";
+  contract: Contract;
+  user: { uid: string } | null;
+  showSuccess: (msg: string) => void;
+  onClose: () => void;
+  onSaved: (reportId: string) => void;
+}
+
+export default function DeliveryReportWizard({ mode, contract, user, showSuccess, onClose, onSaved }: Props) {
+  const isRiconsegna = mode === "riconsegna";
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [consegnaIniziale, setConsegnaIniziale] = useState<DeliveryReport | null>(null);
+  const [loadingRef, setLoadingRef] = useState(isRiconsegna);
+  const [reportDate, setReportDate] = useState<string>(todayLocalISO());
+  const [checklist, setChecklist] = useState<DeliveryReportItem[]>(newChecklist());
+  const [ownerName, setOwnerName] = useState(contract.ownerName || "");
+  const [tenantName, setTenantName] = useState(contract.tenantName || "");
+  const [ownerSigned, setOwnerSigned] = useState(false);
+  const [tenantSigned, setTenantSigned] = useState(false);
+  const [hasDamages, setHasDamages] = useState(false);
+  const [damagesDescription, setDamagesDescription] = useState("");
+  const [estimatedDamages, setEstimatedDamages] = useState<number>(0);
+  const [closeContract, setCloseContract] = useState(true);
+
+  // Recupero verbale di consegna iniziale (TASK 2a): prima contractId, fallback
+  // propertyId (legacy). Filtro type client-side per evitare indici compositi.
+  useEffect(() => {
+    if (!isRiconsegna) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        let snap = await getDocs(query(collection(db, "deliveryReports"), where("contractId", "==", contract.id)));
+        let found = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as DeliveryReport).find((r) => r.type === "consegna") || null;
+        if (!found && contract.propertyId) {
+          snap = await getDocs(query(collection(db, "deliveryReports"), where("propertyId", "==", contract.propertyId)));
+          found = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as DeliveryReport).find((r) => r.type === "consegna") || null;
+        }
+        if (!cancelled) setConsegnaIniziale(found);
+      } catch (e) { console.error("Errore recupero verbale di consegna:", e); }
+      finally { if (!cancelled) setLoadingRef(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [isRiconsegna, contract.id, contract.propertyId]);
+
+  // Calcolo deposito cauzionale (TASK 3b) — solo informativo
+  const deposito = contract.securityDepositAmount || 0;
+  const differenza = deposito - estimatedDamages;
+  const calcoloDeposito = useMemo(() => {
+    if (!hasDamages) return null;
+    return differenza >= 0
+      ? { tone: "restituire" as const, label: "Importo da restituire all'inquilino", value: differenza }
+      : { tone: "debito" as const, label: "Differenza a debito dell'inquilino", value: Math.abs(differenza) };
+  }, [hasDamages, differenza]);
+
+  const updateItem = (id: string, patch: Partial<DeliveryReportItem>) =>
+    setChecklist((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  const addRow = () => setChecklist((prev) => [...prev, { id: `item_new_${Date.now()}`, item: "", status: "Buono", notes: "" }]);
+  const removeRow = (id: string) => setChecklist((prev) => prev.filter((it) => it.id !== id));
+
+  const firmeOk = ownerSigned && tenantSigned && ownerName.trim() && tenantName.trim();
+  const danniOk = !hasDamages || damagesDescription.trim().length > 0;
+
+  const handleConfirm = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const nowIso = new Date().toISOString();
+
+      // 1) Verbale
+      const reportRef = await addDoc(collection(db, "deliveryReports"), {
+        ...stripUndef({
+          userId: user.uid,
+          propertyId: contract.propertyId,
+          contractId: contract.id,
+          tenantId: contract.tenantId,
+          type: mode,
+          date: reportDate,
+          checklist,
+          signatures: {
+            ownerSigned, ownerSignatureData: ownerName.trim(), ownerSignedAt: ownerSigned ? nowIso : undefined,
+            tenantSigned, tenantSignatureData: tenantName.trim(), tenantSignedAt: tenantSigned ? nowIso : undefined,
+          },
+          documentName: `Verbale_${mode}_${(contract.tenantName || "inquilino").replace(/\s+/g, "_")}_${reportDate}.pdf`,
+          hasDamages: isRiconsegna ? hasDamages : undefined,
+          damagesDescription: isRiconsegna && hasDamages ? damagesDescription.trim() : undefined,
+          estimatedDamagesAmount: isRiconsegna && hasDamages ? estimatedDamages : undefined,
+          // TODO: backup Drive quando l'integrazione sarà pronta
+          // driveBackupUrl: <URL restituito da Google Drive>
+        }),
+        createdAt: serverTimestamp(),
+      });
+
+      // 2) Branching danni (TASK 2d): LegalCase SOLO se danni
+      if (isRiconsegna && hasDamages) {
+        const legalRef = await addDoc(collection(db, "legalCases"), {
+          ...stripUndef({
+            userId: user.uid,
+            propertyId: contract.propertyId,
+            propertyName: contract.propertyName,
+            contractId: contract.id,
+            tenantName: contract.tenantName,
+            title: `Recupero Danni - ${contract.tenantName || "Inquilino"} - ${contract.propertyName || "Immobile"}`,
+            description:
+              `Danni riscontrati alla riconsegna del ${reportDate}.\n\n` +
+              `Descrizione danni: ${damagesDescription.trim()}\n` +
+              `Stima danni: ${formatEuro(estimatedDamages)}\n` +
+              `Deposito cauzionale: ${formatEuro(deposito)}\n` +
+              `Verbale di consegna iniziale: ${consegnaIniziale?.id || "non presente"}\n` +
+              `Verbale di riconsegna: ${reportRef.id}`,
+            status: "Active",
+            unpaidBalance: estimatedDamages > 0 ? estimatedDamages : undefined,
+            relatedDeliveryReportIds: [...(consegnaIniziale?.id ? [consegnaIniziale.id] : []), reportRef.id],
+          }),
+          createdAt: serverTimestamp(),
+        });
+        await updateDoc(doc(db, "deliveryReports", reportRef.id), { legalCaseId: legalRef.id });
+      }
+
+      // 3) Chiusura contratto + STOP flussi economici (regola 5). Riusa il pattern
+      //    di handleEarlyTerminateContract: cancella le righe fastClosing future
+      //    (Pending/Overdue con dueDate oltre la riconsegna), Indennità incluse.
+      if (isRiconsegna && closeContract) {
+        // CORREZIONE CB — se il contratto era già stato chiuso in precedenza con una
+        // causale REALE (es. Morosità/Sfratto tramite il wizard di Disdetta Anticipata),
+        // non sovrascriverla qui con una causale generica: si perderebbe l'informazione
+        // vera del perché il rapporto è finito. Valorizziamo le causali SOLO se il
+        // contratto non aveva già una earlyTerminationDate registrata (tipicamente il
+        // caso della sola scadenza naturale, dove queste righe non esistevano ancora).
+        const alreadyHadTermination = !!contract.earlyTerminationDate;
+        const contractPatch: any = alreadyHadTermination
+          ? { status: "Terminated" }
+          : {
+              status: "Terminated",
+              earlyTerminationDate: reportDate,
+              earlyTerminationParty: "Locatore",
+              earlyTerminationReason: hasDamages ? "GraveInadempimento" : "RisoluzioneConsensuale",
+              earlyTerminationNotes: hasDamages
+                ? `Riconsegna con danni (${formatEuro(estimatedDamages)} stimati). Verbale ${reportRef.id}.`
+                : `Riconsegna senza danni. Verbale ${reportRef.id}.`,
+            };
+        await updateDoc(doc(db, "contracts", contract.id), stripUndef(contractPatch));
+        // Data di riferimento per cancellare le righe future: usa la data di
+        // terminazione REALE già esistente se c'era, altrimenti la data della riconsegna.
+        const cutoffDate = contract.earlyTerminationDate || reportDate;
+        const fcSnap = await getDocs(query(collection(db, "fastClosing"), where("sourceId", "==", contract.id)));
+        const rowsToCancel = fcSnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .filter((fc: any) => fc.source === "contract" && (fc.status === "Pending" || fc.status === "Overdue") && new Date(fc.dueDate) > new Date(cutoffDate));
+        for (const row of rowsToCancel) {
+          await updateDoc(doc(db, "fastClosing", row.id), { status: "Cancelled" });
+        }
+      }
+
+      // 4) Se è CONSEGNA (TASK 1): contratto non più in attesa di verbale
+      if (!isRiconsegna) {
+        await updateDoc(doc(db, "contracts", contract.id), { deliveryReportPending: false });
+      }
+
+      showSuccess(isRiconsegna
+        ? (hasDamages ? "Verbale di riconsegna salvato e fascicolo legale creato." : "Verbale di riconsegna salvato correttamente.")
+        : "Verbale di consegna salvato. Relazione completa.");
+      onSaved(reportRef.id);
+      onClose();
+    } catch (error) {
+      console.error("Errore salvataggio verbale:", error);
+      alert("Errore durante il salvataggio del verbale. Riprova.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const totalSteps = isRiconsegna ? 4 : 2;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h2 className="text-lg font-black text-slate-900">{isRiconsegna ? "Verbale di Riconsegna" : "Verbale di Consegna"}</h2>
+            <p className="text-xs text-slate-500">{contract.propertyName || "Immobile"} · {contract.tenantName || "Inquilino"} · Step {step}/{totalSteps}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100">✕</button>
+        </div>
+
+        <div className="px-6 py-5">
+          {isRiconsegna && step === 1 && (
+            <div>
+              <h3 className="mb-1 text-sm font-black text-slate-800">Stato registrato alla Consegna iniziale</h3>
+              <p className="mb-4 text-xs text-slate-500">Riferimento per valutare i danni alla riconsegna.</p>
+              {loadingRef ? (
+                <p className="text-xs text-slate-400">Caricamento verbale di consegna…</p>
+              ) : consegnaIniziale ? (
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 text-left text-[10px] font-black uppercase text-slate-500">
+                      <tr><th className="px-3 py-2">Voce</th><th className="px-3 py-2">Stato</th><th className="px-3 py-2">Note</th></tr>
+                    </thead>
+                    <tbody>
+                      {consegnaIniziale.checklist.map((it) => (
+                        <tr key={it.id} className="border-t border-slate-100">
+                          <td className="px-3 py-2 font-medium text-slate-700">{it.item}</td>
+                          <td className="px-3 py-2 text-slate-600">{it.status}</td>
+                          <td className="px-3 py-2 text-slate-500">{it.notes || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400">Verbale del {consegnaIniziale.date}</p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                  Nessun verbale di consegna iniziale trovato. Puoi procedere, ma il confronto danni non avrà riferimento.
+                </div>
+              )}
+            </div>
+          )}
+
+          {((!isRiconsegna && step === 1) || (isRiconsegna && step === 2)) && (
+            <div>
+              <div className="mb-4">
+                <label className={LABEL}>Data verbale</label>
+                <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className={INPUT} />
+              </div>
+              <h3 className="mb-2 text-sm font-black text-slate-800">Checklist stato immobile</h3>
+              <div className="space-y-2">
+                {checklist.map((it) => (
+                  <div key={it.id} className="grid grid-cols-12 gap-2">
+                    <input className="col-span-5 text-xs border border-slate-200 rounded-lg px-3 py-2.5 outline-hidden" placeholder="Voce (es. Stato pareti)" value={it.item} onChange={(e) => updateItem(it.id, { item: e.target.value })} />
+                    <select className="col-span-3 text-xs border border-slate-200 rounded-lg px-2 py-2.5 outline-hidden" value={it.status} onChange={(e) => updateItem(it.id, { status: e.target.value })}>
+                      <option>Ottimo</option><option>Buono</option><option>Da riparare</option><option>Danneggiato</option>
+                    </select>
+                    <input className="col-span-3 text-xs border border-slate-200 rounded-lg px-3 py-2.5 outline-hidden" placeholder="Note" value={it.notes || ""} onChange={(e) => updateItem(it.id, { notes: e.target.value })} />
+                    <button onClick={() => removeRow(it.id)} className="col-span-1 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500" title="Rimuovi">🗑</button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addRow} className="mt-3 text-xs font-black text-amber-600 hover:text-amber-700">+ Aggiungi voce</button>
+
+              <div className="mt-6 grid grid-cols-2 gap-4">
+                <div>
+                  <label className={LABEL}>Firma Locatore (nome e cognome)</label>
+                  <input className={INPUT} value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
+                  <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                    <input type="checkbox" checked={ownerSigned} onChange={(e) => setOwnerSigned(e.target.checked)} />
+                    Il locatore conferma e firma
+                  </label>
+                </div>
+                <div>
+                  <label className={LABEL}>Firma Conduttore (nome e cognome)</label>
+                  <input className={INPUT} value={tenantName} onChange={(e) => setTenantName(e.target.value)} />
+                  <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                    <input type="checkbox" checked={tenantSigned} onChange={(e) => setTenantSigned(e.target.checked)} />
+                    Il conduttore conferma e firma
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isRiconsegna && step === 3 && (
+            <div>
+              <h3 className="mb-3 text-sm font-black text-slate-800">Sono stati riscontrati danni rispetto alla Consegna iniziale?</h3>
+              <div className="mb-4 flex gap-3">
+                <button onClick={() => setHasDamages(false)} className={`flex-1 rounded-xl border px-4 py-3 text-xs font-black ${!hasDamages ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-300 text-slate-600"}`}>No, nessun danno</button>
+                <button onClick={() => setHasDamages(true)} className={`flex-1 rounded-xl border px-4 py-3 text-xs font-black ${hasDamages ? "border-red-500 bg-red-50 text-red-700" : "border-slate-300 text-slate-600"}`}>Sì, ci sono danni</button>
+              </div>
+              {hasDamages && (
+                <div className="space-y-4">
+                  <div>
+                    <label className={LABEL}>Descrizione dei danni</label>
+                    <textarea rows={3} className={INPUT} value={damagesDescription} onChange={(e) => setDamagesDescription(e.target.value)} placeholder="Descrivi i danni riscontrati…" />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Stima danni (€) — solo informativa</label>
+                    <input type="number" min={0} step="0.01" className={INPUT} value={estimatedDamages || ""} onChange={(e) => setEstimatedDamages(parseFloat(e.target.value) || 0)} />
+                  </div>
+                  {calcoloDeposito && (
+                    <div className={`rounded-xl border px-4 py-3 text-xs ${calcoloDeposito.tone === "debito" ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+                      <div className="flex justify-between"><span>Deposito cauzionale</span><span className="font-black">{formatEuro(deposito)}</span></div>
+                      <div className="flex justify-between"><span>Danni stimati</span><span className="font-black">{formatEuro(estimatedDamages)}</span></div>
+                      <div className="mt-2 flex justify-between border-t border-current/20 pt-2 font-black"><span>{calcoloDeposito.label}</span><span>{formatEuro(calcoloDeposito.value)}</span></div>
+                      <p className="mt-2 text-[10px] opacity-80">Calcolo puramente informativo: compensazione/restituzione gestite dallo Studio Legale fuori dalla piattaforma.</p>
+                    </div>
+                  )}
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                    Alla conferma verrà creato automaticamente un fascicolo nell'Area Legale ("Recupero Danni") collegato a questo contratto e a entrambi i verbali.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {((!isRiconsegna && step === 2) || (isRiconsegna && step === 4)) && (
+            <div>
+              <h3 className="mb-3 text-sm font-black text-slate-800">Conferma finale</h3>
+              <ul className="space-y-2 text-xs text-slate-600">
+                <li>• Data verbale: <b>{reportDate}</b></li>
+                <li>• Voci checklist: <b>{checklist.length}</b></li>
+                <li>• Firme: <b>{ownerSigned ? ownerName : "locatore mancante"} / {tenantSigned ? tenantName : "conduttore mancante"}</b></li>
+                {isRiconsegna && (<li>• Danni: <b className={hasDamages ? "text-red-600" : "text-emerald-600"}>{hasDamages ? `Sì (${formatEuro(estimatedDamages)} stimati)` : "No"}</b></li>)}
+              </ul>
+              {isRiconsegna && (
+                <label className="mt-4 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+                  <input type="checkbox" checked={closeContract} onChange={(e) => setCloseContract(e.target.checked)} className="mt-0.5" />
+                  <span>Chiudi il contratto alla data di riconsegna (stato → <b>Terminated</b>) e cancella le rate future non scadute. Consigliato: evita righe contabili "fantasma" (regola 5).</span>
+                </label>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
+          <button onClick={step === 1 ? onClose : () => setStep((s) => s - 1)} className="rounded-lg px-4 py-2 text-xs font-black text-slate-600 hover:bg-slate-100">{step === 1 ? "Annulla" : "← Torna Indietro"}</button>
+          {step < totalSteps ? (
+            <button onClick={() => setStep((s) => s + 1)} disabled={((!isRiconsegna && step === 1) || (isRiconsegna && step === 2)) && !firmeOk} className="rounded-lg bg-amber-500 px-5 py-2 text-xs font-black text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40">Continua</button>
+          ) : (
+            <button onClick={handleConfirm} disabled={saving || !firmeOk || !danniOk} className="rounded-lg bg-amber-500 px-5 py-2 text-xs font-black text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40">{saving ? "Salvataggio…" : isRiconsegna && hasDamages ? "Conferma e crea fascicolo legale" : "Conferma e salva verbale"}</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

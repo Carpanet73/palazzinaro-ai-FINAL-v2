@@ -1501,7 +1501,10 @@ export default function App() {
   };
 
   // Contracts CRUD & Rent Dues Auto Generation!
-  const handleAddContract = async (data: any) => {
+  // CORREZIONE CA — TASK 1 (Verbale di Consegna tracciato): ora restituisce il
+  // contratto appena creato, per poter aprire subito il wizard del Verbale di
+  // Consegna con i dati giusti (contractId, propertyId, tenantId...).
+  const handleAddContract = async (data: any): Promise<any> => {
     if (!user) return;
     try {
       let finalPropertyId = data.propertyId;
@@ -1608,9 +1611,21 @@ export default function App() {
         }
       }
       showSuccess("Relazione contrattuale e scadenze create con successo!");
+      // CORREZIONE CA — restituisce il contratto appena creato (TASK 1: apre subito
+      // il wizard del Verbale di Consegna in modo tracciato, non bloccante)
+      return {
+        id: contractDoc.id,
+        propertyId: finalPropertyId,
+        propertyName: finalPropertyName,
+        tenantId: finalTenantId,
+        tenantName: finalTenantName,
+        ownerName: data.ownerName,
+        securityDepositAmount: data.securityDepositAmount
+      };
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.CREATE, "contracts");
       showError("Impossibile salvare la relazione: " + errInfo.error);
+      return null;
     }
   };
 
@@ -2960,6 +2975,8 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             tenants={tenants}
             condominiums={condominiums}
             owners={owners}
+            user={user}
+            showSuccess={showSuccess}
             deliveryReports={deliveryReports}
             fastClosing={fastClosing}
             onAddDeliveryReport={handleAddDeliveryReport}

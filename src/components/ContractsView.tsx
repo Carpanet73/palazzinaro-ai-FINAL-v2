@@ -7,19 +7,25 @@ import {
 } from "lucide-react";
 import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner, FastClosingItem } from "../types";
 import ContractGeneratorWizard from "./ContractGeneratorWizard";
+import DeliveryReportWizard from "./DeliveryReportWizard";
 
 interface ContractsViewProps {
   contracts: Contract[];
   properties: Property[];
   tenants: Tenant[];
   condominiums: Condominium[];
+  // CORREZIONE CA — serve a DeliveryReportWizard per le scritture Firestore (userId)
+  user: { uid: string } | null;
+  showSuccess: (msg: string) => void;
   owners?: Owner[]; // CORREZIONE BQ — per il Wizard di generazione contratti
   deliveryReports?: DeliveryReport[];
   // CORREZIONE BX — per il Mastrino Contabile (canoni e scadenze) nella pagina di dettaglio
   fastClosing?: FastClosingItem[];
+  // CORREZIONE CA — TASK 1: ora restituisce il contratto creato (Promise<any>),
+  // serve per aprire subito il Verbale di Consegna tracciato con i dati giusti.
   onAddContract: (
     contract: Omit<Contract, "id" | "userId" | "createdAt"> & { newProperty?: any; newTenant?: any }
-  ) => Promise<void>;
+  ) => Promise<any>;
   onEditContract: (id: string, contract: Partial<Contract>) => Promise<void>;
   // CORREZIONE BZ — Disdetta Anticipata: a differenza di onEditContract, cancella anche le
   // righe Fast Closing future già generate (vedi handleEarlyTerminateContract in App.tsx)
@@ -42,6 +48,8 @@ export default function ContractsView({
   properties,
   tenants,
   condominiums,
+  user,
+  showSuccess,
   owners = [],
   deliveryReports = [],
   fastClosing = [],
@@ -72,6 +80,22 @@ export default function ContractsView({
   const [notes, setNotes] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [isBareOwnership, setIsBareOwnership] = useState(false);
+  // CORREZIONE CA — TASK 3a: deposito cauzionale nel wizard di creazione contratto
+  const [securityDepositAmount, setSecurityDepositAmount] = useState<number>(0);
+  const [securityDepositMonths, setSecurityDepositMonths] = useState<number>(0);
+  const [depositManuallyEdited, setDepositManuallyEdited] = useState(false);
+  // CORREZIONE CA — TASK 1: apre il Verbale di Consegna (tracciato, non bloccante) subito
+  // dopo la creazione di un nuovo contratto
+  const [contractAppenaCreato, setContractAppenaCreato] = useState<Contract | null>(null);
+  // CORREZIONE CA — TASK 2: apre la procedura guidata del Verbale di Riconsegna dalla
+  // pagina di dettaglio del contratto
+  const [showRiconsegnaWizard, setShowRiconsegnaWizard] = useState(false);
+
+  // Ricalcolo automatico del deposito (TASK 3a): solo se l'utente non lo ha editato a mano
+  const handleDepositMonthsChange = (m: number) => {
+    setSecurityDepositMonths(m);
+    if (!depositManuallyEdited) setSecurityDepositAmount((rentAmount || 0) * m);
+  };
 
   // Guided Relationship Wizard state
   const [wizardStep, setWizardStep] = useState(0); // 0: OCR scan, 1: Property, 2: Tenant, 3: Contract parameters, 4: Summary
@@ -497,6 +521,9 @@ export default function ContractsView({
     setNotes("");
     setOwnerName("");
     setIsBareOwnership(false);
+    setSecurityDepositAmount(0);
+    setSecurityDepositMonths(0);
+    setDepositManuallyEdited(false);
 
     // Clear inline states
     setNewPropName("");
@@ -678,7 +705,10 @@ export default function ContractsView({
       status,
       notes,
       ownerName: ownerName || (wizardPropertyMode === "create" ? newPropOwner : linkedProp?.owner) || "Proprietario",
-      isBareOwnership: isBareOwnership || (wizardPropertyMode === "create" ? newPropIsBare : (linkedProp?.isBareOwnership || false))
+      isBareOwnership: isBareOwnership || (wizardPropertyMode === "create" ? newPropIsBare : (linkedProp?.isBareOwnership || false)),
+      // CORREZIONE CA — TASK 3a: deposito cauzionale
+      securityDepositMonths: securityDepositMonths > 0 ? securityDepositMonths : undefined,
+      securityDepositAmount: securityDepositAmount > 0 ? securityDepositAmount : undefined
     };
 
     if (wizardPropertyMode === "create") {
@@ -726,7 +756,12 @@ export default function ContractsView({
           isBareOwnership
         });
       } else {
-        await onAddContract(payload);
+        const created = await onAddContract(payload);
+        // CORREZIONE CA — TASK 1: Verbale di Consegna TRACCIATO, NON bloccante (il
+        // contratto è già salvato in ogni caso). TODO: rendere bloccante se richiesto in futuro.
+        if (created && created.id) {
+          setContractAppenaCreato(created);
+        }
 
         // Store the original scan as physical documentation for this newly created relation
         if (uploadedScanName && payload.propertyId) {
@@ -804,6 +839,17 @@ export default function ContractsView({
             >
               <span>⚠️</span>
               <span>Disdetta Anticipata del Contratto</span>
+            </button>
+          )}
+          {/* CORREZIONE CA — TASK 2: Verbale di Riconsegna, nascosto se già registrato
+              per questo contratto (non ha senso farne due) */}
+          {!deliveryReports.some(dr => dr.contractId === selectedContract.id && dr.type === "riconsegna") && (
+            <button
+              onClick={() => setShowRiconsegnaWizard(true)}
+              className="inline-flex items-center space-x-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-extrabold px-4 py-2.5 rounded-xl text-xs transition-colors border-2 border-amber-150 shadow-sm cursor-pointer self-start"
+            >
+              <span>📋</span>
+              <span>Registra Verbale di Riconsegna</span>
             </button>
           )}
         </div>
@@ -1538,6 +1584,18 @@ export default function ContractsView({
             </div>
           </div>
         )}
+
+        {/* CORREZIONE CA — TASK 2: mount del wizard Verbale di Riconsegna */}
+        {showRiconsegnaWizard && (
+          <DeliveryReportWizard
+            mode="riconsegna"
+            contract={selectedContract}
+            user={user}
+            showSuccess={showSuccess}
+            onClose={() => setShowRiconsegnaWizard(false)}
+            onSaved={() => setShowRiconsegnaWizard(false)}
+          />
+        )}
       </div>
     );
   }
@@ -2251,6 +2309,39 @@ export default function ContractsView({
                     </div>
                   </div>
 
+                  {/* CORREZIONE CA — TASK 3a: Deposito Cauzionale */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Mensilità Anticipate (Deposito)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="3"
+                        value={securityDepositMonths || ""}
+                        onChange={(e) => handleDepositMonthsChange(Number(e.target.value))}
+                        className="w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Deposito Cauzionale (€)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="2550"
+                        value={securityDepositAmount || ""}
+                        onChange={(e) => { setDepositManuallyEdited(true); setSecurityDepositAmount(Number(e.target.value)); }}
+                        className="w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <p className="text-[10px] text-slate-400 leading-tight">
+                        Se inserisci le mensilità, l'importo si calcola in automatico (canone × mensilità) e resta poi modificabile a mano.
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Data Inizio Decorrenza *</label>
@@ -2490,6 +2581,19 @@ export default function ContractsView({
             </form>
           </div>
         </div>
+      )}
+
+      {/* CORREZIONE CA — TASK 1: Verbale di Consegna TRACCIATO (non bloccante), si apre
+          subito dopo la creazione di un nuovo contratto */}
+      {contractAppenaCreato && (
+        <DeliveryReportWizard
+          mode="consegna"
+          contract={contractAppenaCreato}
+          user={user}
+          showSuccess={showSuccess}
+          onClose={() => setContractAppenaCreato(null)}
+          onSaved={() => setContractAppenaCreato(null)}
+        />
       )}
 
       {/* 4. MODALE CREAZIONE/MODIFICA VERBALE CONSEGNA O RICONSEGNA */}

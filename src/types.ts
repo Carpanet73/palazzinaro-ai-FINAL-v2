@@ -326,6 +326,9 @@ export interface Contract {
   // eventuale compensazione rispetto ai danni contestati (calcolo, non negoziazione).
   securityDepositAmount?: number;
   securityDepositMonths?: number;
+  // CORREZIONE CA — TASK 1 (verbale di consegna tracciato, non bloccante): true finché
+  // il Verbale di Consegna non viene compilato dopo la creazione del contratto.
+  deliveryReportPending?: boolean;
 }
 
 export interface CondoRate {
@@ -510,6 +513,9 @@ export interface LegalCase {
   filesToAssign?: boolean;
   contractDetails?: any;
   pastRequests?: any[];
+  // CORREZIONE CA — TASK 2d: collega il fascicolo ai verbali (consegna + riconsegna)
+  // usati come prova del danno contestato.
+  relatedDeliveryReportIds?: string[];
   futureExpirations?: any[];
   // CORREZIONE AU — traccia quando e a quale email è stato inviato il fascicolo allo studio legale
   dossierSentAt?: string;
@@ -629,6 +635,9 @@ export interface DeliveryReport {
   hasDamages?: boolean;
   damagesDescription?: string;
   legalCaseId?: string;
+  // CORREZIONE CA — TASK 3b: stima € danni inserita nella riconsegna, usata per il
+  // calcolo informativo di restituzione/compensazione del deposito cauzionale.
+  estimatedDamagesAmount?: number;
   driveBackupUrl?: string;
 }
 
