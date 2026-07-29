@@ -21,6 +21,12 @@ interface ContractsViewProps {
     contract: Omit<Contract, "id" | "userId" | "createdAt"> & { newProperty?: any; newTenant?: any }
   ) => Promise<void>;
   onEditContract: (id: string, contract: Partial<Contract>) => Promise<void>;
+  // CORREZIONE BZ — Disdetta Anticipata: a differenza di onEditContract, cancella anche le
+  // righe Fast Closing future già generate (vedi handleEarlyTerminateContract in App.tsx)
+  onEarlyTerminateContract?: (
+    contractId: string,
+    data: { date: string; party: "Locatore" | "Conduttore"; reason: string; notes?: string }
+  ) => Promise<void>;
   onDeleteContract: (id: string) => Promise<void>;
   onAddProperty?: (property: Omit<Property, "id" | "userId" | "createdAt">) => Promise<void>;
   onAddTenant?: (tenant: Omit<Tenant, "id" | "userId" | "createdAt">) => Promise<void>;
@@ -41,6 +47,7 @@ export default function ContractsView({
   fastClosing = [],
   onAddContract,
   onEditContract,
+  onEarlyTerminateContract,
   onDeleteContract,
   onAddProperty,
   onAddTenant,
@@ -806,7 +813,7 @@ export default function ContractsView({
             <span className="font-black uppercase tracking-wide">⚠️ Contratto chiuso anticipatamente</span> il{" "}
             {new Date(selectedContract.earlyTerminationDate).toLocaleDateString("it-IT")}.
             {selectedContract.earlyTerminationNotes && <> Note: {selectedContract.earlyTerminationNotes}</>}
-            {" "}Le righe contabili continuano come Indennità di Occupazione fino al Verbale di Riconsegna.
+            {" "}Le righe contabili future non ancora scadute sono state annullate.
           </div>
         )}
 
@@ -1482,9 +1489,10 @@ export default function ContractsView({
                 <strong>{new Date(disdettaForm.date).toLocaleDateString("it-IT")}</strong>.
               </p>
               <p className="text-xs text-slate-500">
-                Da questo momento le righe contabili in Fast Closing continueranno come
-                <strong> Indennità di Occupazione</strong> (stesso importo) fino alla registrazione
-                del Verbale di Riconsegna. Questa azione è seria e va confermata consapevolmente.
+                Da questo momento tutte le righe contabili future non ancora scadute per
+                questo contratto in Fast Closing verranno <strong>annullate</strong> — l'Indennità
+                di Occupazione riguarda solo la scadenza naturale del contratto, non la disdetta
+                anticipata. Questa azione è seria e va confermata consapevolmente.
               </p>
               <div className="flex justify-end space-x-3 pt-2">
                 <button
@@ -1495,13 +1503,23 @@ export default function ContractsView({
                 </button>
                 <button
                   onClick={async () => {
-                    await onEditContract(selectedContract.id, {
-                      status: "Terminated",
-                      earlyTerminationDate: disdettaForm.date,
-                      earlyTerminationParty: disdettaForm.party,
-                      earlyTerminationReason: disdettaForm.reason,
-                      earlyTerminationNotes: disdettaForm.notes || undefined
-                    });
+                    if (onEarlyTerminateContract) {
+                      await onEarlyTerminateContract(selectedContract.id, {
+                        date: disdettaForm.date,
+                        party: disdettaForm.party,
+                        reason: disdettaForm.reason,
+                        notes: disdettaForm.notes || undefined
+                      });
+                    } else {
+                      // Fallback se la prop non è disponibile (non dovrebbe succedere)
+                      await onEditContract(selectedContract.id, {
+                        status: "Terminated",
+                        earlyTerminationDate: disdettaForm.date,
+                        earlyTerminationParty: disdettaForm.party,
+                        earlyTerminationReason: disdettaForm.reason as any,
+                        earlyTerminationNotes: disdettaForm.notes || undefined
+                      });
+                    }
                     setDisdettaWizardStep(0);
                     setSelectedContractDetails({
                       ...selectedContract,

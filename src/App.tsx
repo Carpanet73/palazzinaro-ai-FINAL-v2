@@ -1629,6 +1629,48 @@ export default function App() {
     }
   };
 
+  // CORREZIONE BZ — Disdetta Anticipata (29/07/2026): a differenza della scadenza naturale
+  // (che attiva l'Indennità di Occupazione), la disdetta anticipata deve CANCELLARE le righe
+  // canone future già generate alla creazione del contratto (tutte le rate dell'intera
+  // durata vengono create subito, vedi handleAddContract) — altrimenti restano lì a
+  // "prendere polvere" e rompono l'aderenza tra mastrini e realtà (principio cardine,
+  // sezione 2 delle regole di progetto).
+  const handleEarlyTerminateContract = async (
+    contractId: string,
+    data: { date: string; party: "Locatore" | "Conduttore"; reason: string; notes?: string }
+  ) => {
+    try {
+      const cleanData: any = {};
+      const contractUpdate = {
+        status: "Terminated",
+        earlyTerminationDate: data.date,
+        earlyTerminationParty: data.party,
+        earlyTerminationReason: data.reason,
+        earlyTerminationNotes: data.notes
+      };
+      Object.keys(contractUpdate).forEach((key) => {
+        if ((contractUpdate as any)[key] !== undefined) cleanData[key] = (contractUpdate as any)[key];
+      });
+      await updateDoc(doc(db, "contracts", contractId), cleanData);
+
+      // Cancella tutte le righe Fast Closing future non ancora saldate per questo contratto
+      const rowsToCancel = fastClosing.filter(
+        fc => fc.source === "contract" &&
+              fc.sourceId === contractId &&
+              (fc.status === "Pending" || fc.status === "Overdue") &&
+              new Date(fc.dueDate) > new Date(data.date)
+      );
+      for (const row of rowsToCancel) {
+        await updateDoc(doc(db, "fastClosing", row.id), { status: "Cancelled" });
+      }
+
+      showSuccess(`Contratto chiuso anticipatamente. ${rowsToCancel.length} righe contabili future annullate.`);
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `contracts/${contractId}`);
+      showError("Impossibile registrare la disdetta anticipata: " + errInfo.error);
+    }
+  };
+
   const handleDeleteContract = async (id: string) => {
     try {
       await deleteDoc(doc(db, "contracts", id));
@@ -2925,6 +2967,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             onDeleteDeliveryReport={handleDeleteDeliveryReport}
             onAddContract={handleAddContract}
             onEditContract={handleEditContract}
+            onEarlyTerminateContract={handleEarlyTerminateContract}
             onDeleteContract={handleDeleteContract}
             onAddProperty={handleAddProperty}
             onAddTenant={handleAddTenant}
