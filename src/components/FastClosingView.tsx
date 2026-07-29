@@ -877,10 +877,14 @@ export default function FastClosingView({
       // Riconsegna registrato), il canone deve continuare a fluire regolarmente nel Fast
       // Closing ogni mese, semplicemente cambiando nome in "Indennità di Occupazione" e
       // mantenendo lo stesso importo — finché non viene registrata la riconsegna.
+      // CORREZIONE BY — Estesa anche alla Disdetta Anticipata (29/07/2026): se il contratto
+      // è stato chiuso in anticipo (earlyTerminationDate), vale lo stesso identico
+      // meccanismo della scadenza naturale — cambia solo la data che fa scattare il switch.
       const today = new Date();
       for (const contract of contracts) {
-        if (!contract.endDate || !contract.rentAmount) continue;
-        const contractEnded = new Date(contract.endDate) < today;
+        const effectiveEndDate = contract.earlyTerminationDate || contract.endDate;
+        if (!effectiveEndDate || !contract.rentAmount) continue;
+        const contractEnded = new Date(effectiveEndDate) < today;
         if (!contractEnded) continue;
 
         const hasRiconsegna = deliveryReports.some(
@@ -906,7 +910,9 @@ export default function FastClosingView({
         const dueDate = `${nextMonthKey}-01`;
         await onAddClosingItem({
           title: `Indennità di Occupazione - ${contract.tenantName}`,
-          description: `Contratto scaduto il ${new Date(contract.endDate).toLocaleDateString("it-IT")} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`,
+          description: contract.earlyTerminationDate
+            ? `Contratto chiuso anticipatamente il ${new Date(contract.earlyTerminationDate).toLocaleDateString("it-IT")} (disdetta) ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`
+            : `Contratto scaduto il ${new Date(contract.endDate).toLocaleDateString("it-IT")} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`,
           amount: contract.rentAmount,
           dueDate,
           source: "contract",

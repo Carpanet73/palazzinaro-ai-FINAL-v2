@@ -299,6 +299,33 @@ export interface Contract {
   createdAt: string;
   splitMethod?: "Percentage" | "Fixed" | "percentage" | "fixed";
   fixedTenantAmount?: number;
+  // CORREZIONE BY — Disdetta Anticipata (chiarito da Massimo il 29/07/2026): quando il
+  // contratto viene chiuso anticipatamente (non per scadenza naturale), queste righe
+  // registrano causale/data/note. Attiva lo stesso meccanismo "Indennità di Occupazione"
+  // già esistente per la scadenza naturale (vedi FastClosingView.tsx) — le righe contabili
+  // NON si fermano di colpo, cambiano solo nome/natura, fino al Verbale di Riconsegna.
+  earlyTerminationDate?: string; // YYYY-MM-DD
+  earlyTerminationParty?: "Locatore" | "Conduttore";
+  earlyTerminationReason?:
+    | "MorositaSfratto"
+    | "GraveInadempimento"
+    | "RecessoLavoro"
+    | "RecessoSalute"
+    | "RecessoImmobileInabitabile"
+    | "DisdettaUsoPersonaleFamiliare"
+    | "DisdettaVendita"
+    | "DisdettaRistrutturazione"
+    | "DisdettaAltroAlloggioDisponibile"
+    | "DisdettaMancataOccupazione"
+    | "DecessoConduttore"
+    | "RisoluzioneConsensuale"
+    | "Altro";
+  earlyTerminationNotes?: string;
+  // CORREZIONE BY — Deposito Cauzionale, versato alla creazione del contratto in un certo
+  // numero di mensilità anticipate. Alla riconsegna finale supporta la restituzione con
+  // eventuale compensazione rispetto ai danni contestati (calcolo, non negoziazione).
+  securityDepositAmount?: number;
+  securityDepositMonths?: number;
 }
 
 export interface CondoRate {
@@ -595,6 +622,14 @@ export interface DeliveryReport {
   };
   documentName?: string; // Completed PDF/report name
   createdAt: string;
+  // CORREZIONE BY — per la procedura guidata di Verbale di Riconsegna (29/07/2026): se
+  // vengono riscontrati danni rispetto al Verbale di Consegna iniziale, origina un
+  // fascicolo per l'Area Legale (collegato qui tramite legalCaseId); in ogni caso il
+  // fascicolo va salvato su Drive (driveBackupUrl, quando l'integrazione sarà pronta).
+  hasDamages?: boolean;
+  damagesDescription?: string;
+  legalCaseId?: string;
+  driveBackupUrl?: string;
 }
 
 

@@ -99,6 +99,15 @@ export default function ContractsView({
   // separato da selectedContractId (che resta per la logica pre-esistente invariata dei
   // pannelli/modali già collegati ad esso, es. Verbale di Consegna).
   const [selectedContractDetails, setSelectedContractDetails] = useState<Contract | null>(null);
+  // CORREZIONE BY — Wizard Disdetta Anticipata: step 0 = chiuso, 1 = form (causale/data/note),
+  // 2 = doppia conferma (verifica di volontarietà) prima di scrivere davvero sul contratto.
+  const [disdettaWizardStep, setDisdettaWizardStep] = useState<0 | 1 | 2>(0);
+  const [disdettaForm, setDisdettaForm] = useState<{
+    party: "Locatore" | "Conduttore";
+    reason: string;
+    date: string;
+    notes: string;
+  }>({ party: "Locatore", reason: "", date: new Date().toISOString().split("T")[0], notes: "" });
   // CORREZIONE BT — invio del contratto generato (documento gia' agli atti)
   const [sendPanelOpenForId, setSendPanelOpenForId] = useState<string | null>(null);
   const [sendEmailInput, setSendEmailInput] = useState("");
@@ -775,7 +784,31 @@ export default function ContractsView({
             <ArrowLeft size={14} />
             <span>Torna ai Contratti</span>
           </button>
+          {/* CORREZIONE BY — Pulsante Disdetta Anticipata: nascosto se il contratto è già
+              terminato/chiuso (non ha senso disdire due volte). Apre la procedura guidata
+              a doppia conferma. */}
+          {selectedContract.status !== "Terminated" && !selectedContract.earlyTerminationDate && (
+            <button
+              onClick={() => {
+                setDisdettaForm({ party: "Locatore", reason: "", date: new Date().toISOString().split("T")[0], notes: "" });
+                setDisdettaWizardStep(1);
+              }}
+              className="inline-flex items-center space-x-2 bg-rose-50 hover:bg-rose-100 text-rose-800 font-extrabold px-4 py-2.5 rounded-xl text-xs transition-colors border-2 border-rose-150 shadow-sm cursor-pointer self-start"
+            >
+              <span>⚠️</span>
+              <span>Disdetta Anticipata del Contratto</span>
+            </button>
+          )}
         </div>
+
+        {selectedContract.earlyTerminationDate && (
+          <div className="bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 text-xs text-rose-900">
+            <span className="font-black uppercase tracking-wide">⚠️ Contratto chiuso anticipatamente</span> il{" "}
+            {new Date(selectedContract.earlyTerminationDate).toLocaleDateString("it-IT")}.
+            {selectedContract.earlyTerminationNotes && <> Note: {selectedContract.earlyTerminationNotes}</>}
+            {" "}Le righe contabili continuano come Indennità di Occupazione fino al Verbale di Riconsegna.
+          </div>
+        )}
 
         <div className="bg-amber-50/40 border-2 border-amber-200 rounded-3xl p-6 shadow-xs space-y-6" id="contract-detail-area">
             <div>
@@ -1336,6 +1369,157 @@ export default function ContractsView({
               })()}
             </div>
         </div>
+
+        {/* CORREZIONE BY — Wizard Disdetta Anticipata, 2 passaggi con doppia verifica di
+            volontarietà prima di scrivere la chiusura anticipata sul contratto */}
+        {disdettaWizardStep === 1 && (
+          <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
+              <h3 className="font-black text-slate-900 text-lg flex items-center space-x-2">
+                <span>⚠️</span> <span>Disdetta Anticipata del Contratto</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Registra la chiusura anticipata di questo contratto. Le tempistiche procedurali
+                (preavvisi, termini di grazia) restano a tuo carico fuori dalla piattaforma — qui
+                registriamo solo causale e data effettiva.
+              </p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Chi recede/disdice</label>
+                  <select
+                    value={disdettaForm.party}
+                    onChange={(e) => setDisdettaForm({ ...disdettaForm, party: e.target.value as "Locatore" | "Conduttore", reason: "" })}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5"
+                  >
+                    <option value="Locatore">Locatore (proprietario)</option>
+                    <option value="Conduttore">Conduttore (inquilino)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Causale</label>
+                  <select
+                    value={disdettaForm.reason}
+                    onChange={(e) => setDisdettaForm({ ...disdettaForm, reason: e.target.value })}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5"
+                  >
+                    <option value="">— Seleziona —</option>
+                    <option value="MorositaSfratto">Morosità / Sfratto</option>
+                    <option value="GraveInadempimento">Grave inadempimento contrattuale</option>
+                    {disdettaForm.party === "Conduttore" && (
+                      <>
+                        <option value="RecessoLavoro">Recesso per gravi motivi — lavoro (trasferimento/perdita impiego)</option>
+                        <option value="RecessoSalute">Recesso per gravi motivi — salute</option>
+                        <option value="RecessoImmobileInabitabile">Recesso per gravi motivi — immobile con gravi difetti non risolti</option>
+                      </>
+                    )}
+                    {disdettaForm.party === "Locatore" && (
+                      <>
+                        <option value="DisdettaUsoPersonaleFamiliare">Disdetta — uso personale/familiare</option>
+                        <option value="DisdettaVendita">Disdetta — vendita immobile</option>
+                        <option value="DisdettaRistrutturazione">Disdetta — ristrutturazione/demolizione</option>
+                        <option value="DisdettaAltroAlloggioDisponibile">Disdetta — altro alloggio disponibile per l'inquilino</option>
+                        <option value="DisdettaMancataOccupazione">Disdetta — mancata occupazione da parte dell'inquilino</option>
+                      </>
+                    )}
+                    <option value="DecessoConduttore">Decesso del conduttore</option>
+                    <option value="RisoluzioneConsensuale">Risoluzione consensuale / disdetta comunicata</option>
+                    <option value="Altro">Altro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Data effettiva di chiusura</label>
+                  <input
+                    type="date"
+                    value={disdettaForm.date}
+                    onChange={(e) => setDisdettaForm({ ...disdettaForm, date: e.target.value })}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Note (facoltative)</label>
+                  <textarea
+                    value={disdettaForm.notes}
+                    onChange={(e) => setDisdettaForm({ ...disdettaForm, notes: e.target.value })}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5"
+                    rows={2}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  onClick={() => setDisdettaWizardStep(0)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Annulla
+                </button>
+                <button
+                  disabled={!disdettaForm.reason || !disdettaForm.date}
+                  onClick={() => setDisdettaWizardStep(2)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  Continua →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {disdettaWizardStep === 2 && (
+          <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl border-2 border-rose-200">
+              <h3 className="font-black text-rose-900 text-lg flex items-center space-x-2">
+                <span>🛑</span> <span>Conferma Definitiva</span>
+              </h3>
+              <p className="text-sm text-slate-700">
+                Stai per registrare la <strong>chiusura anticipata</strong> del contratto con{" "}
+                <strong>{selectedContract.tenantName}</strong> per l'immobile{" "}
+                <strong>{selectedContract.propertyName}</strong>, con effetto dal{" "}
+                <strong>{new Date(disdettaForm.date).toLocaleDateString("it-IT")}</strong>.
+              </p>
+              <p className="text-xs text-slate-500">
+                Da questo momento le righe contabili in Fast Closing continueranno come
+                <strong> Indennità di Occupazione</strong> (stesso importo) fino alla registrazione
+                del Verbale di Riconsegna. Questa azione è seria e va confermata consapevolmente.
+              </p>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  onClick={() => setDisdettaWizardStep(1)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  ← Torna Indietro
+                </button>
+                <button
+                  onClick={async () => {
+                    await onEditContract(selectedContract.id, {
+                      status: "Terminated",
+                      earlyTerminationDate: disdettaForm.date,
+                      earlyTerminationParty: disdettaForm.party,
+                      earlyTerminationReason: disdettaForm.reason,
+                      earlyTerminationNotes: disdettaForm.notes || undefined
+                    });
+                    setDisdettaWizardStep(0);
+                    setSelectedContractDetails({
+                      ...selectedContract,
+                      status: "Terminated",
+                      earlyTerminationDate: disdettaForm.date,
+                      earlyTerminationParty: disdettaForm.party,
+                      earlyTerminationReason: disdettaForm.reason as any,
+                      earlyTerminationNotes: disdettaForm.notes || undefined
+                    });
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+                >
+                  Confermo, Chiudi il Contratto
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
