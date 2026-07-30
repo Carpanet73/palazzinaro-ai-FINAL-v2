@@ -1242,8 +1242,11 @@ export default function App() {
   const handleAddProperty = async (data: any) => {
     if (!user) return;
     try {
+      // CORREZIONE CG — stesso bug ricorrente: pulizia undefined prima di addDoc
+      const propClean: any = {};
+      Object.entries(data).forEach(([key, value]) => { if (value !== undefined) propClean[key] = value; });
       await addDoc(collection(db, "properties"), {
-        ...data,
+        ...propClean,
         userId: user.uid,
         createdAt: serverTimestamp()
       });
@@ -1256,7 +1259,10 @@ export default function App() {
 
   const handleEditProperty = async (id: string, data: any) => {
     try {
-      await updateDoc(doc(db, "properties", id), data);
+      // CORREZIONE CG — stesso bug ricorrente: pulizia undefined prima di updateDoc
+      const cleanData: any = {};
+      Object.entries(data).forEach(([key, value]) => { if (value !== undefined) cleanData[key] = value; });
+      await updateDoc(doc(db, "properties", id), cleanData);
       showSuccess("Immobile aggiornato con successo!");
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.UPDATE, `properties/${id}`);
@@ -1335,8 +1341,11 @@ export default function App() {
   const handleAddTenant = async (data: any) => {
     if (!user) return;
     try {
+      // CORREZIONE CG — stesso bug ricorrente: pulizia undefined prima di addDoc
+      const tenantClean: any = {};
+      Object.entries(data).forEach(([key, value]) => { if (value !== undefined) tenantClean[key] = value; });
       await addDoc(collection(db, "tenants"), {
-        ...data,
+        ...tenantClean,
         userId: user.uid,
         createdAt: serverTimestamp()
       });
@@ -1349,7 +1358,10 @@ export default function App() {
 
   const handleEditTenant = async (id: string, data: any) => {
     try {
-      await updateDoc(doc(db, "tenants", id), data);
+      // CORREZIONE CG — stesso bug ricorrente: pulizia undefined prima di updateDoc
+      const cleanData: any = {};
+      Object.entries(data).forEach(([key, value]) => { if (value !== undefined) cleanData[key] = value; });
+      await updateDoc(doc(db, "tenants", id), cleanData);
       showSuccess("Inquilino aggiornato con successo!");
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.UPDATE, `tenants/${id}`);
@@ -1700,8 +1712,11 @@ export default function App() {
   const handleAddCondominium = async (data: any) => {
     if (!user) return;
     try {
+      // CORREZIONE CG — stesso bug già visto altrove: pulizia undefined prima di addDoc
+      const condoDataClean: any = {};
+      Object.entries(data).forEach(([key, value]) => { if (value !== undefined) condoDataClean[key] = value; });
       const condoDoc = await addDoc(collection(db, "condominiums"), {
-        ...data,
+        ...condoDataClean,
         userId: user.uid,
         createdAt: serverTimestamp()
       });
@@ -1733,7 +1748,10 @@ export default function App() {
 
   const handleEditCondominium = async (id: string, data: any) => {
     try {
-      await updateDoc(doc(db, "condominiums", id), data);
+      // CORREZIONE CG — stesso bug ricorrente: pulizia undefined prima di updateDoc
+      const cleanData: any = {};
+      Object.entries(data).forEach(([key, value]) => { if (value !== undefined) cleanData[key] = value; });
+      await updateDoc(doc(db, "condominiums", id), cleanData);
       showSuccess("Condominio modificato con successo!");
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.UPDATE, `condominiums/${id}`);
@@ -1789,8 +1807,12 @@ export default function App() {
       // 1. Crea condominio se nuovo
       let condominiumId: string | undefined = p.condominiumId;
       if (c) {
+        // CORREZIONE CG — stesso bug già corretto altrove: Firestore rifiuta categoricamente
+        // qualunque campo undefined in una scrittura (qui capitava con "notes" lasciato vuoto).
+        const condoClean: any = {};
+        Object.entries(c).forEach(([key, value]) => { if (value !== undefined) condoClean[key] = value; });
         const condoDoc = await addDoc(collection(db, "condominiums"), {
-          ...c,
+          ...condoClean,
           userId: user.uid,
           createdAt: serverTimestamp(),
         });
@@ -2004,8 +2026,11 @@ export default function App() {
   const handleAddMovement = async (data: any) => {
     if (!user) return;
     try {
+      // CORREZIONE CG — stesso bug ricorrente: pulizia undefined prima di addDoc
+      const movementClean: any = {};
+      Object.entries(data).forEach(([key, value]) => { if (value !== undefined) movementClean[key] = value; });
       await addDoc(collection(db, "movements"), {
-        ...data,
+        ...movementClean,
         userId: user.uid,
         createdAt: serverTimestamp()
       });
