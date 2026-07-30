@@ -77,6 +77,10 @@ export interface MasterDataPayload {
   // CORREZIONE E — quando valorizzato, App.tsx deve SOLO creare questa entità
   // (nessun immobile, nessun contratto): usato dagli inserimenti isolati da pagina dedicata.
   standaloneOnly?: "owner" | "tenant" | "condominium";
+  // CORREZIONE CH — quando l'inquilino scelto è già esistente (non nuovo), il suo id va
+  // passato qui per collegarlo all'immobile appena creato (App.tsx lo usa per updateDoc
+  // sul tenant e come tenantId per l'eventuale contratto).
+  selectedTenantId?: string;
   property?: {
     name: string;
     address: string;
@@ -626,8 +630,14 @@ export default function MasterDataWizard({
             ? { number: tPermitNumber.trim(), validity: tPermitValidity.trim() || undefined }
             : undefined,
         });
+      } else if (tenantMode === "select") {
+        // CORREZIONE CH — BUG REALE: questa riga non c'era mai stata scritta, nonostante
+        // il commento sotto dicesse il contrario. Senza questo, App.tsx non sapeva MAI
+        // quale inquilino esistente era stato scelto: l'immobile non si collegava
+        // all'inquilino, e il contratto non veniva creato affatto (dipende dallo stesso
+        // tenantId, derivato in App.tsx proprio da questo campo).
+        payload.selectedTenantId = selectedTenantId;
       }
-      // tenantMode === "select" — we'll link the existing tenant by ID in App.tsx
     }
 
     if (hasContract && isRented) {
