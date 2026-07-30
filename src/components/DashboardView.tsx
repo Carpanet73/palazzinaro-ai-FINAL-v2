@@ -2391,7 +2391,7 @@ export default function DashboardView({
                 {timeLeftManual.unlocked ? "🟢 SBLOCCATA" : "🔒 BLOCCATA FINO AL 20"}
               </span>
             </div>
-            <h4 className="text-lg font-sans font-black text-yellow-400 mt-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">
+            <h4 className="text-lg font-sans font-black text-cyan-400 mt-2 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">
               Abilitazione Chiusura Anticipata
             </h4>
             <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
