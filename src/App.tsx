@@ -154,8 +154,28 @@ export default function App() {
   const [legalCases, setLegalCases] = useState<LegalCase[]>([]);
   const [communications, setCommunications] = useState<Communication[]>([]);
   const [lawyers, setLawyers] = useState<Lawyer[]>([]);
-  const [creditInstitutions, setCreditInstitutions] = useState<CreditInstitution[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [creditInstitutions, setCreditInstitutions] = useState<CreditInstitution[]>([
+    {
+      id: "inst_demo_001",
+      name: "Intesa Sanpaolo",
+      branch: "Filiale Milano Centro",
+      notes: "Istituto principale per operazioni immobiliari",
+      userId: "demo_user",
+      createdAt: new Date().toISOString()
+    } as CreditInstitution
+  ]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([
+    {
+      id: "acc_demo_001",
+      institutionId: "inst_demo_001",
+      iban: "IT60X0542811101000000123456",
+      holder: "Palazzinaro AI Demo",
+      currency: "EUR",
+      isActive: true,
+      userId: "demo_user",
+      createdAt: new Date().toISOString()
+    } as BankAccount
+  ]);
   const [insurancePolicies, setInsurancePolicies] = useState<InsurancePolicy[]>([]);
   const [deliveryReports, setDeliveryReports] = useState<DeliveryReport[]>([]);
   // CORREZIONE AP — Il "mese attivo" del Fast Closing è ora un dato VERO salvato su

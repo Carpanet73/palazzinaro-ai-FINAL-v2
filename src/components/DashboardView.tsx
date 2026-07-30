@@ -2342,82 +2342,88 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* Countdown Widget Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-900 text-white p-6 rounded-3xl shadow-xl border border-slate-800">
-        <div>
-          <div className="flex items-center space-x-2.5 text-amber-400">
-            <Clock size={18} className="animate-pulse" />
-            <span className="font-mono text-xs uppercase font-bold tracking-wider">Scadenza Fast Closing Mensile</span>
+      {/* Countdown Widget Section - Futuristic Style */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 text-white p-8 rounded-3xl shadow-2xl border border-indigo-500/20 relative overflow-hidden">
+        {/* Background Glow Effect */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+        
+        {/* Left Side - Auto Close Countdown */}
+        <div className="relative z-10">
+          <div className="flex items-center space-x-2.5 text-cyan-400">
+            <Clock size={18} className="animate-pulse drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
+            <span className="font-mono text-xs uppercase font-bold tracking-wider drop-shadow-[0_0_5px_rgba(34,211,238,0.4)]">Scadenza Fast Closing Mensile</span>
           </div>
-          <h4 className="text-base font-sans font-black text-white mt-1.5">
+          <h4 className="text-lg font-sans font-black text-white mt-2 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
             Chiusura Automatica Fine Mese
           </h4>
-          <p className="text-[11px] text-slate-400 mt-1">
+          <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
             Allo scadere di questo timer, tutte le posizioni non giustificate verranno consolidate e inserite negli Insoluti.
           </p>
-          <div className="grid grid-cols-4 gap-2.5 mt-4">
+          <div className="grid grid-cols-4 gap-3 mt-5">
             {[
               { label: "Giorni", val: timeLeftAuto.days },
               { label: "Ore", val: timeLeftAuto.hours },
               { label: "Minuti", val: timeLeftAuto.minutes },
               { label: "Secondi", val: timeLeftAuto.seconds },
             ].map((t, idx) => (
-              <div key={idx} className="bg-slate-800 p-2.5 rounded-xl text-center border border-slate-700/80">
-                <span className="block text-xl font-mono font-black text-white">{String(t.val).padStart(2, "0")}</span>
-                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{t.label}</span>
+              <div key={idx} className="bg-slate-900/60 backdrop-blur-sm p-3 rounded-2xl text-center border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)] hover:shadow-[0_0_25px_rgba(34,211,238,0.3)] transition-all duration-300 hover:-translate-y-1">
+                <span className="block text-2xl font-mono font-black text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">{String(t.val).padStart(2, "0")}</span>
+                <span className="text-[9px] font-bold text-cyan-200/70 uppercase tracking-widest">{t.label}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="border-t md:border-t-0 md:border-l border-slate-800 pt-5 md:pt-0 md:pl-6 flex flex-col justify-between">
+        {/* Right Side - Manual Close Status */}
+        <div className="relative z-10 border-t md:border-t-0 md:border-l border-slate-700/50 pt-5 md:pt-0 md:pl-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2.5 text-indigo-400">
-                <CalendarClock size={18} />
-                <span className="font-mono text-xs uppercase font-bold tracking-wider">Chiusura Manuale</span>
+              <div className="flex items-center space-x-2.5 text-purple-400">
+                <CalendarClock size={18} className="drop-shadow-[0_0_8px_rgba(192,132,252,0.6)]" />
+                <span className="font-mono text-xs uppercase font-bold tracking-wider drop-shadow-[0_0_5px_rgba(192,132,252,0.4)]">Chiusura Manuale</span>
               </div>
-              <span className={`text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase ${
+              <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider border ${
                 timeLeftManual.unlocked 
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse" 
-                  : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.4)]" 
+                  : "bg-amber-500/15 text-amber-300 border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
               }`}>
                 {timeLeftManual.unlocked ? "🟢 SBLOCCATA" : "🔒 BLOCCATA FINO AL 20"}
               </span>
             </div>
-            <h4 className="text-base font-sans font-black text-white mt-1.5">
+            <h4 className="text-lg font-sans font-black text-white mt-2 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
               Abilitazione Chiusura Anticipata
             </h4>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
               La chiusura manuale del Fast Closing è consentita solo a partire dal ventesimo giorno del mese corrente.
             </p>
           </div>
           
           {timeLeftManual.unlocked ? (
-            <div className="mt-4 flex items-center space-x-3 bg-emerald-950/40 border border-emerald-900/50 p-3 rounded-xl">
-              <div className="bg-emerald-500 text-slate-950 p-1.5 rounded-lg shrink-0">
-                <CheckCircle2 size={16} />
+            <div className="mt-5 flex items-center space-x-3 bg-emerald-950/50 backdrop-blur-sm border border-emerald-500/30 p-4 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+              <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 text-slate-950 p-2 rounded-xl shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.5)]">
+                <CheckCircle2 size={18} />
               </div>
               <div className="flex-1">
-                <p className="text-[11px] font-bold text-emerald-300">Fast Closing Chiusura Manuale Attiva!</p>
+                <p className="text-[11px] font-bold text-emerald-200 drop-shadow-[0_0_5px_rgba(16,185,129,0.4)]">Fast Closing Chiusura Manuale Attiva!</p>
                 <button
                   onClick={() => setCurrentSection("fast_closing")}
-                  className="text-[10px] text-white hover:underline mt-0.5 flex items-center font-bold"
+                  className="text-[10px] text-white hover:text-emerald-300 transition-colors mt-1 flex items-center font-bold group"
                 >
-                  Vai a Fast Closing per chiudere <ArrowRight size={10} className="ml-1" />
+                  Vai a Fast Closing per chiudere <ArrowRight size={10} className="ml-1 group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
             </div>
           ) : (
-            <div className="mt-4 grid grid-cols-4 gap-2.5">
+            <div className="mt-5 grid grid-cols-4 gap-3">
               {[
                 { label: "Giorni", val: timeLeftManual.days },
                 { label: "Ore", val: timeLeftManual.hours },
                 { label: "Minuti", val: timeLeftManual.minutes },
                 { label: "Secondi", val: timeLeftManual.seconds },
               ].map((t, idx) => (
-                <div key={idx} className="bg-slate-850 p-2 rounded-xl text-center border border-slate-800">
-                  <span className="block text-sm font-mono font-black text-indigo-300">{String(t.val).padStart(2, "0")}</span>
+                <div key={idx} className="bg-slate-900/60 backdrop-blur-sm p-2.5 rounded-2xl text-center border border-purple-500/20 shadow-[0_0_10px_rgba(168,85,247,0.1)]">
+                  <span className="block text-lg font-mono font-black text-purple-300 drop-shadow-[0_0_6px_rgba(168,85,247,0.5)]">{String(t.val).padStart(2, "0")}</span>
                   <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{t.label}</span>
                 </div>
               ))}
