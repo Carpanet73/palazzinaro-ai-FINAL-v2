@@ -80,6 +80,10 @@ export default function ContractsView({
   const [notes, setNotes] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [isBareOwnership, setIsBareOwnership] = useState(false);
+  // CORREZIONE CI — regime fiscale del canone (Cedolare Secca/Ordinaria), concetto
+  // separato dalla titolarità dell'immobile (isBareOwnership sopra). Prima erano
+  // erroneamente mescolati in un solo campo/scelta binaria.
+  const [taxRegime, setTaxRegime] = useState<"CedolareSecca" | "Ordinaria">("Ordinaria");
   // CORREZIONE CA — TASK 3a: deposito cauzionale nel wizard di creazione contratto
   const [securityDepositAmount, setSecurityDepositAmount] = useState<number>(0);
   const [securityDepositMonths, setSecurityDepositMonths] = useState<number>(0);
@@ -521,6 +525,7 @@ export default function ContractsView({
     setNotes("");
     setOwnerName("");
     setIsBareOwnership(false);
+    setTaxRegime("Ordinaria");
     setSecurityDepositAmount(0);
     setSecurityDepositMonths(0);
     setDepositManuallyEdited(false);
@@ -712,6 +717,8 @@ export default function ContractsView({
       notes,
       ownerName: ownerName || (wizardPropertyMode === "create" ? newPropOwner : linkedProp?.owner) || "Proprietario",
       isBareOwnership: isBareOwnership || (wizardPropertyMode === "create" ? newPropIsBare : (linkedProp?.isBareOwnership || false)),
+      // CORREZIONE CI — regime fiscale del canone, ora un campo separato e corretto
+      taxRegime,
       // CORREZIONE CA — TASK 3a: deposito cauzionale
       securityDepositMonths: securityDepositMonths > 0 ? securityDepositMonths : undefined,
       securityDepositAmount: securityDepositAmount > 0 ? securityDepositAmount : undefined
@@ -2404,8 +2411,14 @@ export default function ContractsView({
                     />
                   </div>
 
+                  {/* CORREZIONE CI — Titolarità dell'Immobile: separata dal regime fiscale.
+                      "Nuda Proprietà" è uno status di titolarità (chi possiede il bene),
+                      NON un regime di registrazione fiscale — prima erano mescolati insieme
+                      con un testo scorretto (l'Agenzia delle Entrate è esplicita: il nudo
+                      proprietario non ha "titolo" sull'immobile ai fini della locazione, il
+                      contratto va di norma intestato all'usufruttuario, non a lui). */}
                   <div className="bg-slate-100/50 p-4 rounded-xl border border-slate-200 space-y-2">
-                    <label className="block text-[10px] font-black uppercase text-slate-700">Regime di Registrazione Contratto *</label>
+                    <label className="block text-[10px] font-black uppercase text-slate-700">Titolarità dell'Immobile *</label>
                     <div className="flex flex-col sm:flex-row gap-4 mt-1">
                       <label className="flex-1 flex items-start space-x-2 bg-white p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50/50 transition-colors">
                         <input
@@ -2416,8 +2429,8 @@ export default function ContractsView({
                           className="mt-0.5 rounded-full border-slate-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <div>
-                          <span className="text-xs font-bold text-slate-800 block">Locazione Standard / Ordinaria</span>
-                          <span className="text-[9px] text-slate-500 block mt-0.5">Soggetta ad imposta annuale. Notifica automatica di promemoria 1 mese prima della scadenza dell'annualità.</span>
+                          <span className="text-xs font-bold text-slate-800 block">Piena Proprietà</span>
+                          <span className="text-[9px] text-slate-500 block mt-0.5">Il locatore possiede sia la nuda proprietà sia l'usufrutto: può locare l'immobile senza limitazioni.</span>
                         </div>
                       </label>
 
@@ -2426,12 +2439,58 @@ export default function ContractsView({
                           type="radio"
                           name="isBareOwnership"
                           checked={isBareOwnership}
-                          onChange={() => setIsBareOwnership(true)}
+                          onChange={() => { setIsBareOwnership(true); setTaxRegime("Ordinaria"); }}
                           className="mt-0.5 rounded-full border-slate-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <div>
-                          <span className="text-xs font-bold text-slate-800 block">Nuda Proprietà (Bare Ownership)</span>
-                          <span className="text-[9px] text-slate-500 block mt-0.5">Esenzione imposta annuale. Richiede comunicazione di Proroga Quadriennale Intermedia al Comune.</span>
+                          <span className="text-xs font-bold text-slate-800 block">Nuda Proprietà</span>
+                          <span className="text-[9px] text-rose-600 block mt-0.5 font-semibold">
+                            ⚠️ Il nudo proprietario non ha "titolo" sull'immobile ai fini della locazione: il
+                            contratto va di norma intestato all'usufruttuario, e la Cedolare Secca non è
+                            selezionabile in questo caso.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* CORREZIONE CI — Regime Fiscale del Canone: scelta separata, non più confusa
+                      con la titolarità sopra. Cedolare Secca sostituisce IRPEF + imposta di
+                      registro + bollo con un'imposta sostitutiva; non disponibile in caso di
+                      sola nuda proprietà (vedi avviso sopra). */}
+                  <div className="bg-slate-100/50 p-4 rounded-xl border border-slate-200 space-y-2">
+                    <label className="block text-[10px] font-black uppercase text-slate-700">Regime Fiscale del Canone *</label>
+                    <div className="flex flex-col sm:flex-row gap-4 mt-1">
+                      <label className={`flex-1 flex items-start space-x-2 bg-white p-3 rounded-lg border border-slate-200 transition-colors ${isBareOwnership ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-slate-50/50"}`}>
+                        <input
+                          type="radio"
+                          name="taxRegime"
+                          disabled={isBareOwnership}
+                          checked={taxRegime === "CedolareSecca"}
+                          onChange={() => setTaxRegime("CedolareSecca")}
+                          className="mt-0.5 rounded-full border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-slate-800 block">Cedolare Secca</span>
+                          <span className="text-[9px] text-slate-500 block mt-0.5">
+                            Imposta sostitutiva (21% o 10% a canone concordato) al posto di IRPEF, imposta di
+                            registro e bollo. Va confermata anche alla proroga (comunicazione all'Agenzia delle
+                            Entrate, non al Comune).
+                          </span>
+                        </div>
+                      </label>
+
+                      <label className="flex-1 flex items-start space-x-2 bg-white p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50/50 transition-colors">
+                        <input
+                          type="radio"
+                          name="taxRegime"
+                          checked={taxRegime === "Ordinaria"}
+                          onChange={() => setTaxRegime("Ordinaria")}
+                          className="mt-0.5 rounded-full border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-slate-800 block">Ordinaria</span>
+                          <span className="text-[9px] text-slate-500 block mt-0.5">Tassazione IRPEF a scaglioni, imposta di registro e bollo dovute regolarmente ogni anno.</span>
                         </div>
                       </label>
                     </div>
