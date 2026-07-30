@@ -3049,6 +3049,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             owners={owners}
             user={user}
             showSuccess={showSuccess}
+            ownerProfile={ownerProfile}
             deliveryReports={deliveryReports}
             fastClosing={fastClosing}
             onAddDeliveryReport={handleAddDeliveryReport}

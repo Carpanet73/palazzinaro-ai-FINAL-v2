@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { SignatureRequest } from "../types";
 
@@ -96,7 +96,7 @@ export async function validaToken(token: string): Promise<
   if (req.status === "signed") return { ok: false, reason: "signed" };
   if (req.status === "revoked") return { ok: false, reason: "revoked" };
   if (new Date(req.expiresAt) < new Date()) return { ok: false, reason: "expired" };
-  return { ok: true; req };
+  return { ok: true, req };
 }
 
 // Marca firmato + aggiorna il DeliveryReport (tutto ripulito dagli undefined).

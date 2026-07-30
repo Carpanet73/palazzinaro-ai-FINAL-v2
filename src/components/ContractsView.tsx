@@ -5,9 +5,10 @@ import {
   Sparkles, X, AlertCircle, ArrowRight, ArrowLeft, Check, 
   Upload, RefreshCw, FileCheck, Building, User, Info, MapPin
 } from "lucide-react";
-import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner, FastClosingItem } from "../types";
+import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner, FastClosingItem, OwnerProfile } from "../types";
 import ContractGeneratorWizard from "./ContractGeneratorWizard";
 import DeliveryReportWizard from "./DeliveryReportWizard";
+import { creaSignatureRequest, normalizzaTelefonoE164, soloCifre } from "../lib/signature";
 
 interface ContractsViewProps {
   contracts: Contract[];
@@ -18,6 +19,9 @@ interface ContractsViewProps {
   user: { uid: string } | null;
   showSuccess: (msg: string) => void;
   owners?: Owner[]; // CORREZIONE BQ — per il Wizard di generazione contratti
+  // CORREZIONE CJ — Firma Remota: stessa fonte unica usata da RemindersView (App.tsx),
+  // nessuna query duplicata
+  ownerProfile?: OwnerProfile | null;
   deliveryReports?: DeliveryReport[];
   // CORREZIONE BX — per il Mastrino Contabile (canoni e scadenze) nella pagina di dettaglio
   fastClosing?: FastClosingItem[];
@@ -51,6 +55,7 @@ export default function ContractsView({
   user,
   showSuccess,
   owners = [],
+  ownerProfile = null,
   deliveryReports = [],
   fastClosing = [],
   onAddContract,
@@ -130,6 +135,8 @@ export default function ContractsView({
 
   // Selected details active state
   const [selectedContractId, setSelectedContractId] = useState<string>("");
+  // CORREZIONE CJ — Firma Remota: un link alla volta, come richiesto
+  const [linkFirma, setLinkFirma] = useState<string>("");
   // CORREZIONE BW — nuovo stato per la vista dettaglio a pagina intera (badge + sottopagina),
   // separato da selectedContractId (che resta per la logica pre-esistente invariata dei
   // pannelli/modali già collegati ad esso, es. Verbale di Consegna).
@@ -796,6 +803,44 @@ export default function ContractsView({
     }
   };
 
+  // CORREZIONE CJ — Firma Remota: genera un invito di firma via SMS/email OTP per
+  // il verbale indicato, collegato al contratto attualmente aperto nella
+  // sottopagina di dettaglio (selectedContractDetails, state del componente).
+  const generaLinkFirma = async (report: DeliveryReport) => {
+    if (!user || !selectedContractDetails) return;
+    // CORREZIONE CJ — derivato qui direttamente (selectedContractDetails/tenants sono
+    // state/prop del componente, sempre in scope): "contractTenant" del blocco di
+    // rendering più sotto NON è raggiungibile da questa funzione di primo livello.
+    const tenantForSignature = tenants.find(t => t.id === selectedContractDetails.tenantId);
+    const telefonoE164 = normalizzaTelefonoE164(tenantForSignature?.phone || "");
+    if (!telefonoE164) {
+      alert("Numero telefono inquilino mancante o non valido: impossibile inviare l'SMS.");
+      return;
+    }
+    try {
+      const { token } = await creaSignatureRequest({
+        userId: user.uid,
+        contractId: selectedContractDetails.id,
+        propertyId: selectedContractDetails.propertyId,
+        propertyName: selectedContractDetails.propertyName,
+        tenantId: selectedContractDetails.tenantId,
+        tenantName: selectedContractDetails.tenantName,
+        tenantPhone: telefonoE164,
+        tenantEmail: tenantForSignature?.email || "",
+        reportId: report.id,
+        reportType: report.type,
+        emailjsServiceId: ownerProfile?.emailServiceId,
+        emailjsTemplateId: ownerProfile?.emailTemplateId,
+        emailjsPublicKey: ownerProfile?.emailPublicKey,
+      });
+      setLinkFirma(`${window.location.origin}/firma/${token}`);
+      showSuccess("Link di firma generato. Invialo via WhatsApp.");
+    } catch (err) {
+      console.error("Errore generazione link firma:", err);
+      alert("Errore durante la generazione del link di firma. Riprova.");
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (confirm("Sei sicuro di voler eliminare questo contratto? Le rate ed i solleciti rimarranno storicizzati.")) {
       try {
@@ -1315,10 +1360,24 @@ export default function ContractsView({
                                   ✓ FIRMATO E DEPOSITATO (SHA256)
                                 </span>
                               ) : (
-                                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
-                                  ⚠️ FIRME INCOMPLETE
-                                </span>
+                                <>
+                                  <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+                                    ⚠️ FIRME INCOMPLETE
+                                  </span>
+                                  {/* CORREZIONE CJ — Firma Remota: solo se il conduttore non ha ancora
+                                      firmato (stesso campo già usato più sotto per il badge "Firmato il") */}
+                                  {!report.signatures?.tenantSigned && (
+                                    <button
+                                      type="button"
+                                      onClick={() => generaLinkFirma(report)}
+                                      className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors cursor-pointer"
+                                    >
+                                      📱 Genera Link Firma
+                                    </button>
+                                  )}
+                                </>
                               )}
+
                               
                               <button
                                 type="button"
@@ -1330,6 +1389,23 @@ export default function ContractsView({
                               </button>
                             </div>
                           </div>
+
+                          {/* CORREZIONE CJ — Firma Remota: box col link generato + invio WhatsApp.
+                              linkFirma è uno stato singolo (un link alla volta): compare sotto
+                              qualunque verbale finché non se ne genera un altro. */}
+                          {linkFirma && !report.signatures?.tenantSigned && (
+                            <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 text-xs">
+                              <p className="font-mono break-all text-slate-700">{linkFirma}</p>
+                              <a
+                                href={`https://wa.me/${soloCifre(tenants.find(t => t.id === selectedContract.tenantId)?.phone || "")}?text=${encodeURIComponent(`Gentile ${selectedContract.tenantName}, le invio il link per firmare digitalmente il verbale: ${linkFirma}`)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-3 inline-block rounded-lg bg-emerald-600 px-4 py-2 font-black text-white hover:bg-emerald-700"
+                              >
+                                Apri in WhatsApp e invia
+                              </a>
+                            </div>
+                          )}
 
                           {/* Checklist Excel Mastrino Style Table */}
                           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-3xs">
