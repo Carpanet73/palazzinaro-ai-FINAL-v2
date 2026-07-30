@@ -692,6 +692,12 @@ export default function ContractsView({
       alert("Compila tutti i parametri obbligatori del contratto (canone, date).");
       return;
     }
+    // CORREZIONE CF — il deposito cauzionale non è facoltativo: Massimo ha chiarito che
+    // va sempre versato alla creazione del contratto e va tracciato, non lasciato vuoto.
+    if (!securityDepositAmount || securityDepositAmount <= 0) {
+      alert("Il Deposito Cauzionale è obbligatorio: specifica l'importo (o le mensilità anticipate per calcolarlo automaticamente).");
+      return;
+    }
 
     // Prepare custom payload
     const linkedProp = properties.find(p => p.id === propertyId);
@@ -888,6 +894,20 @@ export default function ContractsView({
                     <div>
                       <span className="text-slate-400 block text-[9px] uppercase font-bold">Canone Base</span>
                       <strong className="text-slate-800 text-sm font-black">€{selectedContract.rentAmount.toLocaleString("it-IT", { minimumFractionDigits: 2 })} / {selectedContract.frequency}</strong>
+                    </div>
+                    {/* CORREZIONE CF — Deposito Cauzionale: non più solo usato di nascosto alla
+                        riconsegna, ora sempre visibile qui, permanentemente, come tutti gli
+                        altri dati del contratto */}
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase font-bold">Deposito Cauzionale</span>
+                      {selectedContract.securityDepositAmount ? (
+                        <strong className="text-slate-800 text-sm font-black">
+                          €{selectedContract.securityDepositAmount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                          {selectedContract.securityDepositMonths ? ` (${selectedContract.securityDepositMonths} mensilità)` : ""}
+                        </strong>
+                      ) : (
+                        <span className="text-rose-600 font-bold text-[10px] uppercase">⚠️ Non registrato</span>
+                      )}
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[9px] uppercase font-bold">Data Decorrenza</span>
@@ -2309,13 +2329,16 @@ export default function ContractsView({
                     </div>
                   </div>
 
-                  {/* CORREZIONE CA — TASK 3a: Deposito Cauzionale */}
+                  {/* CORREZIONE CA/CF — Deposito Cauzionale: OBBLIGATORIO, non facoltativo */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Mensilità Anticipate (Deposito)</label>
+                      <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">
+                        Mensilità Anticipate (Deposito) <span className="text-rose-500">*</span>
+                      </label>
                       <input
                         type="number"
-                        min="0"
+                        required
+                        min="1"
                         step="1"
                         placeholder="3"
                         value={securityDepositMonths || ""}
@@ -2324,10 +2347,13 @@ export default function ContractsView({
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Deposito Cauzionale (€)</label>
+                      <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">
+                        Deposito Cauzionale (€) <span className="text-rose-500">*</span>
+                      </label>
                       <input
                         type="number"
-                        min="0"
+                        required
+                        min="0.01"
                         step="0.01"
                         placeholder="2550"
                         value={securityDepositAmount || ""}
@@ -2337,7 +2363,8 @@ export default function ContractsView({
                     </div>
                     <div className="flex items-end">
                       <p className="text-[10px] text-slate-400 leading-tight">
-                        Se inserisci le mensilità, l'importo si calcola in automatico (canone × mensilità) e resta poi modificabile a mano.
+                        Campo obbligatorio: va sempre versato alla creazione del contratto. Se inserisci le mensilità,
+                        l'importo si calcola in automatico (canone × mensilità) e resta poi modificabile a mano.
                       </p>
                     </div>
                   </div>
