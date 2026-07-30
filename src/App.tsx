@@ -48,6 +48,7 @@ import {
 import Sidebar from "./components/Sidebar";
 import Logo from "./components/Logo";
 import DashboardView from "./components/DashboardView";
+import FirmaPubblicaView from "./pages/FirmaPubblicaView";
 import PropertiesView from "./components/PropertiesView";
 import TenantsView from "./components/TenantsView";
 import ContractsView from "./components/ContractsView";
@@ -2773,6 +2774,15 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         <p className="text-slate-400 text-xs tracking-wider uppercase font-semibold">Caricamento CRM Property...</p>
       </div>
     );
+  }
+
+  // ==========================================
+  // ROUTE PUBBLICA: Firma remota (/firma/:token)
+  // ==========================================
+  const path = window.location.pathname;
+  if (path.startsWith("/firma/")) {
+    const token = path.replace("/firma/", "");
+    return <FirmaPubblicaView token={token} />;
   }
 
   // ==========================================

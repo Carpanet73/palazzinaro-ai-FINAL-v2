@@ -645,6 +645,40 @@ export interface DeliveryReport {
   // calcolo informativo di restituzione/compensazione del deposito cauzionale.
   estimatedDamagesAmount?: number;
   driveBackupUrl?: string;
+  // CORREZIONE CB — Firma remota: collegamento alla SignatureRequest e stato firma
+  signatureRequestId?: string;
+  remoteSigned?: boolean;
+}
+
+// CORREZIONE CB — Firma remota inquilino via link WhatsApp + OTP
+export interface SignatureRequest {
+  id: string;                 // == token segreto (64 char esadecimali)
+  userId: string;             // admin che ha creato l'invito
+  contractId: string;
+  propertyId: string;
+  propertyName?: string;
+  tenantId?: string;
+  tenantName?: string;
+  tenantPhone: string;        // formato E.164 (+39...) — normalizzato
+  tenantEmail?: string;       // per il fallback OTP via email
+  reportId: string;           // DeliveryReport da firmare
+  reportType: "consegna" | "riconsegna";
+  status: "pending" | "signed" | "expired" | "revoked";
+  createdAt: string;
+  expiresAt: string;          // createdAt + 7 giorni (calcolato)
+  signedAt?: string;
+  signedByPhone?: string;
+  otpChannel?: "sms" | "email";
+  otpVerified?: boolean;
+  declaration?: "conforme" | "problemi";
+  declarationNotes?: string;
+  declarationPhotos?: string[];
+  legalCaseId?: string;
+  // Config EmailJS dell'admin (salvata alla creazione per il fallback email
+  // dalla pagina pubblica, che non è autenticata):
+  emailjsServiceId?: string;
+  emailjsTemplateId?: string;
+  emailjsPublicKey?: string;
 }
 
 
