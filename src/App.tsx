@@ -1816,6 +1816,8 @@ export default function App() {
           coOwners: o.coOwners,
           iban: o.iban,
           isCompany: o.isCompany,
+          // CORREZIONE CE — stesso identico bug, trovato oggi: gender veniva scartato qui.
+          gender: o.gender,
           notes: o.notes,
         });
         if (createdId) {
@@ -1847,7 +1849,8 @@ export default function App() {
       let tenantId: string | undefined;
       let tenantName: string | undefined;
       if (t) {
-        const tenantDoc = await addDoc(collection(db, "tenants"), {
+        const tenantPayloadClean: any = {};
+        Object.entries({
           name: t.name,
           email: t.email || "",
           phone: t.phone || "",
@@ -1856,8 +1859,22 @@ export default function App() {
           isCompany: !!t.isCompany,
           companyName: t.companyName || "",
           vatNumber: t.vatNumber || "",
+          // CORREZIONE CE — questi campi (aggiunti oggi al wizard) venivano scartati qui:
+          // un Inquilino creato dal wizard immobile perdeva silenziosamente genere,
+          // nascita, indirizzo e dati straniero/documenti, nonostante il wizard li
+          // raccogliesse correttamente in UI.
+          gender: t.gender,
+          birthDate: t.birthDate || "",
+          birthPlace: t.birthPlace || "",
+          address: t.address || {},
+          isForeign: !!t.isForeign,
+          identityDocument: t.identityDocument,
+          residencePermit: t.residencePermit,
           propertyId: propDoc.id,
           userId: user.uid,
+        }).forEach(([key, value]) => { if (value !== undefined) tenantPayloadClean[key] = value; });
+        const tenantDoc = await addDoc(collection(db, "tenants"), {
+          ...tenantPayloadClean,
           createdAt: serverTimestamp(),
         });
         tenantId = tenantDoc.id;
