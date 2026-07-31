@@ -110,7 +110,10 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
   const addRow = () => setChecklist((prev) => [...prev, { id: `item_new_${Date.now()}`, item: "", status: "Buono", notes: "" }]);
   const removeRow = (id: string) => setChecklist((prev) => prev.filter((it) => it.id !== id));
 
-  const firmeOk = ownerSigned && tenantSigned && ownerName.trim() && tenantName.trim();
+  // CORREZIONE CK — firma CONDUTTORE facoltativa (locatore + nomi restano
+  // obbligatori): sbloccato il collaudo della Firma Remota, che serve proprio
+  // per far firmare il conduttore DOPO, da remoto, quando non firma in presenza.
+  const firmeOk = ownerSigned && ownerName.trim() && tenantName.trim();
   const danniOk = !hasDamages || damagesDescription.trim().length > 0;
 
   const handleConfirm = async () => {
@@ -130,8 +133,15 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
           date: reportDate,
           checklist,
           signatures: {
-            ownerSigned, ownerSignatureData: ownerName.trim(), ownerSignedAt: ownerSigned ? nowIso : undefined,
-            tenantSigned, tenantSignatureData: tenantName.trim(), tenantSignedAt: tenantSigned ? nowIso : undefined,
+            // CORREZIONE CK — stripUndef (riga 17) pulisce solo il primo livello:
+            // non basta per un oggetto annidato come questo. Le chiavi *SignatureData
+            // e *SignedAt vengono quindi OMESSE del tutto (spread condizionale) quando
+            // la firma non è presente, mai impostate a undefined — altrimenti Firestore
+            // rifiuta l'intera scrittura (stesso bug già visto altrove nel progetto).
+            ownerSigned,
+            ...(ownerSigned ? { ownerSignatureData: ownerName.trim(), ownerSignedAt: nowIso } : {}),
+            tenantSigned,
+            ...(tenantSigned ? { tenantSignatureData: tenantName.trim(), tenantSignedAt: nowIso } : {}),
           },
           documentName: `Verbale_${mode}_${(contract.tenantName || "inquilino").replace(/\s+/g, "_")}_${reportDate}.pdf`,
           hasDamages: isRiconsegna ? hasDamages : undefined,
