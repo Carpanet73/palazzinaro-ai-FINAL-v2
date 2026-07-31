@@ -60,6 +60,8 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
   const [emailServiceId, setEmailServiceId] = useState(ownerProfile?.emailServiceId || "");
   const [emailTemplateId, setEmailTemplateId] = useState(ownerProfile?.emailTemplateId || "");
   const [emailPublicKey, setEmailPublicKey] = useState(ownerProfile?.emailPublicKey || "");
+  // CORREZIONE CL — template dedicato OTP Firma Remota, separato da emailTemplateId
+  const [otpEmailTemplateId, setOtpEmailTemplateId] = useState(ownerProfile?.otpEmailTemplateId || "");
   // CORREZIONE AT — le credenziali EmailJS restano mascherate e bloccate finché non si
   // sblocca esplicitamente: evita sia la visibilità immediata sia la modifica involontaria
   const [emailCredsUnlocked, setEmailCredsUnlocked] = useState(false);
@@ -94,6 +96,7 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
       setEmailServiceId(ownerProfile.emailServiceId || "");
       setEmailTemplateId(ownerProfile.emailTemplateId || "");
       setEmailPublicKey(ownerProfile.emailPublicKey || "");
+      setOtpEmailTemplateId(ownerProfile.otpEmailTemplateId || "");
     }
   }, [ownerProfile]);
 
@@ -179,7 +182,9 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
         pauseEnabled,
         emailServiceId: emailServiceId.trim(),
         emailTemplateId: emailTemplateId.trim(),
-        emailPublicKey: emailPublicKey.trim()
+        emailPublicKey: emailPublicKey.trim(),
+        // CORREZIONE CL — template OTP dedicato per la Firma Remota
+        otpEmailTemplateId: otpEmailTemplateId.trim()
       });
       setSuccess("Impostazioni e profilo salvati con successo!");
       setTimeout(() => setSuccess(""), 4000);
@@ -604,6 +609,30 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
                   }`}
                   id="settings-input-emailjs-template"
                 />
+                <p className="text-[9px] text-slate-500 mt-1">Usato per i Solleciti (variabili: message_content, total_amount, items_list...).</p>
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Template ID — Codice OTP Firma Remota
+                </label>
+                <input
+                  type={emailCredsUnlocked ? "text" : "password"}
+                  placeholder="es. template_yyyyyy (DIVERSO da quello dei Solleciti)"
+                  value={otpEmailTemplateId}
+                  onChange={(e) => setOtpEmailTemplateId(e.target.value)}
+                  readOnly={!emailCredsUnlocked}
+                  className={`w-full text-xs text-slate-200 bg-slate-950 border rounded-xl px-3 py-2 outline-hidden font-mono transition-colors ${
+                    emailCredsUnlocked ? "border-slate-800 focus:border-indigo-500" : "border-slate-900 text-slate-500 cursor-not-allowed"
+                  }`}
+                  id="settings-input-emailjs-otp-template"
+                />
+                {/* CORREZIONE CL — deve essere un template EmailJS SEPARATO da quello dei
+                    Solleciti sopra: quello ha variabili diverse (message_content, ecc.) e
+                    non contiene mai il codice OTP. Crea un nuovo template su EmailJS con le
+                    variabili {"{{to_email}}"}, {"{{otp_code}}"}, {"{{subject}}"}. */}
+                <p className="text-[9px] text-amber-500 mt-1">
+                  Deve essere un template DIVERSO da quello sopra, creato apposta su EmailJS con le variabili {"{{to_email}}"}, {"{{otp_code}}"}, {"{{subject}}"} — altrimenti l'email OTP della Firma Remota non parte o arriva vuota.
+                </p>
               </div>
               <div>
                 <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">

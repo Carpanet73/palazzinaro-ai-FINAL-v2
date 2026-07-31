@@ -227,6 +227,13 @@ export interface OwnerProfile {
   emailServiceId?: string;
   emailTemplateId?: string;
   emailPublicKey?: string;
+  // CORREZIONE CL — Firma Remota: template EmailJS DEDICATO per l'email OTP.
+  // NON si può riusare emailTemplateId: quel template (Solleciti) è una pagina
+  // fissa configurata su EmailJS con variabili diverse (message_content,
+  // total_amount, items_list) — inviare otp_code lì produce un'email vuota
+  // o senza senso, mai il codice. Service e Public Key restano condivisi
+  // (stesso account EmailJS), cambia solo il Template.
+  otpEmailTemplateId?: string;
 }
 
 // ── CORREZIONE B — Anagrafica Proprietari reale ──
@@ -679,6 +686,9 @@ export interface SignatureRequest {
   emailjsServiceId?: string;
   emailjsTemplateId?: string;
   emailjsPublicKey?: string;
+  // CORREZIONE CL — template dedicato per l'OTP, diverso da emailjsTemplateId
+  // (quello dei Solleciti): vedi nota su OwnerProfile.otpEmailTemplateId.
+  otpEmailTemplateId?: string;
 }
 
 

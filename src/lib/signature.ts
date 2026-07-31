@@ -59,6 +59,8 @@ export async function creaSignatureRequest(data: {
   emailjsServiceId?: string;
   emailjsTemplateId?: string;
   emailjsPublicKey?: string;
+  // CORREZIONE CL — template dedicato per l'OTP, diverso da quello dei Solleciti
+  otpEmailTemplateId?: string;
 }): Promise<{ token: string }> {
   const token = generaToken();
   const now = isoLocale();
@@ -79,6 +81,7 @@ export async function creaSignatureRequest(data: {
     emailjsServiceId: data.emailjsServiceId ?? null,
     emailjsTemplateId: data.emailjsTemplateId ?? null,
     emailjsPublicKey: data.emailjsPublicKey ?? null,
+    otpEmailTemplateId: data.otpEmailTemplateId ?? null,
   };
   await setDoc(doc(db, "signatureRequests", token), stripUndef(payload));
   return { token };

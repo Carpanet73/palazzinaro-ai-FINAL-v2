@@ -59,15 +59,18 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
         const conf = await signInWithPhoneNumber(auth, numeroE164, verifier);
         setConfirmation(conf);
       } else {
-        if (!req.emailjsServiceId || !req.emailjsTemplateId || !req.emailjsPublicKey) {
-          setErrore("Fallback email non configurato per questo invito. Usa l'SMS.");
+        // CORREZIONE CL — otpEmailTemplateId (dedicato), non emailjsTemplateId
+        // (quello è il template dei Solleciti, con variabili diverse: inviarci
+        // otp_code produceva un'email del Sollecito vuota/senza senso, mai il codice)
+        if (!req.emailjsServiceId || !req.otpEmailTemplateId || !req.emailjsPublicKey) {
+          setErrore("Fallback email non configurato per questo invito (manca il template OTP dedicato). Usa l'SMS.");
           setBusy(false); return;
         }
         const code = String(Math.floor(100000 + Math.random() * 900000));
         setCodiceEmail(code);
         await emailjs.send(
           req.emailjsServiceId,
-          req.emailjsTemplateId,
+          req.otpEmailTemplateId,
           { to_email: req.tenantEmail, otp_code: code, subject: "Codice firma verbale — Palazzinaro AI" },
           { publicKey: req.emailjsPublicKey }
         );
@@ -75,7 +78,8 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
       setCodiceInviato(true);
     } catch (e: any) {
       console.error(e);
-      setErrore("Invio codice non riuscito. Verifica il numero o usa l'email.");
+      const codiceErrore = e?.code ? ` (${e.code})` : "";
+      setErrore(`Invio codice non riuscito${codiceErrore}. Verifica il numero o usa l'email.`);
     } finally { setBusy(false); }
   };
 

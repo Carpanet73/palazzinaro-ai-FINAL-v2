@@ -832,6 +832,8 @@ export default function ContractsView({
         emailjsServiceId: ownerProfile?.emailServiceId,
         emailjsTemplateId: ownerProfile?.emailTemplateId,
         emailjsPublicKey: ownerProfile?.emailPublicKey,
+        // CORREZIONE CL — template DEDICATO per l'OTP, non quello dei Solleciti
+        otpEmailTemplateId: ownerProfile?.otpEmailTemplateId,
       });
       setLinkFirma(`${window.location.origin}/firma/${token}`);
       showSuccess("Link di firma generato. Invialo via WhatsApp.");
