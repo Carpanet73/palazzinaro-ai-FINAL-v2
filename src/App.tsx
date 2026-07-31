@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signOut, 
   User,
   GoogleAuthProvider
@@ -217,6 +219,25 @@ export default function App() {
 
   // 1. Firebase Authentication State Listener
   useEffect(() => {
+    // CORREZIONE CO — login mobile: signInWithPopup è notoriamente inaffidabile
+    // sui browser mobile (popup bloccati o gestiti in modo incoerente). Su
+    // mobile usiamo signInWithRedirect (handleGoogleLogin sotto), che rimanda
+    // l'utente a Google e poi qui indietro: questo controllo recupera il
+    // risultato al ritorno. Nessun effetto su desktop, dove si continua a
+    // usare il popup (getRedirectResult risolve semplicemente a null lì).
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          if (credential?.accessToken) {
+            setGoogleAccessToken(credential.accessToken);
+            showSuccess("Accesso con Google completato e token Calendar sincronizzato!");
+          }
+        }
+      })
+      .catch((error) => {
+        console.error("Redirect login failed:", error);
+      });
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
@@ -367,6 +388,16 @@ export default function App() {
   // Auth Procedures
   const handleGoogleLogin = async () => {
     try {
+      // CORREZIONE CO — su mobile il popup fallisce/si blocca in modo
+      // inconsistente: usiamo signInWithRedirect (il risultato si recupera
+      // nell'useEffect sopra, al ritorno da Google). Su desktop resta il
+      // popup, invariato, incluso per la connessione Google Calendar dalle
+      // Impostazioni (stesso handler, riga usata anche lì più sotto).
+      const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      if (isMobile) {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
       const result = await signInWithPopup(auth, googleProvider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
       if (credential?.accessToken) {
