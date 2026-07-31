@@ -59,20 +59,23 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
         const conf = await signInWithPhoneNumber(auth, numeroE164, verifier);
         setConfirmation(conf);
       } else {
-        // CORREZIONE CM — template creato su EmailJS a partire dal preset
-        // "One-Time Password" (Template ID: template_g09b3yf), che usa le
-        // variabili {{passcode}} e {{time}} (non otp_code): allineato qui.
+        // CORREZIONE CN — riallineato: il contenuto del template su EmailJS
+        // (Template ID: template_g09b3yf) è stato sostituito per usare
+        // {{otp_code}}, non più {{passcode}}/{{time}} del preset originale —
+        // verificato in diretta sul template stesso prima di questa modifica.
+        // Un'altra sessione aveva corretto il codice nella direzione opposta
+        // (passcode/time) basandosi sul preset com'era PRIMA di quella
+        // sostituzione: ora codice e template sono di nuovo allineati.
         if (!req.emailjsServiceId || !req.otpEmailTemplateId || !req.emailjsPublicKey) {
           setErrore("Fallback email non configurato per questo invito (manca il template OTP dedicato). Usa l'SMS.");
           setBusy(false); return;
         }
         const code = String(Math.floor(100000 + Math.random() * 900000));
         setCodiceEmail(code);
-        const scadenza = new Date(Date.now() + 15 * 60 * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
         await emailjs.send(
           req.emailjsServiceId,
           req.otpEmailTemplateId,
-          { to_email: req.tenantEmail, passcode: code, time: scadenza },
+          { to_email: req.tenantEmail, otp_code: code, subject: "Codice firma verbale — Palazzinaro AI" },
           { publicKey: req.emailjsPublicKey }
         );
       }
