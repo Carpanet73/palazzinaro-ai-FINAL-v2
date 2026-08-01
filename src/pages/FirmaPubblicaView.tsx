@@ -13,6 +13,25 @@ const BTN = "w-full rounded-lg bg-amber-500 px-5 py-3 text-sm font-black text-wh
 
 type Fase = "loading" | "notfound" | "expired" | "signed" | "revoked" | "dichiara" | "otp" | "fatto";
 
+// CORREZIONE CQ — BUG REALE: Shell era definito DENTRO FirmaPubblicaView. Ad
+// ogni ri-render (es. ogni carattere digitato nel campo OTP, che aggiorna lo
+// stato) React vedeva una NUOVA identità di componente e smontava/rimontava
+// l'intero albero, distruggendo l'input col focus — risultato: si poteva
+// digitare un solo carattere alla volta prima di perdere il focus. Spostato
+// qui, a livello di modulo, identità stabile tra i render.
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <header className="bg-slate-900 text-white px-5 py-4 flex items-center gap-2">
+        <img src={logoIcon} alt="Palazzinaro AI" className="h-7 w-7 rounded" />
+        <span className="text-sm font-black tracking-wide">PALAZZINARO AI · Firma Verbale</span>
+      </header>
+      <main className="flex-1 w-full max-w-md mx-auto px-5 py-6">{children}</main>
+      <div id="recaptcha-container" />
+    </div>
+  );
+}
+
 export default function FirmaPubblicaView({ token }: { token: string }) {
   const [fase, setFase] = useState<Fase>("loading");
   const [req, setReq] = useState<SignatureRequest | null>(null);
@@ -129,17 +148,6 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
     pdf.text("Documento generato dalla procedura automatizzata Palazzinaro AI.", 14, 106);
     pdf.save(`Verbale_${req.reportType}_firmato_${req.tenantName || "inquilino"}.pdf`);
   };
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-slate-900 text-white px-5 py-4 flex items-center gap-2">
-        <img src={logoIcon} alt="Palazzinaro AI" className="h-7 w-7 rounded" />
-        <span className="text-sm font-black tracking-wide">PALAZZINARO AI · Firma Verbale</span>
-      </header>
-      <main className="flex-1 w-full max-w-md mx-auto px-5 py-6">{children}</main>
-      <div id="recaptcha-container" />
-    </div>
-  );
 
   if (fase === "loading") return <Shell><p className="text-sm text-slate-400">Verifica invito…</p></Shell>;
   if (fase === "notfound") return <Shell><h2 className="font-serif text-xl font-bold text-slate-800">Invito non valido</h2><p className="mt-2 text-sm text-slate-500">Il link non esiste o è stato revocato. Contatta l'amministratore.</p></Shell>;
