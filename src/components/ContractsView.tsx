@@ -9,6 +9,7 @@ import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Ow
 import ContractGeneratorWizard from "./ContractGeneratorWizard";
 import DeliveryReportWizard from "./DeliveryReportWizard";
 import { creaSignatureRequest, normalizzaTelefonoE164, soloCifre } from "../lib/signature";
+import jsPDF from "jspdf";
 
 interface ContractsViewProps {
   contracts: Contract[];
@@ -177,10 +178,6 @@ export default function ContractsView({
     { id: "cl-5", item: "Infissi, Finestre e Tapparelle", status: "Ottimo", notes: "Perfettamente sigillanti e scorrevoli.", photos: [] }
   ]);
   const [newChecklistItemName, setNewChecklistItemName] = useState("");
-  const [showSignatureModal, setShowSignatureModal] = useState(false);
-  const [signatureTargetReport, setSignatureTargetReport] = useState<any | null>(null);
-  const [signatureRole, setSignatureRole] = useState<"owner" | "tenant">("owner");
-  const [signatureTypedName, setSignatureTypedName] = useState("");
 
   // Sync Property documents with localStorage
   const [propertyDocs, setPropertyDocs] = useState<Record<string, Array<{
@@ -434,47 +431,13 @@ export default function ContractsView({
     }
   };
 
-  const handleOpenSignModal = (report: any, role: "owner" | "tenant") => {
-    setSignatureTargetReport(report);
-    setSignatureRole(role);
-    setSignatureTypedName("");
-    setShowSignatureModal(true);
-  };
-
-  const handleConfirmSignature = async () => {
-    if (!signatureTargetReport || !signatureTypedName.trim()) {
-      alert("Inserisci il nome per esteso per apporre la firma digitale.");
-      return;
-    }
-
-    const nextSignatures = {
-      ...(signatureTargetReport.signatures || {})
-    };
-
-    if (signatureRole === "owner") {
-      nextSignatures.ownerSigned = true;
-      nextSignatures.ownerSignatureData = signatureTypedName;
-      nextSignatures.ownerSignedAt = new Date().toISOString();
-    } else {
-      nextSignatures.tenantSigned = true;
-      nextSignatures.tenantSignatureData = signatureTypedName;
-      nextSignatures.tenantSignedAt = new Date().toISOString();
-    }
-
-    try {
-      if (onEditDeliveryReport) {
-        await onEditDeliveryReport(signatureTargetReport.id, {
-          signatures: nextSignatures
-        });
-      }
-      setShowSignatureModal(false);
-      setSignatureTargetReport(null);
-      setSignatureTypedName("");
-      alert("Firma registrata con successo e applicata al verbale di consegna con marca temporale certificata!");
-    } catch (err) {
-      console.error("Error signing delivery report", err);
-    }
-  };
+  // CORREZIONE CU — RIMOSSO su indicazione esplicita di Massimo: un pulsante che
+  // permette di digitare un nome e spuntare "firmato" da qualunque punto dell'app,
+  // senza nessun collegamento dimostrabile alla lettura effettiva del contenuto,
+  // non ha alcun valore probatorio come firma. Il verbale si firma ora SOLO in due
+  // modi dimostrabili: da remoto (link + OTP, generaLinkFirma) o di persona tramite
+  // PDF stampabile (vedi scaricaPdfPerFirmaPresenza più sotto).
+  // handleOpenSignModal e handleConfirmSignature erano qui.
 
   // Open "Create Relationship" wizard instead of generic new contract
   // CORREZIONE BV — invia il documento del contratto (già agli atti su Firebase Storage) via Resend
@@ -847,6 +810,75 @@ export default function ContractsView({
       console.error("Errore generazione link firma:", err);
       alert("Errore durante la generazione del link di firma. Riprova.");
     }
+  };
+
+  // CORREZIONE CU — su indicazione esplicita di Massimo: rimossa la firma "a
+  // pulsante" nell'app (nessun valore probatorio). Per la firma di persona resta
+  // questa seconda via legittima: un PDF stampabile col contenuto reale del
+  // verbale e righe per la firma fisica a inchiostro, DA STAMPARE E FAR FIRMARE
+  // IN PRESENZA — non è un documento già firmato, solo il modulo da compilare.
+  const pulisciTestoPdfContratti = (testo: string) => testo.replace(/[^\x00-\xFF]/g, "").trim();
+
+  const scaricaPdfPerFirmaPresenza = (report: DeliveryReport) => {
+    if (!selectedContractDetails) return;
+    const pdf = new jsPDF();
+    const margineBasso = 280;
+    let y = 20;
+    const nuovaRigaConPagina = (altezza = 8) => {
+      if (y + altezza > margineBasso) { pdf.addPage(); y = 20; }
+    };
+
+    pdf.setFontSize(16);
+    pdf.text(`Verbale di ${report.type === "consegna" ? "Consegna" : "Riconsegna"}`, 14, y);
+    y += 10;
+    pdf.setFontSize(11);
+    pdf.text(`Immobile: ${pulisciTestoPdfContratti(selectedContractDetails.propertyName || "-")}`, 14, y); y += 8;
+    pdf.text(`Conduttore: ${pulisciTestoPdfContratti(selectedContractDetails.tenantName || "-")}`, 14, y); y += 8;
+    pdf.text(`Data verbale: ${new Date(report.date).toLocaleDateString("it-IT")}`, 14, y); y += 12;
+
+    if (report.checklist && report.checklist.length > 0) {
+      pdf.setFontSize(13);
+      pdf.text("Dettaglio Verbale", 14, y); y += 8;
+      pdf.setFontSize(10);
+      for (const voce of report.checklist) {
+        const righeVoce = pdf.splitTextToSize(`• ${pulisciTestoPdfContratti(voce.item)}: ${pulisciTestoPdfContratti(voce.status)}`, 180);
+        nuovaRigaConPagina(righeVoce.length * 6 + 2);
+        pdf.text(righeVoce, 14, y); y += righeVoce.length * 6;
+        if (voce.notes) {
+          const righeNote = pdf.splitTextToSize(`   Nota: ${pulisciTestoPdfContratti(voce.notes)}`, 176);
+          nuovaRigaConPagina(righeNote.length * 6);
+          pdf.setTextColor(100);
+          pdf.text(righeNote, 18, y);
+          pdf.setTextColor(0);
+          y += righeNote.length * 6;
+        }
+        y += 2;
+      }
+    }
+    if (report.hasDamages && report.damagesDescription) {
+      nuovaRigaConPagina(10);
+      y += 2;
+      pdf.setTextColor(180, 40, 40);
+      const righeDanni = pdf.splitTextToSize(`Danni riscontrati: ${pulisciTestoPdfContratti(report.damagesDescription)}`, 180);
+      nuovaRigaConPagina(righeDanni.length * 6);
+      pdf.text(righeDanni, 14, y);
+      pdf.setTextColor(0);
+      y += righeDanni.length * 6 + 4;
+    }
+
+    // Righe per la firma fisica a inchiostro
+    nuovaRigaConPagina(50);
+    y += 14;
+    pdf.setFontSize(10);
+    pdf.line(14, y, 90, y);
+    pdf.line(110, y, 186, y);
+    y += 5;
+    pdf.text("Firma Locatore (Proprietario)", 14, y);
+    pdf.text("Firma Conduttore (Inquilino)", 110, y);
+    y += 5;
+    pdf.text(`Luogo e data: _____________________`, 14, y);
+
+    pdf.save(`Verbale_${report.type}_da_firmare_${pulisciTestoPdfContratti(selectedContractDetails.tenantName || "inquilino")}.pdf`);
   };
 
   const handleDelete = async (id: string) => {
@@ -1484,15 +1516,12 @@ export default function ContractsView({
                                     </p>
                                   </div>
                                 ) : (
-                                  <div className="mt-3">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenSignModal(report, "owner")}
-                                      className="w-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-slate-700 text-[10px] font-extrabold py-2 rounded-lg border border-slate-250 transition-all cursor-pointer text-center"
-                                    >
-                                      ✍️ Apponi Firma Proprietario
-                                    </button>
-                                  </div>
+                                  // CORREZIONE CU — RIMOSSO il pulsante "Apponi Firma": la firma del
+                                  // locatore si raccoglie SOLO alla creazione/chiusura del verbale
+                                  // (Registra Verbale di Riconsegna), mai con un pulsante qui.
+                                  <p className="mt-3 text-[10px] text-slate-400 italic">
+                                    Non ancora firmato. La firma del locatore si registra alla creazione del verbale.
+                                  </p>
                                 )}
                               </div>
                             </div>
@@ -1511,14 +1540,19 @@ export default function ContractsView({
                                     </p>
                                   </div>
                                 ) : (
+                                  // CORREZIONE CU — RIMOSSO il pulsante "Apponi Firma": nessun valore
+                                  // probatorio. Restano solo due vie dimostrabili: da remoto (pulsante
+                                  // "Genera Link Firma" nell'header del verbale, sopra) o di persona
+                                  // tramite questo PDF stampabile, da far firmare fisicamente.
                                   <div className="mt-3">
                                     <button
                                       type="button"
-                                      onClick={() => handleOpenSignModal(report, "tenant")}
+                                      onClick={() => scaricaPdfPerFirmaPresenza(report)}
                                       className="w-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-slate-700 text-[10px] font-extrabold py-2 rounded-lg border border-slate-250 transition-all cursor-pointer text-center"
                                     >
-                                      ✍️ Apponi Firma Inquilino
+                                      📄 Scarica PDF per Firma in Presenza
                                     </button>
+                                    <p className="mt-1.5 text-[9px] text-slate-400 text-center">oppure "Genera Link Firma" qui sopra, per la firma da remoto</p>
                                   </div>
                                 )}
                               </div>
@@ -2921,73 +2955,11 @@ export default function ContractsView({
       })()}
 
       {/* 5. MODALE FIRMA DIGITALE VERBALE */}
-      {showSignatureModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100">
-            
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <h3 className="font-sans font-black text-sm flex items-center space-x-2">
-                <span>✍️</span>
-                <span>Firma Elettronica Verbale di Consegna</span>
-              </h3>
-              <button type="button" onClick={() => setShowSignatureModal(false)} className="text-slate-400 hover:text-white transition-colors cursor-pointer">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="bg-indigo-50 border border-indigo-150 rounded-xl p-4 text-xs text-indigo-950">
-                <strong>Clausola di Sottoscrizione:</strong>
-                <p className="mt-1 leading-relaxed text-slate-600">
-                  Digitando il proprio nome per esteso si appone una firma digitale con validità legale di avvenuto controllo dello stato dell'immobile in conformità a quanto riportato nel verbale di {signatureTargetReport?.type === "consegna" ? "consegna" : "riconsegna"}.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
-                  Digita Nome e Cognome per Esteso *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Es: Stefano Marini"
-                  value={signatureTypedName}
-                  onChange={(e) => setSignatureTypedName(e.target.value)}
-                  className="w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden focus:border-indigo-500 text-center font-serif text-lg italic tracking-wide"
-                />
-              </div>
-
-              {/* Pad/Canvas Simulation visual decorative */}
-              <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 flex flex-col items-center justify-center gap-1.5 select-none h-24">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Traccia di firma acquisita digitalmente</span>
-                {signatureTypedName ? (
-                  <span className="text-xl font-serif italic text-indigo-900 font-black tracking-wide animate-pulse">{signatureTypedName}</span>
-                ) : (
-                  <span className="text-xs text-slate-350 italic">Scrivi il tuo nome sopra...</span>
-                )}
-              </div>
-            </div>
-
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowSignatureModal(false)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-              >
-                Annulla
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmSignature}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer"
-              >
-                Applica Firma
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
+      {/* CORREZIONE CU — RIMOSSO su indicazione esplicita di Massimo: il vecchio
+          modale "digita il tuo nome e appone una firma" (nessun valore probatorio,
+          nessun collegamento dimostrabile alla lettura effettiva del contenuto).
+          Sostituito da: firma remota (link + OTP) o PDF stampabile per firma
+          fisica in presenza — vedi generaLinkFirma / scaricaPdfPerFirmaPresenza. */}
     </div>
   );
 }
