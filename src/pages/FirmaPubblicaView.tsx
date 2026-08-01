@@ -157,7 +157,11 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
     y += 10;
     pdf.setFontSize(11);
     pdf.text(`Immobile: ${pulisciTestoPdf(req.propertyName || "-")}`, 14, y); y += 8;
+    // CORREZIONE CV — indirizzo, entrambe le parti per esteso, luogo
+    if (req.propertyAddress) { pdf.text(`Indirizzo: ${pulisciTestoPdf(req.propertyAddress)}`, 14, y); y += 8; }
+    pdf.text(`Locatore (Proprietario): ${pulisciTestoPdf(req.ownerName || "-")}`, 14, y); y += 8;
     pdf.text(`Conduttore: ${pulisciTestoPdf(req.tenantName || "-")}`, 14, y); y += 8;
+    if (req.luogo) { pdf.text(`Luogo di redazione: ${pulisciTestoPdf(req.luogo)}`, 14, y); y += 8; }
     if (req.reportDate) { pdf.text(`Data verbale: ${new Date(req.reportDate).toLocaleDateString("it-IT")}`, 14, y); y += 8; }
     pdf.text(`Dichiarazione del conduttore: ${declaration === "conforme" ? "Tutto conforme" : "Segnalati problemi"}`, 14, y); y += 8;
     if (declaration === "problemi" && notes) {
@@ -241,6 +245,11 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
     <Shell>
       <h2 className="font-serif text-xl font-bold text-slate-800">Verbale di {req?.reportType === "consegna" ? "Consegna" : "Riconsegna"}</h2>
       <p className="mt-1 text-sm text-slate-500 font-mono">{req?.propertyName} · {req?.tenantName}</p>
+      {/* CORREZIONE CV — un verbale completo indica indirizzo, entrambe le parti
+          per esteso e il luogo di redazione, non solo nome immobile+conduttore */}
+      {req?.propertyAddress && <p className="text-xs text-slate-500">📍 {req.propertyAddress}</p>}
+      {req?.ownerName && <p className="text-xs text-slate-500">Locatore: {req.ownerName}</p>}
+      {req?.luogo && <p className="text-xs text-slate-400">Luogo di redazione: {req.luogo}</p>}
       {req?.reportDate && <p className="text-xs text-slate-400">Data verbale: {new Date(req.reportDate).toLocaleDateString("it-IT")}</p>}
 
       {/* CORREZIONE CS — BUG SEGNALATO ("firma a scatola chiusa"): prima qui c'era

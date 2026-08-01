@@ -50,6 +50,11 @@ export async function creaSignatureRequest(data: {
   contractId: string;
   propertyId: string;
   propertyName?: string;
+  // CORREZIONE CV — un verbale completo indica l'immobile per indirizzo, il
+  // proprietario per esteso, e il luogo di redazione — non solo il conduttore
+  propertyAddress?: string;
+  ownerName?: string;
+  luogo?: string;
   tenantId?: string;
   tenantName?: string;
   tenantPhone: string;        // già normalizzato E.164 dal chiamante
@@ -75,6 +80,9 @@ export async function creaSignatureRequest(data: {
     contractId: data.contractId,
     propertyId: data.propertyId,
     propertyName: data.propertyName ?? null,
+    propertyAddress: data.propertyAddress ?? null,
+    ownerName: data.ownerName ?? null,
+    luogo: data.luogo ?? data.propertyAddress ?? null,
     tenantId: data.tenantId ?? null,
     tenantName: data.tenantName ?? null,
     tenantPhone: data.tenantPhone,

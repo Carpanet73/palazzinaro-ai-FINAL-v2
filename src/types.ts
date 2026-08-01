@@ -664,6 +664,13 @@ export interface SignatureRequest {
   contractId: string;
   propertyId: string;
   propertyName?: string;
+  // CORREZIONE CV — un verbale completo indica l'immobile per indirizzo (dati
+  // anagrafici reali), non solo il nome; e il proprietario per esteso, non solo
+  // il conduttore — entrambe le parti devono comparire.
+  propertyAddress?: string;
+  ownerName?: string;
+  // Luogo di redazione del verbale (di norma l'immobile stesso)
+  luogo?: string;
   tenantId?: string;
   tenantName?: string;
   tenantPhone: string;        // formato E.164 (+39...) — normalizzato

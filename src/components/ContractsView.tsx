@@ -780,12 +780,18 @@ export default function ContractsView({
       alert("Numero telefono inquilino mancante o non valido: impossibile inviare l'SMS.");
       return;
     }
+    // CORREZIONE CV — un verbale completo indica l'immobile per indirizzo reale
+    // (dall'anagrafica), non solo il nome
+    const proprietaCollegata = properties.find(p => p.id === selectedContractDetails.propertyId);
     try {
       const { token } = await creaSignatureRequest({
         userId: user.uid,
         contractId: selectedContractDetails.id,
         propertyId: selectedContractDetails.propertyId,
         propertyName: selectedContractDetails.propertyName,
+        propertyAddress: proprietaCollegata?.address,
+        ownerName: selectedContractDetails.ownerName,
+        luogo: proprietaCollegata?.address,
         tenantId: selectedContractDetails.tenantId,
         tenantName: selectedContractDetails.tenantName,
         tenantPhone: telefonoE164,
@@ -821,6 +827,10 @@ export default function ContractsView({
 
   const scaricaPdfPerFirmaPresenza = (report: DeliveryReport) => {
     if (!selectedContractDetails) return;
+    // CORREZIONE CV — un verbale completo indica indirizzo reale, entrambe le
+    // parti per esteso (proprietario incluso, non solo conduttore), luogo, data
+    // e ora — mai un documento generico senza questi dati.
+    const proprietaCollegata = properties.find(p => p.id === selectedContractDetails.propertyId);
     const pdf = new jsPDF();
     const margineBasso = 280;
     let y = 20;
@@ -833,8 +843,11 @@ export default function ContractsView({
     y += 10;
     pdf.setFontSize(11);
     pdf.text(`Immobile: ${pulisciTestoPdfContratti(selectedContractDetails.propertyName || "-")}`, 14, y); y += 8;
+    if (proprietaCollegata?.address) { pdf.text(`Indirizzo: ${pulisciTestoPdfContratti(proprietaCollegata.address)}`, 14, y); y += 8; }
+    pdf.text(`Locatore (Proprietario): ${pulisciTestoPdfContratti(selectedContractDetails.ownerName || "-")}`, 14, y); y += 8;
     pdf.text(`Conduttore: ${pulisciTestoPdfContratti(selectedContractDetails.tenantName || "-")}`, 14, y); y += 8;
-    pdf.text(`Data verbale: ${new Date(report.date).toLocaleDateString("it-IT")}`, 14, y); y += 12;
+    pdf.text(`Luogo di redazione: ${pulisciTestoPdfContratti(proprietaCollegata?.address || selectedContractDetails.propertyName || "-")}`, 14, y); y += 8;
+    pdf.text(`Data e ora di redazione: ${new Date().toLocaleString("it-IT")}`, 14, y); y += 12;
 
     if (report.checklist && report.checklist.length > 0) {
       pdf.setFontSize(13);
