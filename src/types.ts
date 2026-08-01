@@ -681,6 +681,15 @@ export interface SignatureRequest {
   declarationNotes?: string;
   declarationPhotos?: string[];
   legalCaseId?: string;
+  // CORREZIONE CS — BUG SEGNALATO: il verbale si firmava "a scatola chiusa", senza
+  // che il contenuto reale (checklist) fosse mai mostrato né incluso nel PDF
+  // firmato. Snapshot del contenuto al momento della generazione del link (non un
+  // riferimento live: è corretto che rifletta esattamente cosa è stato mostrato e
+  // firmato in quel momento, non eventuali modifiche successive al verbale).
+  reportDate?: string;
+  checklist?: { id: string; item: string; status: string; notes?: string }[];
+  hasDamages?: boolean;
+  damagesDescription?: string;
   // Config EmailJS dell'admin (salvata alla creazione per il fallback email
   // dalla pagina pubblica, che non è autenticata):
   emailjsServiceId?: string;

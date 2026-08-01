@@ -46,7 +46,10 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState("");
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
-  const [esitoFirma, setEsitoFirma] = useState<{ phone: string; at: string } | null>(null);
+  // CORREZIONE CT — BUG SEGNALATO: il PDF mostrava sempre il numero di telefono
+  // come "Firmato da", anche quando la verifica era avvenuta via EMAIL (canale
+  // fallback). Ora tracciamo l'identificativo E il canale realmente usati.
+  const [esitoFirma, setEsitoFirma] = useState<{ identifier: string; canale: "sms" | "email"; at: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -122,7 +125,11 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
         otpChannel: canale,
         signedByPhone: normalizzaTelefonoE164(req.tenantPhone),
       });
-      setEsitoFirma({ phone: req.tenantPhone, at: new Date().toLocaleString("it-IT") });
+      setEsitoFirma({
+        identifier: canale === "sms" ? mascheraTelefono(req.tenantPhone) : (req.tenantEmail || req.tenantPhone),
+        canale,
+        at: new Date().toLocaleString("it-IT"),
+      });
       setFase("fatto");
     } catch (e: any) {
       console.error(e);
@@ -139,19 +146,74 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
   const scaricaPDF = () => {
     if (!req || !esitoFirma) return;
     const pdf = new jsPDF();
+    const margineBasso = 280;
+    let y = 20;
+    const nuovaRigaConPagina = (altezza = 8) => {
+      if (y + altezza > margineBasso) { pdf.addPage(); y = 20; }
+    };
+
     pdf.setFontSize(16);
-    pdf.text(`Verbale di ${req.reportType === "consegna" ? "Consegna" : "Riconsegna"} — FIRMATO`, 14, 20);
+    pdf.text(`Verbale di ${req.reportType === "consegna" ? "Consegna" : "Riconsegna"} — FIRMATO`, 14, y);
+    y += 10;
     pdf.setFontSize(11);
-    pdf.text(`Immobile: ${pulisciTestoPdf(req.propertyName || "-")}`, 14, 32);
-    pdf.text(`Conduttore: ${pulisciTestoPdf(req.tenantName || "-")}`, 14, 40);
-    pdf.text(`Dichiarazione: ${declaration === "conforme" ? "Tutto conforme" : "Segnalati problemi"}`, 14, 48);
-    if (declaration === "problemi" && notes) pdf.text(`Note: ${pulisciTestoPdf(notes)}`, 14, 56, { maxWidth: 180 });
-    pdf.text(`Firmato da: ${esitoFirma.phone}`, 14, 70);
-    pdf.text(`Data firma: ${esitoFirma.at}`, 14, 78);
-    pdf.text(`Canale OTP: ${canale.toUpperCase()} — verificato`, 14, 86);
+    pdf.text(`Immobile: ${pulisciTestoPdf(req.propertyName || "-")}`, 14, y); y += 8;
+    pdf.text(`Conduttore: ${pulisciTestoPdf(req.tenantName || "-")}`, 14, y); y += 8;
+    if (req.reportDate) { pdf.text(`Data verbale: ${new Date(req.reportDate).toLocaleDateString("it-IT")}`, 14, y); y += 8; }
+    pdf.text(`Dichiarazione del conduttore: ${declaration === "conforme" ? "Tutto conforme" : "Segnalati problemi"}`, 14, y); y += 8;
+    if (declaration === "problemi" && notes) {
+      const righeNote = pdf.splitTextToSize(`Note del conduttore: ${pulisciTestoPdf(notes)}`, 180);
+      nuovaRigaConPagina(righeNote.length * 6);
+      pdf.text(righeNote, 14, y); y += righeNote.length * 6 + 2;
+    }
+
+    // CORREZIONE CS — il contenuto vero del verbale, quello effettivamente firmato
+    // (prima il PDF non lo conteneva mai: "firma a scatola chiusa")
+    if (req.checklist && req.checklist.length > 0) {
+      nuovaRigaConPagina(14);
+      y += 4;
+      pdf.setFontSize(13);
+      pdf.text("Dettaglio Verbale", 14, y); y += 8;
+      pdf.setFontSize(10);
+      for (const voce of req.checklist) {
+        const testoVoce = `• ${pulisciTestoPdf(voce.item)}: ${pulisciTestoPdf(voce.status)}`;
+        const righeVoce = pdf.splitTextToSize(testoVoce, 180);
+        nuovaRigaConPagina(righeVoce.length * 6 + 2);
+        pdf.text(righeVoce, 14, y); y += righeVoce.length * 6;
+        if (voce.notes) {
+          const righeNoteVoce = pdf.splitTextToSize(`   Nota: ${pulisciTestoPdf(voce.notes)}`, 176);
+          nuovaRigaConPagina(righeNoteVoce.length * 6);
+          pdf.setTextColor(100);
+          pdf.text(righeNoteVoce, 18, y);
+          pdf.setTextColor(0);
+          y += righeNoteVoce.length * 6;
+        }
+        y += 2;
+      }
+    }
+    if (req.hasDamages && req.damagesDescription) {
+      nuovaRigaConPagina(10);
+      y += 2;
+      pdf.setFontSize(11);
+      pdf.setTextColor(180, 40, 40);
+      const righeDanni = pdf.splitTextToSize(`Danni riscontrati: ${pulisciTestoPdf(req.damagesDescription)}`, 180);
+      nuovaRigaConPagina(righeDanni.length * 6);
+      pdf.text(righeDanni, 14, y);
+      pdf.setTextColor(0);
+      y += righeDanni.length * 6 + 4;
+    }
+
+    nuovaRigaConPagina(40);
+    y += 6;
+    pdf.setFontSize(11);
+    // CORREZIONE CT — mostra l'identificativo e il canale REALMENTE usati per la
+    // verifica (prima mostrava sempre il telefono, anche se si era usata l'email)
+    pdf.text(`Firmato da (${esitoFirma.canale === "sms" ? "SMS" : "Email"}): ${pulisciTestoPdf(esitoFirma.identifier)}`, 14, y); y += 8;
+    pdf.text(`Data firma: ${esitoFirma.at}`, 14, y); y += 8;
+    pdf.text(`Canale OTP: ${canale.toUpperCase()} — verificato`, 14, y); y += 14;
     pdf.setFontSize(8);
-    pdf.text("Firma elettronica ai sensi dell'art. 1 c.1 lett. q-bis CAD e art. 3 eIDAS.", 14, 100);
-    pdf.text("Documento generato dalla procedura automatizzata Palazzinaro AI.", 14, 106);
+    nuovaRigaConPagina(20);
+    pdf.text("Firma elettronica ai sensi dell'art. 1 c.1 lett. q-bis CAD e art. 3 eIDAS.", 14, y); y += 6;
+    pdf.text("Documento generato dalla procedura automatizzata Palazzinaro AI.", 14, y);
     pdf.save(`Verbale_${req.reportType}_firmato_${pulisciTestoPdf(req.tenantName || "inquilino")}.pdf`);
   };
 
@@ -166,7 +228,7 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
       <div className="text-center mt-8">
         <div className="text-5xl">✅</div>
         <h2 className="mt-3 font-serif text-2xl font-bold text-emerald-700">Verbale firmato</h2>
-        <p className="mt-2 text-sm text-slate-600 font-mono">{esitoFirma?.phone}</p>
+        <p className="mt-2 text-sm text-slate-600 font-mono">{esitoFirma?.identifier}</p>
         <p className="text-sm text-slate-500 font-mono">{esitoFirma?.at}</p>
         <p className="mt-1 text-xs text-slate-400">Codice OTP verificato · firma registrata agli atti</p>
         <button onClick={scaricaPDF} className="mt-6 w-full rounded-lg border border-slate-300 px-5 py-3 text-sm font-black text-slate-700 hover:bg-slate-100">Scarica PDF firmato</button>
@@ -179,8 +241,37 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
     <Shell>
       <h2 className="font-serif text-xl font-bold text-slate-800">Verbale di {req?.reportType === "consegna" ? "Consegna" : "Riconsegna"}</h2>
       <p className="mt-1 text-sm text-slate-500 font-mono">{req?.propertyName} · {req?.tenantName}</p>
+      {req?.reportDate && <p className="text-xs text-slate-400">Data verbale: {new Date(req.reportDate).toLocaleDateString("it-IT")}</p>}
+
+      {/* CORREZIONE CS — BUG SEGNALATO ("firma a scatola chiusa"): prima qui c'era
+          solo un testo che dava per scontato che il verbale fosse già stato
+          mostrato in presenza dall'amministratore. Ora il contenuto reale
+          (checklist) è mostrato qui, così la dichiarazione sotto è vera. */}
+      {req?.checklist && req.checklist.length > 0 && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="bg-slate-800 text-white text-[10px] font-black uppercase px-4 py-2">Dettaglio Verbale</div>
+          <div className="divide-y divide-slate-100">
+            {req.checklist.map((voce) => (
+              <div key={voce.id} className="px-4 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-bold text-slate-700">{voce.item}</span>
+                  <span className="text-xs font-mono text-slate-600">{voce.status}</span>
+                </div>
+                {voce.notes && <p className="mt-1 text-[11px] text-slate-500">{voce.notes}</p>}
+              </div>
+            ))}
+          </div>
+          {req.hasDamages && req.damagesDescription && (
+            <div className="px-4 py-3 bg-rose-50 border-t border-rose-200">
+              <p className="text-[11px] font-bold text-rose-700 uppercase">⚠️ Danni riscontrati</p>
+              <p className="mt-1 text-xs text-rose-700">{req.damagesDescription}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-        <p className="text-xs text-slate-500">Leggi il contenuto del verbale mostrato dall'amministratore, poi dichiara:</p>
+        <p className="text-xs text-slate-500">Confermi il contenuto mostrato sopra?</p>
         <label className="mt-4 flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-3 cursor-pointer">
           <input type="radio" name="d" checked={declaration === "conforme"} onChange={() => setDeclaration("conforme")} />
           <span className="text-sm font-medium text-slate-700">Dichiaro che tutto è conforme</span>

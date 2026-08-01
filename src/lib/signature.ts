@@ -61,6 +61,12 @@ export async function creaSignatureRequest(data: {
   emailjsPublicKey?: string;
   // CORREZIONE CL — template dedicato per l'OTP, diverso da quello dei Solleciti
   otpEmailTemplateId?: string;
+  // CORREZIONE CS — snapshot del contenuto reale del verbale, da mostrare al
+  // firmatario prima della firma (mai più una firma "a scatola chiusa")
+  reportDate?: string;
+  checklist?: { id: string; item: string; status: string; notes?: string }[];
+  hasDamages?: boolean;
+  damagesDescription?: string;
 }): Promise<{ token: string }> {
   const token = generaToken();
   const now = isoLocale();
@@ -82,6 +88,18 @@ export async function creaSignatureRequest(data: {
     emailjsTemplateId: data.emailjsTemplateId ?? null,
     emailjsPublicKey: data.emailjsPublicKey ?? null,
     otpEmailTemplateId: data.otpEmailTemplateId ?? null,
+    reportDate: data.reportDate ?? null,
+    // CORREZIONE CS — pulizia esplicita: stripUndef (sotto) non pulisce dentro
+    // gli oggetti di un array, e Firestore rifiuta undefined a qualunque
+    // profondità (stesso bug già visto altrove nel progetto).
+    checklist: (data.checklist ?? []).map((voce) => ({
+      id: voce.id,
+      item: voce.item,
+      status: voce.status,
+      notes: voce.notes ?? null,
+    })),
+    hasDamages: data.hasDamages ?? false,
+    damagesDescription: data.damagesDescription ?? null,
   };
   await setDoc(doc(db, "signatureRequests", token), stripUndef(payload));
   return { token };
