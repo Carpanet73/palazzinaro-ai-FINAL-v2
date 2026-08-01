@@ -404,9 +404,14 @@ export default function App() {
         setGoogleAccessToken(credential.accessToken);
         showSuccess("Accesso con Google completato e token Calendar sincronizzato!");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed:", error);
-      alert("Autenticazione Fallita. Riprova più tardi.");
+      // CORREZIONE CP — mostra il codice errore reale (es. auth/unauthorized-domain)
+      // invece di un alert generico: serve a diagnosticare senza dover aprire la
+      // console del browser, specialmente su URL di Preview con domini diversi
+      // ogni volta da quello di produzione (non autorizzati su Firebase per default).
+      const codiceErrore = error?.code ? ` (${error.code})` : "";
+      alert(`Autenticazione Fallita${codiceErrore}. Riprova più tardi.`);
     }
   };
 
