@@ -227,6 +227,13 @@ export interface OwnerProfile {
   emailServiceId?: string;
   emailTemplateId?: string;
   emailPublicKey?: string;
+  // CORREZIONE CL — Firma Remota: template EmailJS DEDICATO per l'email OTP.
+  // NON si può riusare emailTemplateId: quel template (Solleciti) è una pagina
+  // fissa configurata su EmailJS con variabili diverse (message_content,
+  // total_amount, items_list) — inviare otp_code lì produce un'email vuota
+  // o senza senso, mai il codice. Service e Public Key restano condivisi
+  // (stesso account EmailJS), cambia solo il Template.
+  otpEmailTemplateId?: string;
 }
 
 // ── CORREZIONE B — Anagrafica Proprietari reale ──
@@ -645,6 +652,59 @@ export interface DeliveryReport {
   // calcolo informativo di restituzione/compensazione del deposito cauzionale.
   estimatedDamagesAmount?: number;
   driveBackupUrl?: string;
+  // CORREZIONE CB — Firma remota: collegamento alla SignatureRequest e stato firma
+  signatureRequestId?: string;
+  remoteSigned?: boolean;
+}
+
+// CORREZIONE CB — Firma remota inquilino via link WhatsApp + OTP
+export interface SignatureRequest {
+  id: string;                 // == token segreto (64 char esadecimali)
+  userId: string;             // admin che ha creato l'invito
+  contractId: string;
+  propertyId: string;
+  propertyName?: string;
+  // CORREZIONE CV — un verbale completo indica l'immobile per indirizzo (dati
+  // anagrafici reali), non solo il nome; e il proprietario per esteso, non solo
+  // il conduttore — entrambe le parti devono comparire.
+  propertyAddress?: string;
+  ownerName?: string;
+  // Luogo di redazione del verbale (di norma l'immobile stesso)
+  luogo?: string;
+  tenantId?: string;
+  tenantName?: string;
+  tenantPhone: string;        // formato E.164 (+39...) — normalizzato
+  tenantEmail?: string;       // per il fallback OTP via email
+  reportId: string;           // DeliveryReport da firmare
+  reportType: "consegna" | "riconsegna";
+  status: "pending" | "signed" | "expired" | "revoked";
+  createdAt: string;
+  expiresAt: string;          // createdAt + 7 giorni (calcolato)
+  signedAt?: string;
+  signedByPhone?: string;
+  otpChannel?: "sms" | "email";
+  otpVerified?: boolean;
+  declaration?: "conforme" | "problemi";
+  declarationNotes?: string;
+  declarationPhotos?: string[];
+  legalCaseId?: string;
+  // CORREZIONE CS — BUG SEGNALATO: il verbale si firmava "a scatola chiusa", senza
+  // che il contenuto reale (checklist) fosse mai mostrato né incluso nel PDF
+  // firmato. Snapshot del contenuto al momento della generazione del link (non un
+  // riferimento live: è corretto che rifletta esattamente cosa è stato mostrato e
+  // firmato in quel momento, non eventuali modifiche successive al verbale).
+  reportDate?: string;
+  checklist?: { id: string; item: string; status: string; notes?: string }[];
+  hasDamages?: boolean;
+  damagesDescription?: string;
+  // Config EmailJS dell'admin (salvata alla creazione per il fallback email
+  // dalla pagina pubblica, che non è autenticata):
+  emailjsServiceId?: string;
+  emailjsTemplateId?: string;
+  emailjsPublicKey?: string;
+  // CORREZIONE CL — template dedicato per l'OTP, diverso da emailjsTemplateId
+  // (quello dei Solleciti): vedi nota su OwnerProfile.otpEmailTemplateId.
+  otpEmailTemplateId?: string;
 }
 
 

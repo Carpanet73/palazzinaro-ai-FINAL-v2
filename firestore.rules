@@ -179,6 +179,27 @@ service cloud.firestore {
     }
 
     // ───────────────────────────────────────────────────────────────────────
+    // CORREZIONE CJ — Firma Remota: pagina pubblica /firma/:token (non
+    // autenticata) deve poter leggere l'invito; solo l'admin proprietario può
+    // crearlo; l'update è permesso all'admin (gestione normale) oppure al
+    // flusso pubblico di firma, che può SOLO impostare status=signed con
+    // otpVerified=true, senza toccare userId né expiresAt.
+    // ───────────────────────────────────────────────────────────────────────
+
+    match /signatureRequests/{tokenId} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+      allow update: if (request.auth != null
+                        && resource.data.userId == request.auth.uid)
+                    || (request.resource.data.status == "signed"
+                        && request.resource.data.otpVerified == true
+                        && request.resource.data.userId == resource.data.userId
+                        && request.resource.data.expiresAt == resource.data.expiresAt);
+      allow delete: if false;
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
     // Default deny — anything not explicitly allowed above is blocked
     // ───────────────────────────────────────────────────────────────────────
 
