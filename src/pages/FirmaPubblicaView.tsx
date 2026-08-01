@@ -130,23 +130,29 @@ export default function FirmaPubblicaView({ token }: { token: string }) {
     } finally { setBusy(false); }
   };
 
+  // CORREZIONE CR — BUG: i font standard di jsPDF (Helvetica ecc.) supportano solo
+  // WinAnsi/Latin-1, non Unicode/emoji pieno. Un'emoji nel nome immobile (es. 🏠)
+  // veniva trasformata in caratteri illeggibili tipo "Ø<ßâ". Le lettere accentate
+  // italiane normali (à, è, ì, ò, ù) restano intatte, essendo dentro Latin-1.
+  const pulisciTestoPdf = (testo: string) => testo.replace(/[^\x00-\xFF]/g, "").trim();
+
   const scaricaPDF = () => {
     if (!req || !esitoFirma) return;
     const pdf = new jsPDF();
     pdf.setFontSize(16);
     pdf.text(`Verbale di ${req.reportType === "consegna" ? "Consegna" : "Riconsegna"} — FIRMATO`, 14, 20);
     pdf.setFontSize(11);
-    pdf.text(`Immobile: ${req.propertyName || "-"}`, 14, 32);
-    pdf.text(`Conduttore: ${req.tenantName || "-"}`, 14, 40);
+    pdf.text(`Immobile: ${pulisciTestoPdf(req.propertyName || "-")}`, 14, 32);
+    pdf.text(`Conduttore: ${pulisciTestoPdf(req.tenantName || "-")}`, 14, 40);
     pdf.text(`Dichiarazione: ${declaration === "conforme" ? "Tutto conforme" : "Segnalati problemi"}`, 14, 48);
-    if (declaration === "problemi" && notes) pdf.text(`Note: ${notes}`, 14, 56, { maxWidth: 180 });
+    if (declaration === "problemi" && notes) pdf.text(`Note: ${pulisciTestoPdf(notes)}`, 14, 56, { maxWidth: 180 });
     pdf.text(`Firmato da: ${esitoFirma.phone}`, 14, 70);
     pdf.text(`Data firma: ${esitoFirma.at}`, 14, 78);
     pdf.text(`Canale OTP: ${canale.toUpperCase()} — verificato`, 14, 86);
     pdf.setFontSize(8);
     pdf.text("Firma elettronica ai sensi dell'art. 1 c.1 lett. q-bis CAD e art. 3 eIDAS.", 14, 100);
     pdf.text("Documento generato dalla procedura automatizzata Palazzinaro AI.", 14, 106);
-    pdf.save(`Verbale_${req.reportType}_firmato_${req.tenantName || "inquilino"}.pdf`);
+    pdf.save(`Verbale_${req.reportType}_firmato_${pulisciTestoPdf(req.tenantName || "inquilino")}.pdf`);
   };
 
   if (fase === "loading") return <Shell><p className="text-sm text-slate-400">Verifica invito…</p></Shell>;
