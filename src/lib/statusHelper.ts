@@ -46,10 +46,10 @@ export function getTenantClassification(
 
       return {
         status: "critical",
-        label: isPastHardDeadline 
-          ? "CRITICO: Termine Disdetta Legge Scaduto!" 
+        label: isPastHardDeadline
+          ? "CRITICO: Termine Disdetta Legge Scaduto!"
           : "Fase Disdetta Legge (Manca Raccomandata)",
-        emoji: "👎 ⚖️",
+        emoji: "",
         colorClass: "bg-red-950 text-red-100 border-red-800 animate-pulse",
         badgeClass: "bg-red-900/40 text-red-200 border-red-700/50",
         textClass: "text-red-300 font-extrabold",
@@ -76,7 +76,7 @@ export function getTenantClassification(
     return {
       status: "critical",
       label: "Stato Critico (Area Legale)",
-      emoji: "👎 ⚖️",
+      emoji: "",
       colorClass: "bg-red-950 text-red-100 border-red-800",
       badgeClass: "bg-red-900/30 text-red-200 border-red-700/50",
       textClass: "text-red-300 font-extrabold",
@@ -92,7 +92,7 @@ export function getTenantClassification(
     return {
       status: "red",
       label: "Relazione Critica (Messa in Mora)",
-      emoji: "👎",
+      emoji: "",
       colorClass: "bg-rose-50 text-rose-700 border-rose-200",
       badgeClass: "bg-rose-100 text-rose-800 border-rose-300",
       textClass: "text-rose-600 font-extrabold",
@@ -169,7 +169,7 @@ export function getTenantClassification(
     return {
       status: "red",
       label: "Relazione Critica (Insoluti Multipli)",
-      emoji: "👎",
+      emoji: "",
       colorClass: "bg-rose-50 text-rose-700 border-rose-200",
       badgeClass: "bg-rose-100 text-rose-800 border-rose-300",
       textClass: "text-rose-600 font-extrabold",
@@ -183,7 +183,7 @@ export function getTenantClassification(
     return {
       status: "orange",
       label: "Relazione con Anomalia (Verifica Pendenze)",
-      emoji: "😐",
+      emoji: "",
       colorClass: "bg-amber-50 text-amber-700 border-amber-200",
       badgeClass: "bg-amber-100 text-amber-800 border-amber-300",
       textClass: "text-amber-600 font-extrabold",
@@ -197,7 +197,7 @@ export function getTenantClassification(
     return {
       status: "orange",
       label: "In Attesa di Scadenza",
-      emoji: "😐",
+      emoji: "",
       colorClass: "bg-amber-50 text-amber-700 border-amber-200",
       badgeClass: "bg-amber-100 text-amber-800 border-amber-300",
       textClass: "text-amber-600 font-extrabold",
@@ -210,7 +210,7 @@ export function getTenantClassification(
   return {
     status: "green",
     label: "Relazione Regolare",
-    emoji: "👍",
+    emoji: "",
     colorClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
     badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-200",
     textClass: "text-emerald-600 font-extrabold",
