@@ -1,5 +1,13 @@
 
 /**
+ * ⚠️ SUPERSEDUTO il 05/08/2026 da api/cron-close-fast-closing.ts, che replica per intero
+ * (ed estende) questa stessa logica di rinvio spese accessorie all'interno della chiusura
+ * mensile completa del Fast Closing (Solleciti, riproposta canoni, indennità di occupazione).
+ * Questo file NON è più referenziato in vercel.json (non lo era mai stato, in realtà: il
+ * job non era ancora stato schedulato) e non va aggiunto di nuovo — farlo girare insieme al
+ * nuovo cron rischierebbe di processare due volte le stesse voci. Lasciato nel repository
+ * solo per cronologia/trasparenza.
+ *
  * Vercel Cron Serverless Function — /api/cron-postpone-accessories
  *
  * CORREZIONE D — Sostituisce la vecchia logica client-side (useEffect + localStorage
