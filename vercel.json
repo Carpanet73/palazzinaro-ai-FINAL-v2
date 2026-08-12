@@ -14,6 +14,16 @@
     "api/extract.ts": {
       "memory": 1024,
       "maxDuration": 60
+    },
+    "api/cron-close-fast-closing.ts": {
+      "memory": 1024,
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron-close-fast-closing",
+      "schedule": "0 2 1 * *"
+    }
+  ]
 }
