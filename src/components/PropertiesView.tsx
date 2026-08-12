@@ -2,28 +2,47 @@
 import React, { useState } from "react";
 import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
-import { 
-  Plus, 
-  Edit3, 
-  Trash2, 
-  Home, 
-  MapPin, 
-  Tag, 
-  Info, 
-  X, 
-  ArrowLeft, 
-  Receipt, 
-  Landmark, 
-  CheckCircle, 
-  Scale, 
-  Send, 
-  FileText, 
-  Upload, 
-  Download, 
-  Users, 
-  Phone, 
-  Mail, 
-  FileCheck
+import {
+  Plus,
+  Edit3,
+  Trash2,
+  Home,
+  MapPin,
+  Tag,
+  Info,
+  X,
+  ArrowLeft,
+  Receipt,
+  Landmark,
+  CheckCircle,
+  Scale,
+  Send,
+  FileText,
+  Upload,
+  Download,
+  Users,
+  Phone,
+  Mail,
+  FileCheck,
+  CheckCircle2,
+  Building2,
+  AlertTriangle,
+  ClipboardList,
+  Euro,
+  Zap,
+  Lightbulb,
+  Flame,
+  Droplets,
+  Search,
+  Check,
+  Wrench,
+  User,
+  Briefcase,
+  FolderOpen,
+  Shield,
+  Loader2,
+  Camera,
+  Paperclip
 } from "lucide-react";
 import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, Condominium, Maintenance, InsurancePolicy, DeliveryReport, StoredDocument } from "../types";
 import { getTenantClassification as getTenantClassificationHelper } from "../lib/statusHelper";
@@ -416,9 +435,9 @@ export default function PropertiesView({
         `Immobili/${name || "Nuovo Immobile"}`
       );
       setPropertyDocuments(prev => [...prev, storedDoc]);
-      alert("📄 Documento letto e salvato agli atti! Controlla i campi precompilati prima di salvare.");
+      alert("Documento letto e salvato agli atti! Controlla i campi precompilati prima di salvare.");
     } catch (err: any) {
-      alert(`❌ Errore durante la lettura/salvataggio del documento: ${err?.message || err}`);
+      alert(`Errore durante la lettura/salvataggio del documento: ${err?.message || err}`);
     } finally {
       setProcessingScan(false);
     }
@@ -673,7 +692,7 @@ export default function PropertiesView({
         recipientRole = "Amministratore Condominio";
       }
 
-      setDispatchSuccessMsg(`✅ Documento "${dispatchDoc.name}" inviato con successo a ${recipientName} (${recipientRole}) via email e WhatsApp!`);
+      setDispatchSuccessMsg(`Documento "${dispatchDoc.name}" inviato con successo a ${recipientName} (${recipientRole}) via email e WhatsApp!`);
       setTimeout(() => {
         setShowDispatchModal(false);
         setDispatchDoc(null);
@@ -726,8 +745,9 @@ export default function PropertiesView({
           <div className="lg:col-span-7 bg-white rounded-2xl border-2 border-slate-100 p-6 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">
-                  🏠 {prop.type}
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">
+                  <Home size={11} className="shrink-0" />
+                  {prop.type}
                 </span>
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${
                   prop.status === "Available" 
@@ -752,19 +772,21 @@ export default function PropertiesView({
               </p>
 
               <div className="flex flex-wrap gap-1.5 mt-4 pt-4 border-t border-slate-100">
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md ${
-                  prop.isBareOwnership 
-                    ? "bg-amber-50 text-amber-700 border border-amber-200/50" 
+                <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-md ${
+                  prop.isBareOwnership
+                    ? "bg-amber-50 text-amber-700 border border-amber-200/50"
                     : "bg-emerald-50 text-emerald-700 border border-emerald-200/50"
                 }`}>
-                  {prop.isBareOwnership ? "🟠 Nuda Proprietà" : "🟢 Piena Proprietà (Ammin. Ordinaria)"}
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${prop.isBareOwnership ? "bg-amber-600" : "bg-emerald-600"}`} />
+                  {prop.isBareOwnership ? "Nuda Proprietà" : "Piena Proprietà (Ammin. Ordinaria)"}
                 </span>
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md ${
-                  prop.isCondoConstituted 
-                    ? "bg-indigo-50 text-indigo-700 border border-indigo-200/50" 
+                <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-md ${
+                  prop.isCondoConstituted
+                    ? "bg-indigo-50 text-indigo-700 border border-indigo-200/50"
                     : "bg-rose-50 text-rose-700 border border-rose-200/50"
                 }`}>
-                  {prop.isCondoConstituted ? "🏢 Condominio Costituito" : "⚠️ Condominio Assente / Non Costituito"}
+                  {prop.isCondoConstituted ? <Building2 size={12} className="shrink-0" /> : <AlertTriangle size={12} className="shrink-0" />}
+                  {prop.isCondoConstituted ? "Condominio Costituito" : "Condominio Assente / Non Costituito"}
                 </span>
               </div>
             </div>
@@ -1712,8 +1734,11 @@ export default function PropertiesView({
                 </div>
 
                 {dispatchSuccessMsg ? (
-                  <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl leading-relaxed">
-                    {dispatchSuccessMsg}
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl leading-relaxed flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center shrink-0">
+                      <Check size={11} className="text-white" />
+                    </span>
+                    <span>{dispatchSuccessMsg}</span>
                   </div>
                 ) : (
                   <>

@@ -1,13 +1,24 @@
 
 import React, { useState } from "react";
-import { 
-  Plus, Edit3, Trash2, FileText, Calendar, Wallet, Link2, 
-  Sparkles, X, AlertCircle, ArrowRight, ArrowLeft, Check, 
-  Upload, RefreshCw, FileCheck, Building, User, Info, MapPin
+import {
+  Plus, Edit3, Trash2, FileText, Calendar, Wallet, Link2,
+  Sparkles, X, AlertCircle, ArrowRight, ArrowLeft, Check,
+  Upload, RefreshCw, FileCheck, Building, User, Info, MapPin,
+  CheckCircle2, XCircle, AlertTriangle, ClipboardList, Mail,
+  Search, Handshake, Building2, Calculator, Files, Download,
+  FolderOpen, PenLine, Home, Wand2, Camera, Clock, Image
 } from "lucide-react";
-import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner, FastClosingItem } from "../types";
+import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner, FastClosingItem, OwnerProfile } from "../types";
 import ContractGeneratorWizard from "./ContractGeneratorWizard";
 import DeliveryReportWizard from "./DeliveryReportWizard";
+import emailjs from "@emailjs/browser";
+import { generateDisdettaAnticipataPDF } from "../lib/pdfHelper";
+import {
+  EARLY_TERMINATION_REASON_LABELS,
+  earlyTerminationReasonLabel,
+  earlyTerminationLegalRef,
+  buildDisdettaLetterBody
+} from "../lib/earlyTermination";
 
 interface ContractsViewProps {
   contracts: Contract[];
@@ -17,6 +28,9 @@ interface ContractsViewProps {
   // CORREZIONE CA — serve a DeliveryReportWizard per le scritture Firestore (userId)
   user: { uid: string } | null;
   showSuccess: (msg: string) => void;
+  // CORREZIONE CL (05/08/2026) — per il mittente/firmatario del PDF di Disdetta Anticipata
+  // e per l'invio email (Service ID/Template ID/Public Key), stesso pattern di RemindersView.
+  ownerProfile?: OwnerProfile | null;
   owners?: Owner[]; // CORREZIONE BQ — per il Wizard di generazione contratti
   deliveryReports?: DeliveryReport[];
   // CORREZIONE BX — per il Mastrino Contabile (canoni e scadenze) nella pagina di dettaglio
@@ -31,7 +45,15 @@ interface ContractsViewProps {
   // righe Fast Closing future già generate (vedi handleEarlyTerminateContract in App.tsx)
   onEarlyTerminateContract?: (
     contractId: string,
-    data: { date: string; party: "Locatore" | "Conduttore"; reason: string; notes?: string }
+    data: {
+      date: string;
+      party: "Locatore" | "Conduttore";
+      reason: string;
+      reasonFreeText?: string;
+      notes?: string;
+      letterText?: string;
+      otpVerifiedAt?: string;
+    }
   ) => Promise<void>;
   onDeleteContract: (id: string) => Promise<void>;
   onAddProperty?: (property: Omit<Property, "id" | "userId" | "createdAt">) => Promise<void>;
@@ -50,6 +72,7 @@ export default function ContractsView({
   condominiums,
   user,
   showSuccess,
+  ownerProfile,
   owners = [],
   deliveryReports = [],
   fastClosing = [],
@@ -84,6 +107,10 @@ export default function ContractsView({
   // separato dalla titolarità dell'immobile (isBareOwnership sopra). Prima erano
   // erroneamente mescolati in un solo campo/scelta binaria.
   const [taxRegime, setTaxRegime] = useState<"CedolareSecca" | "Ordinaria">("Ordinaria");
+  // CORREZIONE CK (05/08/2026) — Ripartizione dell'imposta di registro F24 (regime
+  // Ordinaria) tra Locatore e Conduttore: per legge di regola in parti uguali, ma libera e
+  // modificabile, stesso principio del sistema a percentuale già usato per le manutenzioni.
+  const [f24OwnerSplitPct, setF24OwnerSplitPct] = useState<number>(50);
   // CORREZIONE CA — TASK 3a: deposito cauzionale nel wizard di creazione contratto
   const [securityDepositAmount, setSecurityDepositAmount] = useState<number>(0);
   const [securityDepositMonths, setSecurityDepositMonths] = useState<number>(0);
@@ -134,15 +161,55 @@ export default function ContractsView({
   // separato da selectedContractId (che resta per la logica pre-esistente invariata dei
   // pannelli/modali già collegati ad esso, es. Verbale di Consegna).
   const [selectedContractDetails, setSelectedContractDetails] = useState<Contract | null>(null);
-  // CORREZIONE BY — Wizard Disdetta Anticipata: step 0 = chiuso, 1 = form (causale/data/note),
-  // 2 = doppia conferma (verifica di volontarietà) prima di scrivere davvero sul contratto.
-  const [disdettaWizardStep, setDisdettaWizardStep] = useState<0 | 1 | 2>(0);
+  // CORREZIONE BY/CL (05/08/2026) — Wizard Disdetta Anticipata, ora a 3 passaggi come
+  // richiesto da Massimo: 0 = chiuso, 1 = form (parte/causale/decorrenza/preavviso),
+  // 2 = bozza editabile della comunicazione, 3 = conferma definitiva con parola di
+  // conferma + verifica OTP via email prima di scrivere davvero sul contratto.
+  const [disdettaWizardStep, setDisdettaWizardStep] = useState<0 | 1 | 2 | 3>(0);
   const [disdettaForm, setDisdettaForm] = useState<{
     party: "Locatore" | "Conduttore";
     reason: string;
+    reasonFreeText: string;
     date: string;
     notes: string;
-  }>({ party: "Locatore", reason: "", date: new Date().toISOString().split("T")[0], notes: "" });
+    noticeAck: boolean; // conferma esplicita quando il Conduttore recede con meno di 6 mesi di preavviso
+  }>({ party: "Locatore", reason: "", reasonFreeText: "", date: new Date().toISOString().split("T")[0], notes: "", noticeAck: false });
+  // Bozza della comunicazione (step 2), precompilata e poi modificabile a mano.
+  const [disdettaLetterDraft, setDisdettaLetterDraft] = useState("");
+  // Step 3: parola di conferma + verifica OTP via email (CORREZIONE CL)
+  const [disdettaConfirmWord, setDisdettaConfirmWord] = useState("");
+  const [disdettaOtp, setDisdettaOtp] = useState<{
+    code: string;
+    expiresAt: number;
+    sent: boolean;
+    verified: boolean;
+    input: string;
+    sending: boolean;
+  }>({ code: "", expiresAt: 0, sent: false, verified: false, input: "", sending: false });
+  const [disdettaSubmitting, setDisdettaSubmitting] = useState(false);
+
+  // Preavviso minimo di legge: 6 mesi. Vale in modo stringente solo per il recesso del
+  // Conduttore (che l'utente ha chiesto di validare); quando è il Locatore a dare la
+  // disdetta la procedura resta elastica (tempistiche reali legate a sfratto/giudiziale
+  // fuori dal controllo dell'app), come chiarito esplicitamente da Massimo il 05/08/2026.
+  const disdettaMinNoticeDate = (() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 6);
+    return d.toISOString().split("T")[0];
+  })();
+  const disdettaNoticeTooShort =
+    disdettaForm.party === "Conduttore" && !!disdettaForm.date && disdettaForm.date < disdettaMinNoticeDate;
+
+  const formatStructuredAddressCV = (addr?: { via?: string; civico?: string; interno?: string; citta?: string; provincia?: string; cap?: string }): string => {
+    if (!addr) return "";
+    const parts = [
+      [addr.via, addr.civico].filter(Boolean).join(" "),
+      addr.interno ? `int. ${addr.interno}` : "",
+      [addr.cap, addr.citta].filter(Boolean).join(" "),
+      addr.provincia ? `(${addr.provincia})` : ""
+    ].filter(Boolean);
+    return parts.join(", ");
+  };
   // CORREZIONE BT — invio del contratto generato (documento gia' agli atti)
   const [sendPanelOpenForId, setSendPanelOpenForId] = useState<string | null>(null);
   const [sendEmailInput, setSendEmailInput] = useState("");
@@ -498,11 +565,11 @@ export default function ContractsView({
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Errore sconosciuto durante l'invio.");
       }
-      alert(`✅ Contratto inviato con successo a ${toEmail.trim()}.`);
+      alert(`Contratto inviato con successo a ${toEmail.trim()}.`);
       setSendPanelOpenForId(null);
       setSendEmailInput("");
     } catch (err: any) {
-      alert(`❌ Errore durante l'invio: ${err?.message || err}`);
+      alert(`Errore durante l'invio: ${err?.message || err}`);
     } finally {
       setSendingContractId(null);
     }
@@ -719,6 +786,8 @@ export default function ContractsView({
       isBareOwnership: isBareOwnership || (wizardPropertyMode === "create" ? newPropIsBare : (linkedProp?.isBareOwnership || false)),
       // CORREZIONE CI — regime fiscale del canone, ora un campo separato e corretto
       taxRegime,
+      // CORREZIONE CK — ripartizione dell'imposta di registro F24 (solo se Ordinaria)
+      f24OwnerSplitPct: taxRegime === "Ordinaria" ? f24OwnerSplitPct : undefined,
       // CORREZIONE CA — TASK 3a: deposito cauzionale
       securityDepositMonths: securityDepositMonths > 0 ? securityDepositMonths : undefined,
       securityDepositAmount: securityDepositAmount > 0 ? securityDepositAmount : undefined
@@ -845,12 +914,15 @@ export default function ContractsView({
           {selectedContract.status !== "Terminated" && !selectedContract.earlyTerminationDate && (
             <button
               onClick={() => {
-                setDisdettaForm({ party: "Locatore", reason: "", date: new Date().toISOString().split("T")[0], notes: "" });
+                setDisdettaForm({ party: "Locatore", reason: "", reasonFreeText: "", date: new Date().toISOString().split("T")[0], notes: "", noticeAck: false });
+                setDisdettaLetterDraft("");
+                setDisdettaConfirmWord("");
+                setDisdettaOtp({ code: "", expiresAt: 0, sent: false, verified: false, input: "", sending: false });
                 setDisdettaWizardStep(1);
               }}
               className="inline-flex items-center space-x-2 bg-rose-50 hover:bg-rose-100 text-rose-800 font-extrabold px-4 py-2.5 rounded-xl text-xs transition-colors border-2 border-rose-150 shadow-sm cursor-pointer self-start"
             >
-              <span>⚠️</span>
+              <AlertTriangle size={14} className="text-rose-700 shrink-0" />
               <span>Disdetta Anticipata del Contratto</span>
             </button>
           )}
@@ -861,28 +933,123 @@ export default function ContractsView({
               onClick={() => setShowRiconsegnaWizard(true)}
               className="inline-flex items-center space-x-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-extrabold px-4 py-2.5 rounded-xl text-xs transition-colors border-2 border-amber-150 shadow-sm cursor-pointer self-start"
             >
-              <span>📋</span>
+              <ClipboardList size={14} className="text-amber-700 shrink-0" />
               <span>Registra Verbale di Riconsegna</span>
             </button>
           )}
         </div>
 
-        {selectedContract.earlyTerminationDate && (
-          <div className="bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 text-xs text-rose-900">
-            <span className="font-black uppercase tracking-wide">⚠️ Contratto chiuso anticipatamente</span> il{" "}
-            {new Date(selectedContract.earlyTerminationDate).toLocaleDateString("it-IT")}.
-            {selectedContract.earlyTerminationNotes && <> Note: {selectedContract.earlyTerminationNotes}</>}
-            {" "}Le righe contabili future non ancora scadute sono state annullate.
-          </div>
-        )}
+        {selectedContract.earlyTerminationDate && (() => {
+          const reasonLabel = earlyTerminationReasonLabel(selectedContract.earlyTerminationReason, selectedContract.earlyTerminationReasonFreeText);
+          const legalRef = earlyTerminationLegalRef(selectedContract.earlyTerminationReason);
+          const resolvedLetterText = selectedContract.earlyTerminationLetterText || buildDisdettaLetterBody({
+            ownerName: ownerProfile?.name || "Il Proprietario",
+            tenantName: selectedContract.tenantName || "Il Conduttore",
+            propertyAddress: matchingProperty?.address,
+            party: selectedContract.earlyTerminationParty || "Locatore",
+            reasonLabel,
+            legalRef,
+            effectiveDateFormatted: new Date(selectedContract.earlyTerminationDate).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })
+          });
+
+          const handleDownloadDisdettaPdf = () => {
+            generateDisdettaAnticipataPDF({
+              tenantName: selectedContract.tenantName || "Conduttore",
+              tenantAddress: formatStructuredAddressCV(matchingTenant?.address) || undefined,
+              propertyAddress: matchingProperty?.address,
+              owner: {
+                name: ownerProfile?.name || "Il Proprietario",
+                birthPlace: ownerProfile?.birthPlace,
+                birthDate: ownerProfile?.birthDate,
+                residenceAddress: formatStructuredAddressCV(ownerProfile?.structuredAddress) || ownerProfile?.address,
+                citta: ownerProfile?.structuredAddress?.citta,
+                fiscalCode: ownerProfile?.fiscalCode,
+                phone: ownerProfile?.phone,
+                email: ownerProfile?.email
+              },
+              party: selectedContract.earlyTerminationParty || "Locatore",
+              reasonLabel,
+              legalRef,
+              effectiveDate: selectedContract.earlyTerminationDate!,
+              bodyText: resolvedLetterText
+            });
+          };
+
+          const handleSendDisdettaEmail = async () => {
+            const serviceId = ownerProfile?.emailServiceId || "";
+            const templateId = ownerProfile?.emailTemplateId || "";
+            const publicKey = ownerProfile?.emailPublicKey || "";
+            if (!serviceId || !templateId || !publicKey) {
+              alert("CONFIGURAZIONE EMAILJS MANCANTE:\nVai nelle Impostazioni per inserire Service ID, Template ID e Public Key.");
+              return;
+            }
+            const recipientEmail = matchingTenant?.email;
+            if (!recipientEmail || !recipientEmail.includes("@")) {
+              alert(`EMAIL ASSENTE:\n"${selectedContract.tenantName}" non ha un indirizzo email valido in anagrafica.`);
+              return;
+            }
+            try {
+              await emailjs.send(serviceId, templateId, {
+                to_email: recipientEmail,
+                tenant_name: selectedContract.tenantName || "Conduttore",
+                subject: "Disdetta Anticipata del Contratto di Locazione",
+                message: resolvedLetterText,
+                message_content: resolvedLetterText,
+                total_amount: "",
+                items_list: ""
+              }, publicKey);
+              const nowIso = new Date().toISOString();
+              await onEditContract(selectedContract.id, { earlyTerminationLetterSentAt: nowIso });
+              setSelectedContractDetails({ ...selectedContract, earlyTerminationLetterSentAt: nowIso });
+              alert(`Comunicazione inviata con successo a ${recipientEmail}.\nQuesto invio è informativo: per l'efficacia legale, dove richiesta, resta necessaria la Raccomandata A/R o PEC.`);
+            } catch (err: any) {
+              alert(`Errore durante l'invio dell'e-mail:\n${err?.text || err?.message || JSON.stringify(err)}`);
+            }
+          };
+
+          return (
+            <div className="bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 text-xs text-rose-900 space-y-3">
+              <div>
+                <span className="font-black uppercase tracking-wide inline-flex items-center gap-1.5">
+                  <AlertTriangle size={13} className="text-rose-700 shrink-0" />
+                  Contratto chiuso anticipatamente
+                </span> il{" "}
+                {new Date(selectedContract.earlyTerminationDate).toLocaleDateString("it-IT")}
+                {selectedContract.earlyTerminationParty && <> — parte: {selectedContract.earlyTerminationParty}</>}
+                {reasonLabel && <> — causale: {reasonLabel}</>}.
+                {selectedContract.earlyTerminationNotes && <> Note: {selectedContract.earlyTerminationNotes}</>}
+                {" "}Le righe contabili future (canoni e F24) non ancora scadute sono state annullate.
+                {" "}Se l'immobile non risulterà riconsegnato entro tale data, il sistema genererà righe di Indennità di Occupazione fino alla riconsegna.
+                {selectedContract.earlyTerminationLetterSentAt && (
+                  <> Comunicazione inviata via email il {new Date(selectedContract.earlyTerminationLetterSentAt).toLocaleDateString("it-IT")}.</>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleDownloadDisdettaPdf}
+                  className="inline-flex items-center space-x-1.5 bg-white hover:bg-rose-100 text-rose-800 font-extrabold px-3 py-2 rounded-lg text-[11px] border border-rose-200 cursor-pointer"
+                >
+                  <FileText size={13} className="text-rose-700 shrink-0" /><span>Scarica PDF Disdetta</span>
+                </button>
+                <button
+                  onClick={handleSendDisdettaEmail}
+                  className="inline-flex items-center space-x-1.5 bg-white hover:bg-rose-100 text-rose-800 font-extrabold px-3 py-2 rounded-lg text-[11px] border border-rose-200 cursor-pointer"
+                >
+                  <Mail size={13} className="text-rose-700 shrink-0" /><span>Invia comunicazione via email</span>
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="bg-amber-50/40 border-2 border-amber-200 rounded-3xl p-6 shadow-xs space-y-6" id="contract-detail-area">
             <div>
-              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-md">
-                🔍 Centralina di Riepilogo Relazione Locativa
+              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-md inline-flex items-center gap-1.5">
+                <Search size={11} className="text-amber-800 shrink-0" />
+                Centralina di Riepilogo Relazione Locativa
               </span>
               <h3 className="font-sans font-black text-slate-950 text-xl mt-2 flex items-center space-x-2">
-                <span>🤝</span>
+                <Handshake size={18} className="text-indigo-700 shrink-0" />
                 <span>Relazione: {selectedContract.propertyName} &mdash; {selectedContract.tenantName}</span>
               </h3>
             </div>
@@ -890,7 +1057,7 @@ export default function ContractsView({
             {/* FIRST AREA: THE CONTRACT ITSELF & DETAILED RELATIONS */}
             <div className="bg-white rounded-2xl border border-amber-100 p-6 space-y-6">
               <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide pb-2.5 flex items-center space-x-1.5">
-                <span>📄</span> <span>1. Dettagli del Contratto & Clausole Giuridiche</span>
+                <FileText size={16} className="text-indigo-700 shrink-0" /> <span>1. Dettagli del Contratto & Clausole Giuridiche</span>
               </h4>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
@@ -913,7 +1080,7 @@ export default function ContractsView({
                           {selectedContract.securityDepositMonths ? ` (${selectedContract.securityDepositMonths} mensilità)` : ""}
                         </strong>
                       ) : (
-                        <span className="text-rose-600 font-bold text-[10px] uppercase">⚠️ Non registrato</span>
+                        <span className="text-rose-600 font-bold text-[10px] uppercase inline-flex items-center gap-1"><AlertTriangle size={11} className="text-rose-600 shrink-0" /> Non registrato</span>
                       )}
                     </div>
                     <div>
@@ -968,12 +1135,12 @@ export default function ContractsView({
                       <span className="text-slate-400 block text-[9px] uppercase font-bold">Inquadramento Condominiale</span>
                       {condoConstituted ? (
                         <div className="mt-1.5 p-2 bg-indigo-50 border border-indigo-100 rounded-lg">
-                          <div className="font-black text-indigo-950 text-[10px]">🏢 {condoConstituted.name}</div>
+                          <div className="font-black text-indigo-950 text-[10px] flex items-center gap-1"><Building2 size={11} className="text-indigo-700 shrink-0" /> {condoConstituted.name}</div>
                           <div className="text-[9px] text-slate-500 mt-0.5">Amministratore: {condoConstituted.administrator || "N/D"}</div>
                         </div>
                       ) : (
-                        <span className="inline-flex items-center space-x-1 bg-rose-50 text-rose-800 border border-rose-200 rounded px-1.5 py-0.5 mt-1 font-semibold text-[9px]">
-                          ⚠️ Nessun condominio associato
+                        <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-800 border border-rose-200 rounded px-1.5 py-0.5 mt-1 font-semibold text-[9px]">
+                          <AlertTriangle size={10} className="text-rose-600 shrink-0" /> Nessun condominio associato
                         </span>
                       )}
                     </div>
@@ -995,7 +1162,7 @@ export default function ContractsView({
                 parte nella scheda contratto) */}
             <div className="bg-white rounded-2xl border border-amber-100 p-6 space-y-4">
               <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide pb-2.5 flex items-center space-x-1.5">
-                <span>🧮</span> <span>2. Mastrino Contabile — Canoni e Scadenze</span>
+                <Calculator size={16} className="text-indigo-700 shrink-0" /> <span>2. Mastrino Contabile — Canoni e Scadenze</span>
               </h4>
               {contractLedger.length === 0 ? (
                 <p className="text-xs text-slate-400 italic">
@@ -1054,7 +1221,7 @@ export default function ContractsView({
                 Contract lo prevedesse esplicitamente) */}
             <div className="bg-white rounded-2xl border border-amber-100 p-6 space-y-4">
               <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide pb-2.5 flex items-center space-x-1.5">
-                <span>📑</span> <span>3. Documenti Generati e Salvati agli Atti ({contractDocuments.length})</span>
+                <Files size={16} className="text-indigo-700 shrink-0" /> <span>3. Documenti Generati e Salvati agli Atti ({contractDocuments.length})</span>
               </h4>
               {contractDocuments.length === 0 ? (
                 <p className="text-xs text-slate-400 italic">
@@ -1072,7 +1239,7 @@ export default function ContractsView({
                       className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:border-amber-200 hover:bg-amber-50/10 transition-all"
                     >
                       <div className="flex items-start space-x-3 truncate">
-                        <span className="text-lg shrink-0 mt-0.5">📄</span>
+                        <FileText size={18} className="text-indigo-700 shrink-0 mt-0.5" />
                         <div className="truncate">
                           <h5 className="text-xs font-bold text-slate-800 truncate" title={doc.fileName}>{doc.fileName}</h5>
                           <div className="flex items-center space-x-2 mt-1">
@@ -1081,7 +1248,7 @@ export default function ContractsView({
                           </div>
                         </div>
                       </div>
-                      <span className="text-amber-700 text-xs font-bold shrink-0 ml-2">⬇️</span>
+                      <Download size={14} className="text-amber-700 shrink-0 ml-2" />
                     </a>
                   ))}
                 </div>
@@ -1099,12 +1266,12 @@ export default function ContractsView({
               }`}
             >
               <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide pb-2.5 flex items-center space-x-1.5">
-                <span>📂</span> <span>4. Documentazione Fisica dell'Alloggio & Certificazioni</span>
+                <FolderOpen size={16} className="text-amber-700 shrink-0" /> <span>4. Documentazione Fisica dell'Alloggio & Certificazioni</span>
               </h4>
               
               {localStorage.getItem("highlight_registration_contract_id") === selectedContract.id && (
                 <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start space-x-3 text-xs text-amber-900">
-                  <span className="text-xl shrink-0">⚠️</span>
+                  <AlertTriangle size={20} className="text-amber-600 shrink-0" />
                   <div>
                     <strong className="font-extrabold text-amber-950 block">Caricamento Ricevuta o Proroga Richiesto</strong>
                     <p className="mt-0.5 leading-relaxed">
@@ -1123,7 +1290,7 @@ export default function ContractsView({
                 {/* Upload technical documentation */}
                 <div className="bg-amber-50/40 rounded-xl border border-amber-200/80 p-5 space-y-4">
                   <h5 className="font-bold text-amber-950 text-xs uppercase tracking-wider flex items-center space-x-1.5">
-                    <span>📥</span> <span>Registra Documento Tecnico</span>
+                    <Upload size={14} className="text-amber-700 shrink-0" /> <span>Registra Documento Tecnico</span>
                   </h5>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1204,7 +1371,7 @@ export default function ContractsView({
                 {/* Stored documents listing */}
                 <div className="space-y-3.5">
                   <h5 className="font-bold text-slate-900 text-xs uppercase tracking-wide flex items-center justify-between">
-                    <span>📋 Allegati Certificati Associati ({matchedDocs.length})</span>
+                    <span className="inline-flex items-center gap-1.5"><ClipboardList size={13} className="text-indigo-700 shrink-0" /> Allegati Certificati Associati ({matchedDocs.length})</span>
                     <span className="text-[9px] text-emerald-800 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded uppercase font-bold">Condiviso con Proprietà</span>
                   </h5>
 
@@ -1212,7 +1379,7 @@ export default function ContractsView({
                     {matchedDocs.map((doc) => (
                       <div key={doc.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-amber-50/10 transition-all">
                         <div className="flex items-start space-x-3 truncate">
-                          <span className="text-lg shrink-0 mt-0.5">📄</span>
+                          <FileText size={18} className="text-indigo-700 shrink-0 mt-0.5" />
                           <div className="truncate">
                             <h5 className="text-xs font-bold text-slate-800 truncate" title={doc.name}>{doc.name}</h5>
                             <div className="flex items-center space-x-2 mt-1">
@@ -1228,14 +1395,14 @@ export default function ContractsView({
                             className="p-1 text-amber-950 hover:bg-amber-100 border border-amber-200/50 rounded-md text-xs font-bold transition-all"
                             title="Scarica documento originale"
                           >
-                            ⬇️
+                            <Download size={13} />
                           </button>
-                          <button 
+                          <button
                             onClick={() => handleDeleteDoc(selectedContract.propertyId, doc.id)}
                             className="p-1 text-rose-800 hover:bg-rose-100 border border-rose-200/50 rounded-md text-xs font-bold transition-all"
                             title="Rimuovi allegato"
                           >
-                            🗑️
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </div>
@@ -1255,7 +1422,7 @@ export default function ContractsView({
             <div className="bg-white rounded-2xl border border-amber-100 p-6 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
                 <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide flex items-center space-x-1.5">
-                  <span className="text-base">📋</span> <span>5. Verbali di Consegna & Riconsegna Immobile</span>
+                  <ClipboardList size={16} className="text-indigo-700 shrink-0" /> <span>5. Verbali di Consegna & Riconsegna Immobile</span>
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -1263,14 +1430,14 @@ export default function ContractsView({
                     onClick={() => handleOpenCreateDeliveryReport("consegna")}
                     className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] rounded-lg transition-all cursor-pointer shadow-xs"
                   >
-                    <span>➕ Nuovo Verbale di Consegna</span>
+                    <span className="inline-flex items-center gap-1"><Plus size={11} className="text-white shrink-0" /> Nuovo Verbale di Consegna</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleOpenCreateDeliveryReport("riconsegna")}
                     className="inline-flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[10px] rounded-lg transition-all cursor-pointer shadow-xs"
                   >
-                    <span>➕ Nuovo Verbale di Riconsegna</span>
+                    <span className="inline-flex items-center gap-1"><Plus size={11} className="text-white shrink-0" /> Nuovo Verbale di Riconsegna</span>
                   </button>
                 </div>
               </div>
@@ -1283,8 +1450,8 @@ export default function ContractsView({
                 const matchedReports = (deliveryReports || []).filter(r => r.contractId === selectedContract.id);
                 if (matchedReports.length === 0) {
                   return (
-                    <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                      📢 Nessun verbale di consegna o riconsegna registrato per questa relazione locativa.
+                    <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200 flex items-center justify-center gap-1.5">
+                      <Info size={13} className="text-indigo-600 shrink-0" /> Nessun verbale di consegna o riconsegna registrato per questa relazione locativa.
                     </div>
                   );
                 }
@@ -1311,12 +1478,12 @@ export default function ContractsView({
 
                             <div className="flex items-center gap-1.5 self-start sm:self-auto">
                               {isFullySigned ? (
-                                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                  ✓ FIRMATO E DEPOSITATO (SHA256)
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <Check size={10} className="text-emerald-800 shrink-0" /> FIRMATO E DEPOSITATO (SHA256)
                                 </span>
                               ) : (
-                                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
-                                  ⚠️ FIRME INCOMPLETE
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+                                  <AlertTriangle size={10} className="text-amber-800 shrink-0" /> FIRME INCOMPLETE
                                 </span>
                               )}
                               
@@ -1370,7 +1537,7 @@ export default function ContractsView({
                                               onClick={() => alert(`Anteprima foto allegata: visualizzazione del file "${p}"`)}
                                               className="inline-flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.5 rounded border border-slate-200 transition-all font-mono"
                                             >
-                                              🖼️ {p.length > 15 ? p.substring(0, 12) + "..." : p}
+                                              <Image size={11} className="text-slate-600 shrink-0" /> {p.length > 15 ? p.substring(0, 12) + "..." : p}
                                             </button>
                                           ))
                                         ) : (
@@ -1395,8 +1562,8 @@ export default function ContractsView({
                                     <p className="text-xs font-black text-slate-800 italic font-serif text-center py-1 /50">
                                       {report.signatures.ownerSignatureData}
                                     </p>
-                                    <p className="text-[9px] text-emerald-700 text-center mt-1 font-semibold">
-                                      ✓ Firmato il {new Date(report.signatures.ownerSignedAt || "").toLocaleString("it-IT")}
+                                    <p className="text-[9px] text-emerald-700 text-center mt-1 font-semibold inline-flex items-center justify-center gap-1 w-full">
+                                      <Check size={10} className="text-emerald-700 shrink-0" /> Firmato il {new Date(report.signatures.ownerSignedAt || "").toLocaleString("it-IT")}
                                     </p>
                                   </div>
                                 ) : (
@@ -1406,7 +1573,7 @@ export default function ContractsView({
                                       onClick={() => handleOpenSignModal(report, "owner")}
                                       className="w-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-slate-700 text-[10px] font-extrabold py-2 rounded-lg border border-slate-250 transition-all cursor-pointer text-center"
                                     >
-                                      ✍️ Apponi Firma Proprietario
+                                      <span className="inline-flex items-center justify-center gap-1"><PenLine size={11} className="shrink-0" /> Apponi Firma Proprietario</span>
                                     </button>
                                   </div>
                                 )}
@@ -1422,8 +1589,8 @@ export default function ContractsView({
                                     <p className="text-xs font-black text-slate-800 italic font-serif text-center py-1 /50">
                                       {report.signatures.tenantSignatureData}
                                     </p>
-                                    <p className="text-[9px] text-emerald-700 text-center mt-1 font-semibold">
-                                      ✓ Firmato il {new Date(report.signatures.tenantSignedAt || "").toLocaleString("it-IT")}
+                                    <p className="text-[9px] text-emerald-700 text-center mt-1 font-semibold inline-flex items-center justify-center gap-1 w-full">
+                                      <Check size={10} className="text-emerald-700 shrink-0" /> Firmato il {new Date(report.signatures.tenantSignedAt || "").toLocaleString("it-IT")}
                                     </p>
                                   </div>
                                 ) : (
@@ -1433,7 +1600,7 @@ export default function ContractsView({
                                       onClick={() => handleOpenSignModal(report, "tenant")}
                                       className="w-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-slate-700 text-[10px] font-extrabold py-2 rounded-lg border border-slate-250 transition-all cursor-pointer text-center"
                                     >
-                                      ✍️ Apponi Firma Inquilino
+                                      <span className="inline-flex items-center justify-center gap-1"><PenLine size={11} className="shrink-0" /> Apponi Firma Inquilino</span>
                                     </button>
                                   </div>
                                 )}
@@ -1456,12 +1623,14 @@ export default function ContractsView({
           <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
               <h3 className="font-black text-slate-900 text-lg flex items-center space-x-2">
-                <span>⚠️</span> <span>Disdetta Anticipata del Contratto</span>
+                <AlertTriangle size={18} className="text-amber-600 shrink-0" /> <span>Disdetta Anticipata del Contratto</span>
               </h3>
               <p className="text-xs text-slate-500">
-                Registra la chiusura anticipata di questo contratto. Le tempistiche procedurali
-                (preavvisi, termini di grazia) restano a tuo carico fuori dalla piattaforma — qui
-                registriamo solo causale e data effettiva.
+                Procedura guidata di disdetta/risoluzione anticipata. Il preavviso di legge
+                (6 mesi) viene verificato quando è il <strong>Conduttore</strong> a recedere; se è il{" "}
+                <strong>Locatore</strong> (es. sfratto per morosità, tempistiche giudiziali) la data
+                resta libera, perché i tempi reali dipendono dal procedimento e non sono
+                calcolabili in automatico.
               </p>
 
               <div className="space-y-3">
@@ -1469,7 +1638,7 @@ export default function ContractsView({
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Chi recede/disdice</label>
                   <select
                     value={disdettaForm.party}
-                    onChange={(e) => setDisdettaForm({ ...disdettaForm, party: e.target.value as "Locatore" | "Conduttore", reason: "" })}
+                    onChange={(e) => setDisdettaForm({ ...disdettaForm, party: e.target.value as "Locatore" | "Conduttore", reason: "", reasonFreeText: "", noticeAck: false })}
                     className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5"
                   >
                     <option value="Locatore">Locatore (proprietario)</option>
@@ -1481,43 +1650,92 @@ export default function ContractsView({
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Causale</label>
                   <select
                     value={disdettaForm.reason}
-                    onChange={(e) => setDisdettaForm({ ...disdettaForm, reason: e.target.value })}
+                    onChange={(e) => setDisdettaForm({ ...disdettaForm, reason: e.target.value, reasonFreeText: e.target.value === "Altro" ? disdettaForm.reasonFreeText : "" })}
                     className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5"
                   >
                     <option value="">— Seleziona —</option>
-                    <option value="MorositaSfratto">Morosità / Sfratto</option>
-                    <option value="GraveInadempimento">Grave inadempimento contrattuale</option>
+                    <option value="MorositaSfratto">{EARLY_TERMINATION_REASON_LABELS.MorositaSfratto}</option>
+                    <option value="GraveInadempimento">{EARLY_TERMINATION_REASON_LABELS.GraveInadempimento}</option>
                     {disdettaForm.party === "Conduttore" && (
                       <>
-                        <option value="RecessoLavoro">Recesso per gravi motivi — lavoro (trasferimento/perdita impiego)</option>
-                        <option value="RecessoSalute">Recesso per gravi motivi — salute</option>
-                        <option value="RecessoImmobileInabitabile">Recesso per gravi motivi — immobile con gravi difetti non risolti</option>
+                        <option value="RecessoLavoro">{EARLY_TERMINATION_REASON_LABELS.RecessoLavoro}</option>
+                        <option value="RecessoSalute">{EARLY_TERMINATION_REASON_LABELS.RecessoSalute}</option>
+                        <option value="RecessoImmobileInabitabile">{EARLY_TERMINATION_REASON_LABELS.RecessoImmobileInabitabile}</option>
                       </>
                     )}
                     {disdettaForm.party === "Locatore" && (
                       <>
-                        <option value="DisdettaUsoPersonaleFamiliare">Disdetta — uso personale/familiare</option>
-                        <option value="DisdettaVendita">Disdetta — vendita immobile</option>
-                        <option value="DisdettaRistrutturazione">Disdetta — ristrutturazione/demolizione</option>
-                        <option value="DisdettaAltroAlloggioDisponibile">Disdetta — altro alloggio disponibile per l'inquilino</option>
-                        <option value="DisdettaMancataOccupazione">Disdetta — mancata occupazione da parte dell'inquilino</option>
+                        <option value="DisdettaUsoPersonaleFamiliare">{EARLY_TERMINATION_REASON_LABELS.DisdettaUsoPersonaleFamiliare}</option>
+                        <option value="DisdettaVendita">{EARLY_TERMINATION_REASON_LABELS.DisdettaVendita}</option>
+                        <option value="DisdettaRistrutturazione">{EARLY_TERMINATION_REASON_LABELS.DisdettaRistrutturazione}</option>
+                        <option value="DisdettaAltroAlloggioDisponibile">{EARLY_TERMINATION_REASON_LABELS.DisdettaAltroAlloggioDisponibile}</option>
+                        <option value="DisdettaMancataOccupazione">{EARLY_TERMINATION_REASON_LABELS.DisdettaMancataOccupazione}</option>
                       </>
                     )}
-                    <option value="DecessoConduttore">Decesso del conduttore</option>
-                    <option value="RisoluzioneConsensuale">Risoluzione consensuale / disdetta comunicata</option>
-                    <option value="Altro">Altro</option>
+                    <option value="DecessoConduttore">{EARLY_TERMINATION_REASON_LABELS.DecessoConduttore}</option>
+                    <option value="RisoluzioneConsensuale">{EARLY_TERMINATION_REASON_LABELS.RisoluzioneConsensuale}</option>
+                    <option value="Altro">{EARLY_TERMINATION_REASON_LABELS.Altro}</option>
                   </select>
                 </div>
 
+                {disdettaForm.reason === "Altro" && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Descrivi il motivo non tipico</label>
+                    <textarea
+                      value={disdettaForm.reasonFreeText}
+                      onChange={(e) => setDisdettaForm({ ...disdettaForm, reasonFreeText: e.target.value })}
+                      className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5"
+                      rows={2}
+                      placeholder="Es. accordo particolare tra le parti non rientrante nelle causali tipiche…"
+                    />
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Data effettiva di chiusura</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Data effettiva di chiusura (decorrenza)</label>
                   <input
                     type="date"
                     value={disdettaForm.date}
-                    onChange={(e) => setDisdettaForm({ ...disdettaForm, date: e.target.value })}
+                    onChange={(e) => setDisdettaForm({ ...disdettaForm, date: e.target.value, noticeAck: false })}
                     className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    In alternativa, imposta direttamente il numero di mesi di preavviso da oggi:{" "}
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-16 border border-slate-200 rounded-md px-1.5 py-0.5 text-xs"
+                      placeholder="mesi"
+                      onChange={(e) => {
+                        const months = Number(e.target.value);
+                        if (!months && months !== 0) return;
+                        const d = new Date();
+                        d.setMonth(d.getMonth() + months);
+                        setDisdettaForm({ ...disdettaForm, date: d.toISOString().split("T")[0], noticeAck: false });
+                      }}
+                    />
+                  </p>
                 </div>
+
+                {disdettaNoticeTooShort && (
+                  <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 space-y-2">
+                    <p className="flex items-start gap-1.5">
+                      <AlertTriangle size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                      <span>La data scelta è a <strong>meno di 6 mesi</strong> da oggi. Il preavviso di
+                      legge per il recesso del Conduttore è di norma di 6 mesi (salvo gravi motivi
+                      o diverso accordo tra le parti). Conferma consapevolmente per procedere lo
+                      stesso.</span>
+                    </p>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={disdettaForm.noticeAck}
+                        onChange={(e) => setDisdettaForm({ ...disdettaForm, noticeAck: e.target.checked })}
+                      />
+                      <span className="font-bold">Confermo che il preavviso di 6 mesi non è rispettato e procedo consapevolmente.</span>
+                    </label>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Note (facoltative)</label>
@@ -1538,8 +1756,27 @@ export default function ContractsView({
                   Annulla
                 </button>
                 <button
-                  disabled={!disdettaForm.reason || !disdettaForm.date}
-                  onClick={() => setDisdettaWizardStep(2)}
+                  disabled={
+                    !disdettaForm.reason ||
+                    !disdettaForm.date ||
+                    (disdettaForm.reason === "Altro" && !disdettaForm.reasonFreeText.trim()) ||
+                    (disdettaNoticeTooShort && !disdettaForm.noticeAck)
+                  }
+                  onClick={() => {
+                    const reasonLabel = earlyTerminationReasonLabel(disdettaForm.reason, disdettaForm.reasonFreeText);
+                    const legalRef = earlyTerminationLegalRef(disdettaForm.reason);
+                    const draft = buildDisdettaLetterBody({
+                      ownerName: ownerProfile?.name || "Il Proprietario",
+                      tenantName: selectedContract.tenantName || "Il Conduttore",
+                      propertyAddress: matchingProperty?.address,
+                      party: disdettaForm.party,
+                      reasonLabel,
+                      legalRef,
+                      effectiveDateFormatted: new Date(disdettaForm.date).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })
+                    });
+                    setDisdettaLetterDraft(draft);
+                    setDisdettaWizardStep(2);
+                  }}
                   className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 >
                   Continua →
@@ -1551,22 +1788,21 @@ export default function ContractsView({
 
         {disdettaWizardStep === 2 && (
           <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl border-2 border-rose-200">
-              <h3 className="font-black text-rose-900 text-lg flex items-center space-x-2">
-                <span>🛑</span> <span>Conferma Definitiva</span>
+            <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
+              <h3 className="font-black text-slate-900 text-lg flex items-center space-x-2">
+                <FileText size={18} className="text-indigo-700 shrink-0" /> <span>Bozza della Comunicazione</span>
               </h3>
-              <p className="text-sm text-slate-700">
-                Stai per registrare la <strong>chiusura anticipata</strong> del contratto con{" "}
-                <strong>{selectedContract.tenantName}</strong> per l'immobile{" "}
-                <strong>{selectedContract.propertyName}</strong>, con effetto dal{" "}
-                <strong>{new Date(disdettaForm.date).toLocaleDateString("it-IT")}</strong>.
-              </p>
               <p className="text-xs text-slate-500">
-                Da questo momento tutte le righe contabili future non ancora scadute per
-                questo contratto in Fast Closing verranno <strong>annullate</strong> — l'Indennità
-                di Occupazione riguarda solo la scadenza naturale del contratto, non la disdetta
-                anticipata. Questa azione è seria e va confermata consapevolmente.
+                Testo precompilato della comunicazione di disdetta anticipata. Puoi modificarlo
+                liberamente prima di generare il documento PDF definitivo — verrà salvato così
+                come lo lasci qui.
               </p>
+              <textarea
+                value={disdettaLetterDraft}
+                onChange={(e) => setDisdettaLetterDraft(e.target.value)}
+                className="w-full text-xs font-mono border border-slate-200 rounded-xl px-3 py-3 leading-relaxed"
+                rows={14}
+              />
               <div className="flex justify-end space-x-3 pt-2">
                 <button
                   onClick={() => setDisdettaWizardStep(1)}
@@ -1575,42 +1811,214 @@ export default function ContractsView({
                   ← Torna Indietro
                 </button>
                 <button
-                  onClick={async () => {
-                    if (onEarlyTerminateContract) {
-                      await onEarlyTerminateContract(selectedContract.id, {
-                        date: disdettaForm.date,
-                        party: disdettaForm.party,
-                        reason: disdettaForm.reason,
-                        notes: disdettaForm.notes || undefined
-                      });
-                    } else {
-                      // Fallback se la prop non è disponibile (non dovrebbe succedere)
-                      await onEditContract(selectedContract.id, {
-                        status: "Terminated",
-                        earlyTerminationDate: disdettaForm.date,
-                        earlyTerminationParty: disdettaForm.party,
-                        earlyTerminationReason: disdettaForm.reason as any,
-                        earlyTerminationNotes: disdettaForm.notes || undefined
-                      });
-                    }
-                    setDisdettaWizardStep(0);
-                    setSelectedContractDetails({
-                      ...selectedContract,
-                      status: "Terminated",
-                      earlyTerminationDate: disdettaForm.date,
-                      earlyTerminationParty: disdettaForm.party,
-                      earlyTerminationReason: disdettaForm.reason as any,
-                      earlyTerminationNotes: disdettaForm.notes || undefined
-                    });
-                  }}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+                  disabled={!disdettaLetterDraft.trim()}
+                  onClick={() => setDisdettaWizardStep(3)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  Confermo, Chiudi il Contratto
+                  Continua alla Conferma →
                 </button>
               </div>
             </div>
           </div>
         )}
+
+        {disdettaWizardStep === 3 && (() => {
+          const emailConfigured = !!(ownerProfile?.emailServiceId && ownerProfile?.emailTemplateId && ownerProfile?.emailPublicKey);
+          const emailAvailable = emailConfigured && !!ownerProfile?.email;
+          const otpOk = !emailAvailable || disdettaOtp.verified;
+          const wordOk = disdettaConfirmWord.trim().toUpperCase() === "CONFERMO";
+          const canConfirm = wordOk && otpOk && !disdettaSubmitting;
+
+          const sendOtp = async () => {
+            if (!ownerProfile?.email) return;
+            const code = String(Math.floor(100000 + Math.random() * 900000));
+            const expiresAt = Date.now() + 10 * 60 * 1000;
+            setDisdettaOtp({ ...disdettaOtp, sending: true });
+            try {
+              await emailjs.send(
+                ownerProfile!.emailServiceId!,
+                ownerProfile!.emailTemplateId!,
+                {
+                  to_email: ownerProfile!.email,
+                  tenant_name: ownerProfile!.name || "Proprietario",
+                  subject: "Codice di verifica — Risoluzione Anticipata Contratto",
+                  message: `Codice di verifica per confermare la disdetta anticipata del contratto con ${selectedContract.tenantName}: ${code}\n\nIl codice è valido per 10 minuti. Se non hai richiesto questa operazione, ignora questa email.`,
+                  message_content: `Codice di verifica: ${code} (valido 10 minuti)`,
+                  total_amount: "",
+                  items_list: ""
+                },
+                ownerProfile!.emailPublicKey!
+              );
+              setDisdettaOtp({ code, expiresAt, sent: true, verified: false, input: "", sending: false });
+              alert(`Codice di verifica inviato a ${ownerProfile!.email}.`);
+            } catch (err: any) {
+              setDisdettaOtp({ ...disdettaOtp, sending: false });
+              alert(`Errore nell'invio del codice via EmailJS:\n${err?.text || err?.message || JSON.stringify(err)}`);
+            }
+          };
+
+          const verifyOtp = () => {
+            if (Date.now() > disdettaOtp.expiresAt) {
+              alert("Il codice è scaduto. Richiedine uno nuovo.");
+              return;
+            }
+            if (disdettaOtp.input.trim() !== disdettaOtp.code) {
+              alert("Codice non corretto. Riprova o richiedine uno nuovo.");
+              return;
+            }
+            setDisdettaOtp({ ...disdettaOtp, verified: true });
+          };
+
+          const handleConfirmTermination = async () => {
+            if (!canConfirm) return;
+            setDisdettaSubmitting(true);
+            try {
+              const otpVerifiedAt = disdettaOtp.verified ? new Date().toISOString() : undefined;
+              const reasonFreeText = disdettaForm.reason === "Altro" ? (disdettaForm.reasonFreeText || undefined) : undefined;
+              if (onEarlyTerminateContract) {
+                await onEarlyTerminateContract(selectedContract.id, {
+                  date: disdettaForm.date,
+                  party: disdettaForm.party,
+                  reason: disdettaForm.reason,
+                  reasonFreeText,
+                  notes: disdettaForm.notes || undefined,
+                  letterText: disdettaLetterDraft,
+                  otpVerifiedAt
+                });
+              } else {
+                // Fallback se la prop non è disponibile (non dovrebbe succedere)
+                await onEditContract(selectedContract.id, {
+                  status: "Terminated",
+                  earlyTerminationDate: disdettaForm.date,
+                  earlyTerminationParty: disdettaForm.party,
+                  earlyTerminationReason: disdettaForm.reason as any,
+                  earlyTerminationReasonFreeText: reasonFreeText,
+                  earlyTerminationNotes: disdettaForm.notes || undefined,
+                  earlyTerminationLetterText: disdettaLetterDraft,
+                  earlyTerminationOtpVerifiedAt: otpVerifiedAt
+                });
+              }
+              setDisdettaWizardStep(0);
+              setSelectedContractDetails({
+                ...selectedContract,
+                status: "Terminated",
+                earlyTerminationDate: disdettaForm.date,
+                earlyTerminationParty: disdettaForm.party,
+                earlyTerminationReason: disdettaForm.reason as any,
+                earlyTerminationReasonFreeText: reasonFreeText,
+                earlyTerminationNotes: disdettaForm.notes || undefined,
+                earlyTerminationLetterText: disdettaLetterDraft,
+                earlyTerminationOtpVerifiedAt: otpVerifiedAt
+              });
+            } finally {
+              setDisdettaSubmitting(false);
+            }
+          };
+
+          return (
+            <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl border-2 border-rose-200">
+                <h3 className="font-black text-rose-900 text-lg flex items-center space-x-2">
+                  <AlertTriangle size={18} className="text-rose-600 shrink-0" /> <span>Conferma Definitiva</span>
+                </h3>
+                <p className="text-sm text-slate-700">
+                  Stai per registrare la <strong>chiusura anticipata</strong> del contratto con{" "}
+                  <strong>{selectedContract.tenantName}</strong> per l'immobile{" "}
+                  <strong>{selectedContract.propertyName}</strong>, con effetto dal{" "}
+                  <strong>{new Date(disdettaForm.date).toLocaleDateString("it-IT")}</strong>.
+                </p>
+                <p className="text-xs text-slate-500">
+                  Da questo momento tutte le righe contabili future non ancora scadute per questo
+                  contratto (canoni e F24) verranno <strong>annullate</strong>. Se alla data di
+                  decorrenza l'immobile non risulterà riconsegnato (Verbale di Riconsegna), il
+                  sistema genererà comunque righe mensili come <strong>Indennità di Occupazione</strong>,
+                  fino alla riconsegna. Questa azione è seria: va confermata consapevolmente.
+                </p>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Digita <span className="text-rose-700">CONFERMO</span> per procedere
+                  </label>
+                  <input
+                    type="text"
+                    value={disdettaConfirmWord}
+                    onChange={(e) => setDisdettaConfirmWord(e.target.value)}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2"
+                    placeholder="CONFERMO"
+                  />
+                </div>
+
+                {emailAvailable ? (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                      Verifica via codice email ({ownerProfile!.email})
+                    </label>
+                    {!disdettaOtp.sent ? (
+                      <button
+                        type="button"
+                        disabled={disdettaOtp.sending}
+                        onClick={sendOtp}
+                        className="px-3 py-2 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 cursor-pointer"
+                      >
+                        {disdettaOtp.sending ? "Invio in corso…" : (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="w-[16px] h-[16px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                              <Mail size={9} className="text-white" />
+                            </span>
+                            Invia codice di verifica
+                          </span>
+                        )}
+                      </button>
+                    ) : disdettaOtp.verified ? (
+                      <p className="text-xs text-emerald-700 font-bold flex items-center gap-1.5">
+                        <CheckCircle2 size={13} className="text-emerald-700 shrink-0" />
+                        Codice verificato.
+                      </p>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={disdettaOtp.input}
+                          onChange={(e) => setDisdettaOtp({ ...disdettaOtp, input: e.target.value })}
+                          className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2"
+                          placeholder="Codice a 6 cifre"
+                        />
+                        <button type="button" onClick={verifyOtp} className="px-3 py-2 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer">
+                          Verifica
+                        </button>
+                        <button type="button" onClick={sendOtp} className="px-3 py-2 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 cursor-pointer">
+                          Rinvia
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-slate-400">
+                    Verifica via codice OTP non disponibile (email o credenziali EmailJS non
+                    configurate in Impostazioni → Profilo Proprietario): si procede con la sola
+                    parola di conferma.
+                  </p>
+                )}
+
+                <div className="flex justify-end space-x-3 pt-2">
+                  <button
+                    onClick={() => setDisdettaWizardStep(2)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  >
+                    ← Torna Indietro
+                  </button>
+                  <button
+                    disabled={!canConfirm}
+                    onClick={handleConfirmTermination}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {disdettaSubmitting ? "Registrazione…" : "Confermo, Chiudi il Contratto"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* CORREZIONE CA — TASK 2: mount del wizard Verbale di Riconsegna */}
         {showRiconsegnaWizard && (
@@ -1641,7 +2049,12 @@ export default function ContractsView({
             onClick={() => setShowGeneratorWizard(true)}
             className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4.5 py-2.5 rounded-xl text-xs active:transition-all shadow-sm"
           >
-            <span>🪄 Genera Contratto Guidato</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <Wand2 size={11} className="text-white" />
+              </span>
+              Genera Contratto Guidato
+            </span>
           </button>
           <button
             onClick={handleOpenAddWizard}
@@ -1649,7 +2062,10 @@ export default function ContractsView({
             className="inline-flex items-center space-x-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-4.5 py-2.5 rounded-xl text-xs active:transition-all shadow-sm"
           >
             <Plus size={15} className="stroke-[3]" />
-            <span>🤝 Crea Nuova Relazione</span>
+            <span className="inline-flex items-center gap-1.5">
+              <Handshake size={13} className="shrink-0" />
+              Crea Nuova Relazione
+            </span>
           </button>
         </div>
       </div>
@@ -2494,6 +2910,37 @@ export default function ContractsView({
                         </div>
                       </label>
                     </div>
+
+                    {taxRegime === "Ordinaria" && (
+                      <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-3">
+                        <label className="text-[10px] font-black uppercase text-slate-600 shrink-0">
+                          Ripartizione Imposta di Registro F24
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-500">Locatore</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={f24OwnerSplitPct}
+                            onChange={(e) => {
+                              const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                              setF24OwnerSplitPct(v);
+                            }}
+                            className="w-16 text-xs border border-slate-200 rounded-lg px-2 py-1 text-center outline-hidden focus:border-indigo-500"
+                          />
+                          <span className="text-[10px] text-slate-500">%</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-500">Conduttore</span>
+                          <span className="w-16 text-xs border border-slate-100 bg-slate-50 rounded-lg px-2 py-1 text-center font-mono text-slate-600">
+                            {100 - f24OwnerSplitPct}
+                          </span>
+                          <span className="text-[10px] text-slate-500">%</span>
+                        </div>
+                        <span className="text-[9px] text-slate-400">(default 50/50 per legge, modificabile)</span>
+                      </div>
+                    )}
                   </div>
 
                   <div>

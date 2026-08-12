@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { 
-  Plus, Wrench, Calendar, Hammer, CheckCircle2, X, AlertCircle, 
-  Trash2, ArrowRight, ArrowLeft, Coins, Percent, Users, User, 
-  Building, Clock, CheckCircle, Search, TrendingUp, DollarSign
+  Plus, Wrench, Calendar, Hammer, CheckCircle2, X, AlertCircle,
+  Trash2, ArrowRight, ArrowLeft, Coins, Percent, Users, User,
+  Building, Clock, CheckCircle, Search, TrendingUp, DollarSign, Briefcase
 } from "lucide-react";
 import { Maintenance, Property, FastClosingItem, Owner } from "../types";
 
@@ -790,7 +790,10 @@ export default function MaintenanceView({
                           Conduttore (Inquilino):
                         </span>
                         {activePropertyData.isRented ? (
-                          <strong className="text-indigo-700 font-extrabold">👤 {activePropertyData.tenantName}</strong>
+                          <strong className="text-indigo-700 font-extrabold inline-flex items-center gap-1">
+                            <User size={13} className="text-indigo-700 shrink-0" />
+                            {activePropertyData.tenantName}
+                          </strong>
                         ) : (
                           <span className="text-slate-400 italic">Immobile sfitto / Non locato</span>
                         )}
@@ -1041,8 +1044,9 @@ export default function MaintenanceView({
                             <div className="flex items-center justify-between gap-4">
                               <div className="min-w-0">
                                 <span className="text-[10px] text-slate-400 font-mono block">PROPRIETARIO</span>
-                                <span className="font-extrabold text-slate-700 text-xs truncate block">
-                                  💼 {activePropertyData?.ownerName}
+                                <span className="font-extrabold text-slate-700 text-xs truncate inline-flex items-center gap-1">
+                                  <Briefcase size={12} className="text-amber-700 shrink-0" />
+                                  {activePropertyData?.ownerName}
                                 </span>
                               </div>
                               
@@ -1078,8 +1082,9 @@ export default function MaintenanceView({
                               <div className="flex items-center justify-between gap-4 border-t border-slate-150 pt-3">
                                 <div className="min-w-0">
                                   <span className="text-[10px] text-indigo-400 font-mono block">INQUILINO</span>
-                                  <span className="font-extrabold text-indigo-950 text-xs truncate block">
-                                    👤 {activePropertyData.tenantName}
+                                  <span className="font-extrabold text-indigo-950 text-xs truncate inline-flex items-center gap-1">
+                                    <User size={12} className="text-indigo-700 shrink-0" />
+                                    {activePropertyData.tenantName}
                                   </span>
                                 </div>
                                 
@@ -1196,8 +1201,8 @@ export default function MaintenanceView({
                       onChange={(e) => setEsigibilita(e.target.value as any)}
                       className="w-full text-xs border border-slate-250 rounded-xl px-3.5 py-3 bg-white outline-hidden focus:border-indigo-500 font-bold text-slate-800 shadow-xs"
                     >
-                      <option value="Immediata">Immediata ⚡ (Mese Corrente)</option>
-                      <option value="Differita">Differita 📅 (Mese Futuro / Data Specifica)</option>
+                      <option value="Immediata">Immediata (Mese Corrente)</option>
+                      <option value="Differita">Differita (Mese Futuro / Data Specifica)</option>
                     </select>
                   </div>
 

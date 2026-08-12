@@ -12,6 +12,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from "react";
+import { Wand2, X, AlertTriangle, FileText, Loader2, CheckCircle2, Download } from "lucide-react";
 import { Property, Tenant, Owner, Contract } from "../types";
 import { generateContractDocx, ContractGenData } from "../lib/contractGenerator";
 import { amountToItalianWords } from "../lib/numberToItalianWords";
@@ -197,7 +198,7 @@ export default function ContractGeneratorWizard({
       const blob = await generateContractDocx(buildContractGenData());
       setGeneratedBlob(blob);
     } catch (err: any) {
-      alert(`❌ Errore durante la generazione del contratto: ${err?.message || err}`);
+      alert(`Errore durante la generazione del contratto: ${err?.message || err}`);
     } finally {
       setGenerating(false);
     }
@@ -264,12 +265,12 @@ export default function ContractGeneratorWizard({
         documents: [storedDoc]
       });
 
-      alert(`✅ Contratto generato, salvato agli atti${sendEmail.trim() ? " e inviato via email" : ""} con successo!`);
+      alert(`Contratto generato, salvato agli atti${sendEmail.trim() ? " e inviato via email" : ""} con successo!`);
       onClose();
       setStep(1);
       setGeneratedBlob(null);
     } catch (err: any) {
-      alert(`❌ Errore: ${err?.message || err}`);
+      alert(`Errore: ${err?.message || err}`);
     } finally {
       setSending(false);
     }
@@ -279,8 +280,13 @@ export default function ContractGeneratorWizard({
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
       <div className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-100 max-h-[92vh] flex flex-col">
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
-          <h3 className="font-sans font-bold text-base">🪄 Genera Contratto Guidato — Passo {step} di 5</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-lg">✕</button>
+          <h3 className="font-sans font-bold text-base flex items-center gap-2">
+            <Wand2 size={16} className="text-indigo-400 shrink-0" />
+            Genera Contratto Guidato — Passo {step} di 5
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
         </div>
 
         <div className="p-6 overflow-y-auto space-y-4 flex-1">
@@ -322,7 +328,10 @@ export default function ContractGeneratorWizard({
                     </div>
                   ))}
                   {(!selectedProperty.cadastralData?.foglio) && (
-                    <p className="text-amber-600">⚠️ Mancano i dati catastali su questo immobile — fotografali dalla scheda Immobile prima di continuare, altrimenti il contratto avrà dei vuoti.</p>
+                    <p className="text-amber-600 flex items-start gap-1.5">
+                      <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                      <span>Mancano i dati catastali su questo immobile — fotografali dalla scheda Immobile prima di continuare, altrimenti il contratto avrà dei vuoti.</span>
+                    </p>
                   )}
                 </div>
               )}
@@ -348,10 +357,16 @@ export default function ContractGeneratorWizard({
                     />
                   </div>
                   {selectedTenant.isForeign && !selectedTenant.residencePermit?.number && (
-                    <p className="text-amber-600">⚠️ Risulta straniero ma manca il permesso di soggiorno — fotografalo dalla scheda Inquilino prima di continuare.</p>
+                    <p className="text-amber-600 flex items-start gap-1.5">
+                      <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                      <span>Risulta straniero ma manca il permesso di soggiorno — fotografalo dalla scheda Inquilino prima di continuare.</span>
+                    </p>
                   )}
                   {!selectedTenant.fiscalCode && (
-                    <p className="text-amber-600">⚠️ Manca il codice fiscale — fotografa il documento d'identità dalla scheda Inquilino.</p>
+                    <p className="text-amber-600 flex items-start gap-1.5">
+                      <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                      <span>Manca il codice fiscale — fotografa il documento d'identità dalla scheda Inquilino.</span>
+                    </p>
                   )}
                 </div>
               )}
@@ -387,15 +402,28 @@ export default function ContractGeneratorWizard({
               <button
                 onClick={handleGenerate}
                 disabled={generating || !canGenerate}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-xl text-sm font-bold"
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
               >
-                {generating ? "⏳ Genero il documento..." : "📄 Genera Documento Contratto (.docx)"}
+                {generating ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Genero il documento...
+                  </>
+                ) : (
+                  <>
+                    <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                      <FileText size={11} className="text-white" />
+                    </span>
+                    Genera Documento Contratto (.docx)
+                  </>
+                )}
               </button>
 
               {generatedBlob && (
                 <>
-                  <button onClick={handleDownload} className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
-                    ⬇️ Scarica per Controllare
+                  <button onClick={handleDownload} className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                    <Download size={13} />
+                    Scarica per Controllare
                   </button>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Invia a (facoltativo, via Resend)</label>
@@ -404,9 +432,21 @@ export default function ContractGeneratorWizard({
                   <button
                     onClick={handleSaveAndFinish}
                     disabled={sending}
-                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl text-sm font-bold"
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
                   >
-                    {sending ? "⏳ Salvo e invio..." : ("✅ Salva agli Atti" + (sendEmail.trim() ? " e Invia" : ""))}
+                    {sending ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        Salvo e invio...
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                          <CheckCircle2 size={11} className="text-white" />
+                        </span>
+                        {"Salva agli Atti" + (sendEmail.trim() ? " e Invia" : "")}
+                      </>
+                    )}
                   </button>
                 </>
               )}

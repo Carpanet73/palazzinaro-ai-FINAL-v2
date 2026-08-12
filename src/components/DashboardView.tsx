@@ -1,29 +1,47 @@
 
 import React, { useState, useEffect, useMemo } from "react";
-import { 
-  Building2, 
-  FileText, 
-  Users, 
-  CalendarClock, 
-  AlertTriangle, 
-  TrendingUp, 
+import {
+  Building2,
+  FileText,
+  CalendarClock,
+  AlertTriangle,
+  TrendingUp,
   ArrowRight,
-  ShieldAlert,
   Sparkles,
-  DollarSign,
   Scale,
   Home,
   CheckCircle2,
-  AlertCircle,
   Clock,
-  ShieldCheck,
   Building,
   Plus,
   ArrowLeft,
-  Download,
-  FileSpreadsheet,
-  Briefcase,
-  Wrench
+  Wrench,
+  Check,
+  X,
+  XCircle,
+  Info,
+  User,
+  ClipboardList,
+  Euro,
+  Mail,
+  Calendar,
+  Upload,
+  Key,
+  Gift,
+  Car,
+  BellOff,
+  Pin,
+  Settings,
+  Wand2,
+  Lightbulb,
+  Shield,
+  Rocket,
+  FlaskConical,
+  BarChart3,
+  MessageCircle,
+  AlarmClock,
+  Hourglass,
+  Lock
 } from "lucide-react";
 import { Property, Contract, Tenant, FastClosingItem, Reminder, Condominium, LegalCase, AppSection, Communication, Lawyer, Maintenance, OwnerProfile, InsurancePolicy } from "../types";
 import { getTenantClassification } from "../lib/statusHelper";
@@ -87,9 +105,6 @@ export default function DashboardView({
   const [showConsolidatedReport, setShowConsolidatedReport] = useState(false);
   const [selectedDashboardProperty, setSelectedDashboardProperty] = useState<Property | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<string>("all");
-  const [localPayments, setLocalPayments] = useState<Record<string, { status: "Paid" | "Pending" | "Overdue"; paymentDate?: string; txId?: string }>>({});
-  const [localNoticeSent, setLocalNoticeSent] = useState<Record<string, { step: number; dateSent: string }>>({});
-  const [localRegistrationStatus, setLocalRegistrationStatus] = useState<Record<string, string>>({});
 
   // Google Calendar synchronization states
   const [syncingContractId, setSyncingContractId] = useState<string | null>(null);
@@ -287,11 +302,11 @@ export default function DashboardView({
 
   const handleSendBirthdayWishes = (tenant: Tenant) => {
     if (!tenant.phone) {
-      alert(`⚠️ "${tenant.name}" non ha un numero di telefono in anagrafica: impossibile inviare gli auguri via WhatsApp.`);
+      alert(`"${tenant.name}" non ha un numero di telefono in anagrafica: impossibile inviare gli auguri via WhatsApp.`);
       return;
     }
     const firstName = tenant.name.trim().split(" ")[0];
-    const message = `Buongiorno ${firstName}, dalla documentazione ho visto che oggi è il tuo compleanno, ti faccio i miei migliori auguri. 🥂`;
+    const message = `Buongiorno ${firstName}, dalla documentazione ho visto che oggi è il tuo compleanno, ti faccio i miei migliori auguri.`;
     const phoneClean = tenant.phone.replace(/[^0-9+]/g, "");
     window.open(`https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`, "_blank");
   };
@@ -852,132 +867,110 @@ export default function DashboardView({
     );
 
     // Filter maintenance tickets
-    const realMaintenance = maintenance.filter(m => m.propertyId === p.id);
-    
-    // Default maintenance if database has none
-    const defaultMaintenance = [
-      {
-        id: `${p.id}-maint-1`,
-        title: "Revisione Caldaia & Bollino Blu",
-        contractor: "Svevo Clima S.r.l.",
-        date: "2026-03-10",
-        cost: 120,
-        status: "Completed" as const,
-        chargedTo: "owner" as const,
-        description: "Analisi fumi ordinaria caldaia autonoma gas."
-      },
-      {
-        id: `${p.id}-maint-2`,
-        title: "Riparazione Sifone Lavabo Bagno",
-        contractor: "Termoidraulica Rossi",
-        date: "2026-05-20",
-        cost: 85,
-        status: "Completed" as const,
-        chargedTo: "tenant" as const,
-        description: "Sostituzione guarnizione e sifone usurato in plastica."
-      },
-      {
-        id: `${p.id}-maint-3`,
-        title: "Ripristino Intonaco Balcone Esterno",
-        contractor: "Edilizia Costruzioni S.p.A.",
-        date: "2026-09-12",
-        cost: 650,
-        status: "In Progress" as const,
-        chargedTo: "owner" as const,
-        description: "Rifacimento frontalini ammalorati balcone camera."
-      }
-    ];
-    const maintenanceToShow = realMaintenance.length > 0 ? realMaintenance : defaultMaintenance;
+    // CORREZIONE CM (08/08/2026) — RIMOSSA la lista di 3 manutenzioni fittizie con date
+    // fisse 2026 (bug critico: rompeva l'app al cambio di mese/anno) che veniva mostrata
+    // ogni volta che il database non aveva ancora manutenzioni reali per l'immobile. Ora si
+    // mostra solo il dato reale; se non esiste nulla, si mostra uno stato vuoto onesto
+    // (nessun dato fittizio, come da regola 2 di progetto: "flusso unico, mai duplicati").
+    const maintenanceToShow = maintenance.filter(m => m.propertyId === p.id);
 
-    // Months list for Rents Spreadsheet — derivato dinamicamente dall'anno corrente,
-    // mai da un anno scritto fisso (vedi REGOLE_PROGETTO sez. 4/13.5)
-    const currentYearForMonths = new Date().getFullYear();
-    const italianMonthNames = [
-      "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-      "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
-    ];
-    const monthsList = italianMonthNames.map((name, idx) => {
-      const num = idx + 1;
-      const monthStr = String(num).padStart(2, "0");
-      return {
-        name: `${name} ${currentYearForMonths}`,
-        num,
-        dueDate: `${currentYearForMonths}-${monthStr}-05`
+    // Mastrino Economico dei Canoni Locativi — SOLO dati reali letti da Fast Closing, che
+    // resta l'unica fonte di verità dei flussi economici (regola 2 di progetto). In
+    // precedenza qui venivano generati 12 mesi finti per l'anno corrente con uno stato
+    // deciso da un'euristica hardcoded (bug: "m.num === 6 || m.num === 5"), poi sovrascritti
+    // da uno stato locale mai persistito (bug: si perdeva ad ogni refresh della pagina).
+    // CORREZIONE CM (08/08/2026).
+    // Include sia le rate "Canone Affitto" sia le eventuali righe "Indennità di Occupazione"
+    // generate dopo la fine del contratto (stesso source/sourceId, vedi FastClosingView.tsx
+    // e api/cron-close-fast-closing.ts — CORREZIONE CL).
+    const contractFastClosingRows = activeContract
+      ? fastClosing
+          .filter(fc => fc.source === "contract" && fc.sourceId === activeContract.id)
+          .slice()
+          .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      : [];
+
+    const generatedRents = contractFastClosingRows.map(fc => ({
+      key: fc.id,
+      name: fc.title,
+      dueDate: fc.dueDate,
+      amount: fc.amount,
+      status: fc.status,
+      cancellationReason: fc.cancellationReason,
+      fastClosingId: fc.id
+    }));
+
+    // Mastrino Oneri Condominiali — SOLO dati reali letti da Fast Closing. Ogni spesa
+    // condominiale nasce sempre come DUE righe separate (Rata Inquilino / Rata Proprietario,
+    // vedi CondominiumsView.tsx → handleAddExpenseSubmit): qui le raggruppiamo per scadenza e
+    // titolo spesa in un'unica riga di mastrino, senza mai ricalcolare o duplicare gli
+    // importi. In precedenza la quota inquilino/proprietario veniva ricalcolata qui con uno
+    // split 90/10 fisso indipendentemente dal metodo di ripartizione realmente configurato
+    // (bug: dato discostato dal mastrino reale — vietato da regola 2), con un fallback di 4
+    // rate fittizie a importo zero e date 2026 fisse. CORREZIONE CM (08/08/2026).
+    const condoFastClosingRowsRaw = condoConstituted
+      ? fastClosing.filter(fc =>
+          fc.source === "condominium" &&
+          fc.sourceId === condoConstituted.id &&
+          fc.title.endsWith(` - ${p.name}`)
+        )
+      : [];
+
+    const condoRatesGroupedMap = new Map<string, {
+      key: string;
+      title: string;
+      dueDate: string;
+      amount: number;
+      tenantShare: number;
+      ownerShare: number;
+      tenantStatus?: FastClosingItem["status"];
+      ownerStatus?: FastClosingItem["status"];
+    }>();
+
+    condoFastClosingRowsRaw.forEach(fc => {
+      const isTenantRow = fc.title.startsWith("[Spese Condominiali] Rata Inquilino:");
+      const isOwnerRow = fc.title.startsWith("[Spese Condominiali] Rata Proprietario:");
+      if (!isTenantRow && !isOwnerRow) return;
+
+      const core = fc.title
+        .replace("[Spese Condominiali] Rata Inquilino: ", "")
+        .replace("[Spese Condominiali] Rata Proprietario: ", "")
+        .replace(` - ${p.name}`, "");
+      const groupKey = `${fc.dueDate}::${core}`;
+
+      const existing = condoRatesGroupedMap.get(groupKey) || {
+        key: groupKey,
+        title: core,
+        dueDate: fc.dueDate,
+        amount: 0,
+        tenantShare: 0,
+        ownerShare: 0
       };
-    });
 
-    // Rents spreadsheet calculation
-    const generatedRents = monthsList.map(m => {
-      const key = `${p.id}-rent-${m.num}`;
-      let defaultStatus: "Paid" | "Pending" | "Overdue" = "Paid";
-      const mDate = new Date(m.dueDate);
-      const now = new Date(); // Data corrente reale, mai una stringa fissa
-      
-      if (mDate > now) {
-        defaultStatus = "Pending";
+      if (isTenantRow) {
+        existing.tenantShare = fc.amount;
+        existing.tenantStatus = fc.status;
       } else {
-        const hasActiveReminder = reminders.some(r => r.tenantId === associatedTenant?.id && r.status !== "Paid" && r.status !== "Cancelled");
-        if (hasActiveReminder && (m.num === 6 || m.num === 5)) {
-          defaultStatus = "Overdue";
-        }
+        existing.ownerShare = fc.amount;
+        existing.ownerStatus = fc.status;
       }
-
-      const local = localPayments[key];
-      const status = local ? local.status : defaultStatus;
-      const paymentDate = local?.paymentDate || (status === "Paid" ? m.dueDate : undefined);
-      const txId = local?.txId || (status === "Paid" ? `TX-${p.id.slice(0, 3).toUpperCase()}-${100000 + m.num}` : undefined);
-
-      return {
-        ...m,
-        key,
-        amount: activeContract ? activeContract.rentAmount : 0,
-        status,
-        paymentDate,
-        txId
-      };
+      existing.amount = existing.tenantShare + existing.ownerShare;
+      condoRatesGroupedMap.set(groupKey, existing);
     });
 
-    // Condo rates calculation
-    const condoRatesList = condoConstituted?.rates?.map((rate: any, idx: number) => {
-      const key = `${p.id}-condo-${idx}`;
-      let tenantShare = 0;
-      let ownerShare = rate.amount;
-      if (activeContract) {
-        if (activeContract.splitMethod === "Percentage") {
-          tenantShare = rate.amount * 0.9;
-          ownerShare = rate.amount * 0.1;
-        } else {
-          tenantShare = activeContract.fixedTenantAmount || 0;
-          ownerShare = Math.max(0, rate.amount - tenantShare);
+    const condoRatesToShow = Array.from(condoRatesGroupedMap.values())
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .map(rate => {
+        const statuses = [rate.tenantStatus, rate.ownerStatus].filter(Boolean) as FastClosingItem["status"][];
+        let status: FastClosingItem["status"] = "Pending";
+        if (statuses.length > 0) {
+          if (statuses.includes("Overdue")) status = "Overdue";
+          else if (statuses.includes("Pending")) status = "Pending";
+          else if (statuses.every(s => s === "Cancelled")) status = "Cancelled";
+          else status = "Paid";
         }
-      }
-
-      let defaultStatus: "Paid" | "Pending" | "Overdue" = "Paid";
-      const rDate = new Date(rate.dueDate);
-      const now = new Date(); // Data corrente reale, mai una stringa fissa
-      if (rDate > now) {
-        defaultStatus = "Pending";
-      }
-
-      const local = localPayments[key];
-      const status = local ? local.status : defaultStatus;
-
-      return {
-        ...rate,
-        key,
-        tenantShare,
-        ownerShare,
-        status
-      };
-    }) || [];
-
-    const defaultCondoRates = [
-      { title: "Rata 1 - Spese Ordinarie", dueDate: "2026-02-15", amount: 0, status: "Pending" as const, tenantShare: 0, ownerShare: 0, key: `${p.id}-condo-d1` },
-      { title: "Rata 2 - Spese Riscaldamento", dueDate: "2026-04-15", amount: 0, status: "Pending" as const, tenantShare: 0, ownerShare: 0, key: `${p.id}-condo-d2` },
-      { title: "Rata 3 - Spese Ordinarie", dueDate: "2026-06-15", amount: 0, status: "Pending" as const, tenantShare: 0, ownerShare: 0, key: `${p.id}-condo-d3` },
-      { title: "Rata 4 - Conguaglio Esercizio", dueDate: "2026-09-15", amount: 0, status: "Pending" as const, tenantShare: 0, ownerShare: 0, key: `${p.id}-condo-d4` },
-    ];
-    const condoRatesToShow = condoConstituted ? condoRatesList : defaultCondoRates;
+        return { ...rate, status };
+      });
 
     // Helper for contract registration anniversary
     const fallbackYearBase = new Date().getFullYear();
@@ -992,78 +985,38 @@ export default function DashboardView({
       }
     };
 
-    // Registration taxes (Imposta di Registro) for 4+4 contracts
-    const baseRentAmount = activeContract ? activeContract.rentAmount : 0;
-    const yearlyTaxAmount = baseRentAmount > 0 ? Math.max(67, Math.round(baseRentAmount * 12 * 0.02)) : 0;
-    
-    const registrationYears = [
-      { year: "1° Anno (Registrazione Iniziale)", dueDate: activeContract ? activeContract.startDate : `${fallbackYearBase - 2}-01-01`, amount: yearlyTaxAmount, f24Code: "1500", key: `${p.id}-reg-1`, defaultStatus: "Paid" },
-      { year: "2° Anno (Annualità successiva)", dueDate: activeContract ? getAnniversaryDate(activeContract.startDate, 1) : `${fallbackYearBase - 1}-01-01`, amount: yearlyTaxAmount, f24Code: "1501", key: `${p.id}-reg-2`, defaultStatus: "Paid" },
-      { year: "3° Anno (Annualità successiva)", dueDate: activeContract ? getAnniversaryDate(activeContract.startDate, 2) : `${fallbackYearBase}-01-01`, amount: yearlyTaxAmount, f24Code: "1501", key: `${p.id}-reg-3`, defaultStatus: "Overdue" },
-      { year: "4° Anno (Annualità successiva)", dueDate: activeContract ? getAnniversaryDate(activeContract.startDate, 3) : `${fallbackYearBase + 1}-01-01`, amount: yearlyTaxAmount, f24Code: "1501", key: `${p.id}-reg-4`, defaultStatus: "Pending" },
-    ];
-
-    const generatedRegistration = registrationYears.map(r => {
-      const local = localRegistrationStatus[r.key];
-      const status = local || r.defaultStatus;
-      return {
-        ...r,
-        status
-      };
-    });
+    // CORREZIONE CK (05/08/2026) — promemoria di registrazione F24 (SOLO date/stato, mai
+    // importi in Dashboard — regola 6). Le righe economiche vere vivono in Fast Closing
+    // (generate alla creazione del contratto quando taxRegime è "Ordinaria", vedi
+    // handleAddContract in App.tsx), con sourceId nel formato f24-{contractId}-y{N}: qui si
+    // limita a leggerne lo stato reale per mostrare il pallino colorato, mai a duplicarle.
+    const registrationYearsF24Reminder = activeContract && activeContract.taxRegime !== "CedolareSecca"
+      ? Array.from({ length: 4 }, (_, i) => ({
+          year: i === 0 ? "1° Anno (Registrazione Iniziale)" : `${i + 1}° Anno (Annualità successiva)`,
+          dueDate: i === 0 ? activeContract.startDate : getAnniversaryDate(activeContract.startDate, i),
+          key: `f24-${activeContract.id}-y${i + 1}`,
+        }))
+      : [];
 
     // Find any active payment reminders / sequences
+    // CORREZIONE CM (08/08/2026) — RIMOSSI handleRegisterLocalPayment/handleSendLocalNotice:
+    // simulavano in stato locale React (mai persistito, perso ad ogni refresh) sia
+    // l'incasso di un canone sia l'intera sequenza di un Sollecito fino alla "Messa in
+    // Mora"/"Inoltro a Studio Legale" — in violazione diretta della regola 2 ("i Solleciti
+    // nascono solo dalla chiusura del Fast Closing o dal marcare Insoluto un canone") e
+    // della regola 6 ("nessuna azione diretta sui Solleciti dalla Dashboard"). Le azioni
+    // reali (registrare un incasso, marcare insoluto, avanzare un Sollecito) si compiono
+    // solo nelle pagine dedicate: Fast Closing e Solleciti.
     const activeRemindersForProperty = reminders.filter(r => r.tenantId === associatedTenant?.id);
-
-    // Interactive Handler to register payment
-    const handleRegisterLocalPayment = (key: string, type: "rent" | "condo") => {
-      setLocalPayments(prev => ({
-        ...prev,
-        [key]: {
-          status: "Paid" as const,
-          paymentDate: new Date().toISOString().split("T")[0],
-          txId: "TX-" + Math.random().toString(36).substring(2, 9).toUpperCase()
-        }
-      }));
-      setSuccessToast(`Pagamento registrato correttamente nel mastrino.`);
-      setTimeout(() => setSuccessToast(""), 3500);
-    };
-
-    // Interactive Handler for registration payment
-    const handleRegisterLocalRegistration = (key: string) => {
-      setLocalRegistrationStatus(prev => ({
-        ...prev,
-        [key]: "Paid"
-      }));
-      setSuccessToast(`Imposta di registro F24 saldata con successo.`);
-      setTimeout(() => setSuccessToast(""), 3500);
-    };
-
-    // Interactive Handler to send dynamic reminder
-    const handleSendLocalNotice = (key: string) => {
-      const currentStep = localNoticeSent[key]?.step || 0;
-      const nextStep = currentStep + 1;
-      setLocalNoticeSent(prev => ({
-        ...prev,
-        [key]: {
-          step: nextStep,
-          dateSent: new Date().toLocaleDateString("it-IT")
-        }
-      }));
-      
-      const stepLabels = ["Sollecito Cortese", "Primo Richiamo Formale", "Messa in Mora", "Inoltro a Studio Legale"];
-      const appliedLabel = stepLabels[Math.min(nextStep - 1, stepLabels.length - 1)];
-      
-      setSuccessToast(`Inviato ${appliedLabel} con successo a ${associatedTenant?.name}!`);
-      setTimeout(() => setSuccessToast(""), 4000);
-    };
 
     return (
       <div className="space-y-6" id="property-detail-page">
         {/* Dynamic Success Toast */}
         {successToast && (
           <div className="fixed top-6 right-6 z-50 bg-slate-900 text-white font-sans text-xs font-bold px-4 py-3.5 rounded-2xl border border-indigo-500/20 shadow-2xl flex items-center space-x-2.5 animate-bounce duration-300">
-            <span className="text-base">✨</span>
+            <span className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={11} className="text-white" />
+            </span>
             <span>{successToast}</span>
           </div>
         )}
@@ -1080,7 +1033,7 @@ export default function DashboardView({
             </button>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-xl">📊</span>
+                <BarChart3 size={20} className="text-indigo-700 shrink-0" />
                 <h2 className="text-xl font-sans font-black text-slate-900 tracking-tight flex items-center gap-2">
                   Pratica di 2° Livello: <span className="text-indigo-600">{p.name}</span>
                 </h2>
@@ -1103,8 +1056,9 @@ export default function DashboardView({
         {!activeContract ? (
           <div className="bg-rose-50 border-2 border-rose-300 p-5 rounded-3xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <span className="text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 px-2 py-0.5 rounded border border-rose-300 animate-pulse inline-block">
-                🔴 DA LOCARE / VACANTE
+              <span className="text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 px-2 py-0.5 rounded border border-rose-300 animate-pulse inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0" />
+                DA LOCARE / VACANTE
               </span>
               <h4 className="font-extrabold text-sm text-rose-950 mt-2">
                 Immobile Libero: Costi al 100% a Carico del Proprietario!
@@ -1123,8 +1077,9 @@ export default function DashboardView({
         ) : (
           <div className="bg-indigo-50 border-2 border-indigo-200 p-5 rounded-3xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <span className="text-[9px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded border border-indigo-200 inline-block">
-                🟢 CONTRATTO ATTIVO (4+4)
+              <span className="text-[9px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded border border-indigo-200 inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
+                CONTRATTO ATTIVO (4+4)
               </span>
               <h4 className="font-extrabold text-sm text-indigo-950 mt-2">
                 Locazione Registrata con {associatedTenant?.name || activeContract.tenantName}
@@ -1148,25 +1103,31 @@ export default function DashboardView({
         {/* Dynamic Navigation Tabs */}
         <div className="flex flex-wrap items-center gap-1.5 pb-px">
           {[
-            { id: "all", label: "📊 Vista Completa" },
-            { id: "rents", label: `💰 Canoni d'Affitto` },
-            { id: "condo", label: "🏢 Spese Condominiali" },
-            { id: "maintenance", label: "🛠️ Manutenzioni" },
-            { id: "registration", label: "📝 Imposta di Registro" },
-            { id: "tenant", label: "👤 Anagrafica Inquilino" }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveDetailTab(tab.id)}
-              className={`px-4 py-2.5 font-sans font-black text-xs rounded-t-xl transition-all border-t border-x -mb-px cursor-pointer ${
-                activeDetailTab === tab.id
-                  ? "bg-white border-slate-200 text-indigo-600 font-extrabold shadow-3xs"
-                  : "bg-transparent border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/50"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+            { id: "all", label: "Vista Completa", icon: BarChart3 },
+            { id: "rents", label: `Canoni d'Affitto`, icon: Euro },
+            { id: "condo", label: "Spese Condominiali", icon: Building2 },
+            { id: "maintenance", label: "Manutenzioni", icon: Wrench },
+            { id: "registration", label: "Imposta di Registro", icon: FileText },
+            { id: "tenant", label: "Anagrafica Inquilino", icon: User }
+          ].map(tab => {
+            const TabIcon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveDetailTab(tab.id)}
+                className={`px-4 py-2.5 font-sans font-black text-xs rounded-t-xl transition-all border-t border-x -mb-px cursor-pointer ${
+                  activeDetailTab === tab.id
+                    ? "bg-white border-slate-200 text-indigo-600 font-extrabold shadow-3xs"
+                    : "bg-transparent border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/50"
+                }`}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <TabIcon size={14} className="shrink-0" />
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Content Tabs Area */}
@@ -1176,7 +1137,7 @@ export default function DashboardView({
           {(activeDetailTab === "all" || activeDetailTab === "tenant") && (
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex items-center space-x-2 pb-3">
-                <span className="text-base">📋</span>
+                <ClipboardList size={16} className="text-indigo-700 shrink-0" />
                 <h4 className="font-sans font-black text-xs text-slate-900 uppercase tracking-wide">
                   Anagrafica Generale Immobile e Locazione
                 </h4>
@@ -1230,7 +1191,7 @@ export default function DashboardView({
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3">
                 <div className="flex items-center space-x-2">
-                  <span className="text-base">💰</span>
+                  <Euro size={16} className="text-emerald-700 shrink-0" />
                   <h4 className="font-sans font-black text-xs text-slate-900 uppercase tracking-wide">
                     Mastrino Economico dei Canoni Locativi (Spreadsheet)
                   </h4>
@@ -1244,70 +1205,84 @@ export default function DashboardView({
 
               {!activeContract ? (
                 <div className="py-8 text-center text-slate-400 text-xs mt-4">
-                  📢 Nessun contratto attivo. Lo spreadsheet dei canoni mostra 0.00€
+                  <span className="inline-flex items-center gap-1.5">
+                    <Info size={14} className="text-indigo-600 shrink-0" />
+                    Nessun contratto attivo. Lo spreadsheet dei canoni mostra 0.00€
+                  </span>
+                </div>
+              ) : generatedRents.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs mt-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Info size={14} className="text-indigo-600 shrink-0" />
+                    Nessuna rata trovata in Fast Closing per questo contratto.
+                  </span>
                 </div>
               ) : (
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-left text-slate-600 text-[11px] leading-relaxed">
                     <thead>
                       <tr className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">
-                        <th className="pb-2">Rata / Mese</th>
+                        <th className="pb-2">Rata / Voce</th>
                         <th className="pb-2">Data Scadenza</th>
                         <th className="pb-2">Importo Canone</th>
-                        <th className="pb-2">Data Incasso</th>
-                        <th className="pb-2">ID Transazione</th>
                         <th className="pb-2 text-center">Stato</th>
                         <th className="pb-2 text-right">Azioni</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono">
                       {generatedRents.map(row => {
-                        const hasSentNotice = localNoticeSent[row.key];
+                        const activeReminder = activeRemindersForProperty.find(
+                          r => r.associatedItemsIds?.includes(row.fastClosingId) &&
+                               r.status !== "Paid" && r.status !== "Cancelled" && r.status !== "Closed"
+                        );
                         return (
                           <tr key={row.key} className="hover:bg-slate-50/50">
                             <td className="py-3 font-sans font-black text-slate-900">{row.name}</td>
                             <td className="py-3 text-slate-500">{new Date(row.dueDate).toLocaleDateString("it-IT")}</td>
                             <td className="py-3 font-extrabold text-slate-800">€{row.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
-                            <td className="py-3 text-slate-600 font-sans">{row.paymentDate ? new Date(row.paymentDate).toLocaleDateString("it-IT") : "—"}</td>
-                            <td className="py-3 text-slate-400 text-[10px]">{row.txId || "—"}</td>
                             <td className="py-3 text-center">
-                              <span className={`text-[8px] font-black px-2.5 py-0.5 rounded-full uppercase ${
-                                row.status === "Paid" 
-                                  ? "bg-emerald-100 text-emerald-800" 
-                                  : row.status === "Overdue" 
+                              <span className={`inline-flex items-center gap-1.5 text-[8px] font-black px-2.5 py-0.5 rounded-full uppercase ${
+                                row.status === "Paid"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : row.status === "Overdue"
                                   ? "bg-rose-100 text-rose-800 animate-pulse"
+                                  : row.status === "Cancelled"
+                                  ? "bg-slate-100 text-slate-500"
                                   : "bg-amber-100 text-amber-800"
                               }`}>
-                                {row.status === "Paid" && "🟢 PAGATO"}
-                                {row.status === "Overdue" && "🔴 MOROSO"}
-                                {row.status === "Pending" && "🟡 IN ATTESA"}
+                                {row.status === "Paid" && (<><span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />PAGATO</>)}
+                                {row.status === "Overdue" && (<><span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0" />MOROSO</>)}
+                                {row.status === "Pending" && (<><span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />IN ATTESA</>)}
+                                {row.status === "Cancelled" && (<><span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />ANNULLATO</>)}
                               </span>
-                              {hasSentNotice && (
-                                <span className="block text-[7px] text-rose-600 font-black mt-1 font-sans uppercase">
-                                  ✉️ SOLLECITO STEP {hasSentNotice.step} ({hasSentNotice.dateSent})
+                              {activeReminder && (
+                                <span className="flex items-center gap-1 text-[7px] text-rose-600 font-black mt-1 font-sans uppercase">
+                                  <Mail size={9} className="text-rose-600 shrink-0" />
+                                  SOLLECITO ATTIVO — STEP {activeReminder.step || 1}
                                 </span>
+                              )}
+                              {row.status === "Cancelled" && row.cancellationReason && (
+                                <span className="block text-[8px] text-slate-400 mt-1 font-sans normal-case">{row.cancellationReason}</span>
                               )}
                             </td>
                             <td className="py-3 text-right">
                               <div className="flex justify-end gap-1.5 font-sans">
-                                {row.status !== "Paid" && (
-                                  <button
-                                    onClick={() => handleRegisterLocalPayment(row.key, "rent")}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[8px] px-2 py-1 rounded active:-0 cursor-pointer uppercase transition-all"
-                                  >
-                                    Registra Incasso
-                                  </button>
-                                )}
-                                {row.status === "Overdue" && (
-                                  <button
-                                    onClick={() => handleSendLocalNotice(row.key)}
-                                    className="bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-[8px] px-2 py-1 rounded active:-0 cursor-pointer uppercase transition-all"
-                                  >
-                                    Sollecita {hasSentNotice ? `Step ${hasSentNotice.step + 1}` : "Step 1"}
-                                  </button>
-                                )}
                                 {row.status === "Paid" && (
-                                  <span className="text-[10px] text-emerald-600 font-extrabold font-sans select-none">✓ RICONCILIATO</span>
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-extrabold font-sans select-none">
+                                    <Check size={11} className="text-emerald-600 shrink-0" />
+                                    RICONCILIATO
+                                  </span>
+                                )}
+                                {row.status === "Cancelled" && (
+                                  <span className="text-[10px] text-slate-400 font-sans italic select-none">Annullato</span>
+                                )}
+                                {(row.status === "Pending" || row.status === "Overdue") && (
+                                  <button
+                                    onClick={() => setCurrentSection("fast_closing")}
+                                    className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[8px] px-2 py-1 rounded active:-0 cursor-pointer uppercase transition-all"
+                                  >
+                                    Gestisci in Fast Closing
+                                  </button>
                                 )}
                               </div>
                             </td>
@@ -1326,7 +1301,7 @@ export default function DashboardView({
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3">
                 <div className="flex items-center space-x-2">
-                  <span className="text-base">🏢</span>
+                  <Building2 size={16} className="text-indigo-700 shrink-0" />
                   <h4 className="font-sans font-black text-xs text-slate-900 uppercase tracking-wide">
                     Mastrino Oneri Condominiali & Spese Amministrazione
                   </h4>
@@ -1338,61 +1313,83 @@ export default function DashboardView({
                 </div>
               </div>
 
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-left text-slate-600 text-[11px] leading-relaxed">
-                  <thead>
-                    <tr className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">
-                      <th className="pb-2">Rata / Descrizione</th>
-                      <th className="pb-2">Data Scadenza</th>
-                      <th className="pb-2">Importo Rata</th>
-                      <th className="pb-2">Quota Inquilino (90% o Fisso)</th>
-                      <th className="pb-2">Quota Proprietà</th>
-                      <th className="pb-2 text-center">Stato</th>
-                      <th className="pb-2 text-right">Azioni</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono">
-                    {condoRatesToShow.map((rate, index) => {
-                      return (
-                        <tr key={rate.key || index} className="hover:bg-slate-50/50">
-                          <td className="py-3 font-sans font-black text-slate-900">{rate.title}</td>
-                          <td className="py-3 text-slate-500">{new Date(rate.dueDate).toLocaleDateString("it-IT")}</td>
-                          <td className="py-3 font-extrabold text-slate-800">€{rate.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3 text-indigo-600 font-black">€{rate.tenantShare.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3 text-slate-500">€{rate.ownerShare.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3 text-center">
-                            <span className={`text-[8px] font-black px-2.5 py-0.5 rounded-full uppercase ${
-                              rate.amount === 0
-                                ? "bg-slate-100 text-slate-500"
-                                : rate.status === "Paid" 
-                                ? "bg-emerald-100 text-emerald-800" 
-                                : rate.status === "Overdue" 
-                                ? "bg-rose-100 text-rose-800 animate-pulse"
-                                : "bg-amber-100 text-amber-800"
-                            }`}>
-                              {rate.amount === 0 ? "REGOLARE (0,00)" : rate.status === "Paid" ? "🟢 PAGATO" : rate.status === "Pending" ? "🟡 IN ATTESA" : "🔴 DA SALDARE"}
-                            </span>
-                          </td>
-                          <td className="py-3 text-right">
-                            {rate.amount > 0 && rate.status !== "Paid" ? (
-                              <button
-                                onClick={() => handleRegisterLocalPayment(rate.key, "condo")}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[8px] px-2 py-1 rounded active:-0 cursor-pointer uppercase font-sans transition-all"
-                              >
-                                Salda Rata
-                              </button>
-                            ) : rate.amount > 0 ? (
-                              <span className="text-[10px] text-emerald-600 font-extrabold font-sans">✓ SALDATA</span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 font-sans italic">Esente</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {!condoConstituted ? (
+                <div className="py-8 text-center text-slate-400 text-xs mt-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Info size={14} className="text-indigo-600 shrink-0" />
+                    Nessun Condominio collegato a questo immobile. Nessuna spesa da ripartire.
+                  </span>
+                </div>
+              ) : condoRatesToShow.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs mt-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Info size={14} className="text-indigo-600 shrink-0" />
+                    Nessuna spesa condominiale trovata in Fast Closing per questo immobile.
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-slate-600 text-[11px] leading-relaxed">
+                    <thead>
+                      <tr className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">
+                        <th className="pb-2">Rata / Descrizione</th>
+                        <th className="pb-2">Data Scadenza</th>
+                        <th className="pb-2">Importo Rata</th>
+                        <th className="pb-2">Quota Inquilino</th>
+                        <th className="pb-2">Quota Proprietà</th>
+                        <th className="pb-2 text-center">Stato</th>
+                        <th className="pb-2 text-right">Azioni</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {condoRatesToShow.map((rate, index) => {
+                        return (
+                          <tr key={rate.key || index} className="hover:bg-slate-50/50">
+                            <td className="py-3 font-sans font-black text-slate-900">{rate.title}</td>
+                            <td className="py-3 text-slate-500">{new Date(rate.dueDate).toLocaleDateString("it-IT")}</td>
+                            <td className="py-3 font-extrabold text-slate-800">€{rate.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
+                            <td className="py-3 text-indigo-600 font-black">€{rate.tenantShare.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
+                            <td className="py-3 text-slate-500">€{rate.ownerShare.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
+                            <td className="py-3 text-center">
+                              <span className={`inline-flex items-center gap-1.5 text-[8px] font-black px-2.5 py-0.5 rounded-full uppercase ${
+                                rate.status === "Paid"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : rate.status === "Overdue"
+                                  ? "bg-rose-100 text-rose-800 animate-pulse"
+                                  : rate.status === "Cancelled"
+                                  ? "bg-slate-100 text-slate-500"
+                                  : "bg-amber-100 text-amber-800"
+                              }`}>
+                                {rate.status === "Paid" && (<><span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />PAGATO</>)}
+                                {rate.status === "Overdue" && (<><span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0" />DA SALDARE</>)}
+                                {rate.status === "Pending" && (<><span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />IN ATTESA</>)}
+                                {rate.status === "Cancelled" && (<><span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />ANNULLATO</>)}
+                              </span>
+                            </td>
+                            <td className="py-3 text-right">
+                              {rate.status === "Paid" ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-extrabold font-sans">
+                                  <Check size={11} className="text-emerald-600 shrink-0" />
+                                  SALDATA
+                                </span>
+                              ) : rate.status === "Cancelled" ? (
+                                <span className="text-[10px] text-slate-400 font-sans italic">Annullata</span>
+                              ) : (
+                                <button
+                                  onClick={() => setCurrentSection("fast_closing")}
+                                  className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[8px] px-2 py-1 rounded active:-0 cursor-pointer uppercase font-sans transition-all"
+                                >
+                                  Gestisci in Fast Closing
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -1401,7 +1398,7 @@ export default function DashboardView({
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3">
                 <div className="flex items-center space-x-2">
-                  <span className="text-base">🛠️</span>
+                  <Wrench size={16} className="text-slate-600 shrink-0" />
                   <h4 className="font-sans font-black text-xs text-slate-900 uppercase tracking-wide">
                     Mastrino Manutenzioni & Spese Tecniche Straordinarie
                   </h4>
@@ -1409,6 +1406,14 @@ export default function DashboardView({
                 <span className="text-[10px] text-slate-500">Spese deducibili fiscalmente al 100% per il proprietario</span>
               </div>
 
+              {maintenanceToShow.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs mt-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Info size={14} className="text-indigo-600 shrink-0" />
+                    Nessuna manutenzione registrata per questo immobile.
+                  </span>
+                </div>
+              ) : (
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-left text-slate-600 text-[11px] leading-relaxed">
                   <thead>
@@ -1440,17 +1445,17 @@ export default function DashboardView({
                             </span>
                           </td>
                           <td className="py-3 text-center font-sans">
-                            <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${
-                              m.status === "Completed" 
-                                ? "bg-emerald-100 text-emerald-800" 
+                            <span className={`inline-flex items-center gap-1.5 text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${
+                              m.status === "Completed"
+                                ? "bg-emerald-100 text-emerald-800"
                                 : m.status === "In Progress"
                                 ? "bg-amber-100 text-amber-800"
                                 : "bg-rose-100 text-rose-800"
                             }`}>
-                              {m.status === "Completed" && "🟢 COMPLETATA"}
-                              {m.status === "In Progress" && "🟡 IN CORSO"}
-                              {m.status === "New" && "🔵 APERTA"}
-                              {m.status === "Cancelled" && "⚪ ANNULLATA"}
+                              {m.status === "Completed" && (<><span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />COMPLETATA</>)}
+                              {m.status === "In Progress" && (<><span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />IN CORSO</>)}
+                              {m.status === "New" && (<><span className="w-1.5 h-1.5 rounded-full bg-indigo-600 shrink-0" />APERTA</>)}
+                              {m.status === "Cancelled" && (<><span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />ANNULLATA</>)}
                             </span>
                           </td>
                         </tr>
@@ -1459,27 +1464,47 @@ export default function DashboardView({
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
           )}
 
-          {/* E. MASTRINO IMPOSTA DI REGISTRO SPREADSHEET (4+4) */}
+          {/* E. PROMEMORIA IMPOSTA DI REGISTRO (F24) — SOLO STATO, MAI IMPORTI (Regola 6) */}
+          {/* CORREZIONE CK (05/08/2026) — questo pannello mostrava importi reali in euro e un
+              tasto "Paga F24" con tracciamento solo locale (mai collegato a Fast Closing),
+              in violazione della regola 6 di progetto ("Dashboard: mai importi economici,
+              nemmeno di striscio") e in conflitto/duplicato con le righe F24 reali generate
+              ora in Fast Closing alla creazione del contratto (regime Ordinaria). Sostituito
+              con un promemoria a soli colori/date, senza cifre e senza azioni di pagamento —
+              per pagare si va in Fast Closing, come da regola 6 ("nessuna azione diretta...
+              reindirizzati alla pagina dedicata"). */}
           {(activeDetailTab === "all" || activeDetailTab === "registration") && (
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3">
                 <div className="flex items-center space-x-2">
-                  <span className="text-base">📝</span>
+                  <FileText size={16} className="text-indigo-700 shrink-0" />
                   <h4 className="font-sans font-black text-xs text-slate-900 uppercase tracking-wide">
-                    Spreadsheet Registro F24 - Imposte di Registro (4+4)
+                    Promemoria Registrazione Contratto (F24)
                   </h4>
                 </div>
-                <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded border">
-                  Regime Registrazione: Imposta di Registro Standard (2%)
-                </span>
               </div>
 
               {!activeContract ? (
                 <div className="py-8 text-center text-slate-400 text-xs mt-4">
-                  📢 Carica un contratto attivo per visualizzare le imposte di registro annuali.
+                  <span className="inline-flex items-center gap-1.5">
+                    <Info size={14} className="text-indigo-600 shrink-0" />
+                    Carica un contratto attivo per visualizzare i promemoria di registrazione.
+                  </span>
+                </div>
+              ) : activeContract.taxRegime === "CedolareSecca" ? (
+                <div className="mt-4 flex items-center gap-3 text-xs text-slate-600">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                    new Date() >= new Date(getAnniversaryDate(activeContract.startDate, 4)) ? "bg-amber-500" : "bg-emerald-500"
+                  }`} />
+                  <span>
+                    Regime Cedolare Secca: nessuna imposta di registro annuale dovuta. Promemoria comunicazione di proroga
+                    all'Agenzia delle Entrate {new Date() >= new Date(getAnniversaryDate(activeContract.startDate, 4)) ? "da inviare" : "in scadenza"} il{" "}
+                    <strong>{new Date(getAnniversaryDate(activeContract.startDate, 4)).toLocaleDateString("it-IT")}</strong> (4 anni dalla decorrenza).
+                  </span>
                 </div>
               ) : (
                 <div className="mt-4 overflow-x-auto">
@@ -1488,44 +1513,29 @@ export default function DashboardView({
                       <tr className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">
                         <th className="pb-2">Annualità Contratto</th>
                         <th className="pb-2">Scadenza F24</th>
-                        <th className="pb-2">Importo F24 dovuto (2%)</th>
-                        <th className="pb-2">Codice Tributo</th>
-                        <th className="pb-2 text-center">Stato F24</th>
-                        <th className="pb-2 text-right">Azioni F24</th>
+                        <th className="pb-2 text-center">Stato</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono">
-                      {generatedRegistration.map(row => {
+                      {registrationYearsF24Reminder.map(row => {
+                        const relatedItem = fastClosing.find(fc => fc.source === "manual" && fc.sourceId === row.key);
+                        const status = relatedItem?.status || (new Date(row.dueDate) < new Date() ? "Overdue" : "Pending");
                         return (
                           <tr key={row.key} className="hover:bg-slate-50/50">
                             <td className="py-3 font-sans font-black text-slate-900">{row.year}</td>
                             <td className="py-3 text-slate-500">{new Date(row.dueDate).toLocaleDateString("it-IT")}</td>
-                            <td className="py-3 font-extrabold text-slate-800">€{row.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
-                            <td className="py-3 text-slate-500 font-bold">{row.f24Code}</td>
                             <td className="py-3 text-center">
-                              <span className={`text-[8px] font-black px-2.5 py-0.5 rounded-full uppercase ${
-                                row.status === "Paid" 
-                                  ? "bg-emerald-100 text-emerald-800" 
-                                  : row.status === "Overdue" 
+                              <span className={`inline-flex items-center gap-1.5 text-[8px] font-black px-2.5 py-0.5 rounded-full uppercase ${
+                                status === "Paid"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : status === "Overdue"
                                   ? "bg-rose-100 text-rose-800 animate-pulse"
                                   : "bg-amber-100 text-amber-800"
                               }`}>
-                                {row.status === "Paid" && "🟢 SALDATO (REGOLARE)"}
-                                {row.status === "Overdue" && "🔴 SCADUTO (DA SALDARE)"}
-                                {row.status === "Pending" && "🟡 IN ATTESA"}
+                                {status === "Paid" && (<><span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />REGOLARE</>)}
+                                {status === "Overdue" && (<><span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0" />SCADUTO</>)}
+                                {status === "Pending" && (<><span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />IN ATTESA</>)}
                               </span>
-                            </td>
-                            <td className="py-3 text-right">
-                              {row.status !== "Paid" ? (
-                                <button
-                                  onClick={() => handleRegisterLocalRegistration(row.key)}
-                                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[8px] px-2.5 py-1.5 rounded -2 border-indigo-800 active:-0 cursor-pointer font-sans transition-all uppercase"
-                                >
-                                  Paga F24 (€{row.amount})
-                                </button>
-                              ) : (
-                                <span className="text-[10px] text-emerald-600 font-extrabold font-sans">✓ RICEVUTA AG_ENTRATE</span>
-                              )}
                             </td>
                           </tr>
                         );
@@ -1541,7 +1551,7 @@ export default function DashboardView({
           {activeDetailTab === "all" && activeRemindersForProperty.length > 0 && (
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex items-center space-x-2 pb-3">
-                <span className="text-base">⚠️</span>
+                <AlertTriangle size={16} className="text-amber-600 shrink-0" />
                 <h4 className="font-sans font-black text-xs text-slate-900 uppercase tracking-wide">
                   Solleciti di Pagamento & Pendenze Legali Attive per l'Inquilino
                 </h4>
@@ -1553,8 +1563,9 @@ export default function DashboardView({
                     <div key={r.id} className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div>
                         <div className="flex items-center space-x-2">
-                          <span className="text-[8px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 px-2 py-0.5 rounded border border-rose-200">
-                            🔴 SOLLECITO ATTIVO — STEP {r.step || 1}
+                          <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 px-2 py-0.5 rounded border border-rose-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0" />
+                            SOLLECITO ATTIVO — STEP {r.step || 1}
                           </span>
                           <span className="text-[10px] text-slate-500 font-mono">Creato il {new Date(r.createdAt).toLocaleDateString("it-IT")}</span>
                         </div>
@@ -1601,11 +1612,11 @@ export default function DashboardView({
         <div>
           <div className="flex items-center space-x-2">
             <h2 className="text-2xl font-sans font-black text-slate-900 tracking-tight">
-              Ciao, {userName}! 👋
+              Ciao, {userName}!
             </h2>
             {totalProperties > 0 && (
               <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-200 flex items-center space-x-1 uppercase animate-pulse">
-                <span>🟢</span> <span>Dati Demo Caricati</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" /> <span>Dati Demo Caricati</span>
               </span>
             )}
           </div>
@@ -1621,7 +1632,9 @@ export default function DashboardView({
               id="seed-demo-data-btn"
               className="inline-flex items-center space-x-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md active:shadow-xs"
             >
-              <span>🚀</span>
+              <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <Rocket size={11} className="text-slate-950" />
+              </span>
               <span>Inietta Dati Demo</span>
             </button>
           )}
@@ -1632,7 +1645,9 @@ export default function DashboardView({
               id="seed-simulation-data-btn"
               className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md active:shadow-xs hover:scale-[1.02] active:scale-[0.98] transition-transform"
             >
-              <span>🏟️</span>
+              <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <Building2 size={11} className="text-white" />
+              </span>
               <span>Simula Locazione Meloni</span>
             </button>
           )}
@@ -1644,7 +1659,9 @@ export default function DashboardView({
               className="inline-flex items-center space-x-2 bg-rose-700 hover:bg-rose-600 text-white font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md active:shadow-xs hover:scale-[1.02] active:scale-[0.98] transition-transform"
               title="ATTENZIONE: cancella tutti i dati attuali e li sostituisce con due sole case di prova"
             >
-              <span>🧪</span>
+              <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <FlaskConical size={11} className="text-white" />
+              </span>
               <span>Test: 2 Case (Condominio + Comproprietà)</span>
             </button>
           )}
@@ -1663,7 +1680,9 @@ export default function DashboardView({
             id="open-consolidated-report-btn"
             className="inline-flex items-center space-x-2 bg-violet-600 hover:bg-violet-500 text-white font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md active:shadow-xs hover:scale-[1.02] cursor-pointer"
           >
-            <span>📊</span>
+            <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+              <BarChart3 size={11} className="text-white" />
+            </span>
             <span>Rendicontazione Consolidata</span>
           </button>
         </div>
@@ -1672,7 +1691,7 @@ export default function DashboardView({
       {/* SEZIONE STATO SOGGETTI DEBITORI E PRATICHE APERTE */}
       <div className="bg-white rounded-3xl border-2 border-slate-150 p-6 shadow-md w-full" id="debtors-status-dashboard">
         <div className="flex items-center space-x-2.5 pb-4">
-          <span className="text-xl">📊</span>
+          <BarChart3 size={20} className="text-indigo-700 shrink-0" />
           <div>
             <h3 className="font-sans font-black text-slate-900 text-sm">
               Stato Soggetti Debitori & Pratiche Aperte
@@ -1744,7 +1763,8 @@ export default function DashboardView({
                       className="inline-flex items-center space-x-1 border border-amber-300 bg-amber-100 text-amber-800 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider"
                       title="Nessun immobile collegato a questo inquilino"
                     >
-                      <span>🏠❗ Immobile da assegnare</span>
+                      <Home size={11} className="text-amber-700 shrink-0" />
+                      <span>Immobile da assegnare</span>
                     </span>
                   )}
                 </div>
@@ -1764,7 +1784,7 @@ export default function DashboardView({
       <div className="bg-white rounded-3xl border-2 border-slate-150 p-6 shadow-md w-full" id="dashboard-activities-bar">
         <div className="flex items-center justify-between pb-4">
           <div className="flex items-center space-x-2.5">
-            <span className="text-xl">📌</span>
+            <Pin size={20} className="text-amber-700 shrink-0" />
             <h3 className="font-sans font-black text-slate-900 text-base">
               Bacheca Attività in Scadenza Significativa
             </h3>
@@ -1778,7 +1798,12 @@ export default function DashboardView({
             }`}
           >
             {hasOpenFastClosing && <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>}
-            <span>{hasOpenFastClosing ? "🔴 Fast Closing Aperto (Vedi)" : "Vedi Scadenza"}</span>
+            <span>{hasOpenFastClosing ? (
+              <span className="inline-flex items-center gap-1.5">
+                <AlertTriangle size={12} className="text-white shrink-0" />
+                Fast Closing Aperto (Vedi)
+              </span>
+            ) : "Vedi Scadenza"}</span>
             <ArrowRight size={12} />
           </button>
         </div>
@@ -1787,7 +1812,7 @@ export default function DashboardView({
           
           {isNotificationsSuspended ? (
             <div className="py-10 px-6 text-center text-slate-500 text-xs bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center space-y-2" id="dashboard-notifications-suspended-box">
-              <span className="text-2xl">🔕</span>
+              <BellOff size={20} className="text-slate-500 shrink-0" />
               <p className="font-extrabold text-slate-800 text-xs uppercase tracking-wider">Ricezione Notifiche Sospesa</p>
               <p className="max-w-md text-slate-500 leading-relaxed text-[10px]">
                 In base alle tue impostazioni personalizzate (giorni, orari o intervalli di sospensione), la bacheca è attualmente silenziata. I solleciti, le scadenze e gli avvisi torneranno ad aggiornarsi negli orari e nei giorni lavorativi configurati.
@@ -1796,7 +1821,8 @@ export default function DashboardView({
                 onClick={() => setCurrentSection("settings")}
                 className="mt-2 text-[10px] font-bold text-indigo-600 hover:text-indigo-500 underline flex items-center gap-1 cursor-pointer"
               >
-                Configura Preferenze ⚙️
+                Configura Preferenze
+                <Settings size={11} className="text-indigo-600 shrink-0" />
               </button>
             </div>
           ) : (
@@ -1811,14 +1837,15 @@ export default function DashboardView({
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div className="flex items-start space-x-3">
-                        <span className="text-2xl mt-0.5 shrink-0">⚠️</span>
+                        <AlertTriangle size={20} className="text-amber-600 mt-0.5 shrink-0" />
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <h4 className="font-extrabold text-xs text-amber-950 leading-snug">
                               Contratto d'Affitto Mancante: {p.name}
                             </h4>
-                            <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 uppercase">
-                              🔴 Registrazione Urgente
+                            <span className="inline-flex items-center gap-1.5 text-[8px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 uppercase">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0" />
+                              Registrazione Urgente
                             </span>
                           </div>
                           <p className="text-[10px] text-amber-900/80 mt-1 leading-relaxed">
@@ -1848,7 +1875,7 @@ export default function DashboardView({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0">🏠❗</span>
+                      <Home size={20} className="text-amber-600 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-extrabold text-xs text-amber-950 leading-snug">
@@ -1884,7 +1911,7 @@ export default function DashboardView({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0">🎂</span>
+                      <Gift size={20} className="text-rose-700 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-extrabold text-xs text-emerald-950 leading-snug">
@@ -1905,7 +1932,10 @@ export default function DashboardView({
                         onClick={() => handleSendBirthdayWishes(t)}
                         className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] px-3.5 py-2 rounded-lg -2 border-emerald-800 active:-0 transition-all cursor-pointer flex items-center gap-1.5"
                       >
-                        💬 Invia Auguri via WhatsApp
+                        <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                          <MessageCircle size={11} className="text-white" />
+                        </span>
+                        Invia Auguri via WhatsApp
                       </button>
                     </div>
                   </div>
@@ -1920,7 +1950,7 @@ export default function DashboardView({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0">💸❗</span>
+                      <Euro size={20} className="text-rose-700 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-extrabold text-xs text-rose-950 leading-snug">
@@ -1958,7 +1988,7 @@ export default function DashboardView({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0">⚖️❗</span>
+                      <Scale size={20} className="text-rose-700 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-extrabold text-xs text-rose-950 leading-snug">
@@ -2022,7 +2052,7 @@ export default function DashboardView({
 
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                       <div className="flex items-start space-x-3">
-                        <span className="text-xl mt-0.5 shrink-0">⏰</span>
+                        <AlarmClock size={18} className="text-rose-600 mt-0.5 shrink-0" />
                         <div>
                           <h4 className="font-extrabold text-xs text-rose-950">
                             Pendenza Amministrativa: {alert.tenantName}
@@ -2057,14 +2087,14 @@ export default function DashboardView({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0">⏰</span>
+                      <AlarmClock size={20} className="text-amber-600 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-extrabold text-xs text-amber-950 leading-snug">
                             {alert.title}: {alert.propertyName}
                           </h4>
-                          <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full uppercase ${alert.daysRemaining <= 0 ? "bg-rose-200 text-rose-900" : "bg-amber-200 text-amber-900"}`}>
-                            {alert.daysRemaining <= 0 ? "⚠️ Scaduto / Urgente" : `⏳ Scade tra ${alert.daysRemaining} gg`}
+                          <span className={`inline-flex items-center gap-1.5 text-[8px] font-bold px-2 py-0.5 rounded-full uppercase ${alert.daysRemaining <= 0 ? "bg-rose-200 text-rose-900" : "bg-amber-200 text-amber-900"}`}>
+                            {alert.daysRemaining <= 0 ? (<><AlertTriangle size={10} className="text-rose-700 shrink-0" />Scaduto / Urgente</>) : (<><Hourglass size={10} className="text-amber-700 shrink-0" />Scade tra {alert.daysRemaining} gg</>)}
                           </span>
                         </div>
                         <p className="text-[10px] text-amber-900/80 mt-1 leading-relaxed">
@@ -2104,14 +2134,15 @@ export default function DashboardView({
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div className="flex items-start space-x-3">
-                        <span className="text-2xl mt-0.5 shrink-0">📄</span>
+                        <FileText size={20} className="text-amber-700 mt-0.5 shrink-0" />
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <h4 className="font-extrabold text-xs text-amber-950 leading-snug">
                               Contratto in Scadenza: {contract.propertyName}
                             </h4>
-                            <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 uppercase">
-                              ⏳ Mancano {diffDays} Giorni
+                            <span className="inline-flex items-center gap-1.5 text-[8px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 uppercase">
+                              <Hourglass size={10} className="text-amber-700 shrink-0" />
+                              Mancano {diffDays} Giorni
                             </span>
                           </div>
                           <p className="text-[10px] text-amber-900/80 mt-1 leading-relaxed">
@@ -2137,7 +2168,21 @@ export default function DashboardView({
                               : "bg-slate-900 hover:bg-slate-800 text-white"
                           }`}
                         >
-                          <span>{syncingContractId === contract.id ? "Sincronizzazione..." : calendarSyncSuccess[contract.id] ? "✓ Sincronizzato" : "🗓️ Sincronizza Google Calendar"}</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            {syncingContractId === contract.id ? (
+                              "Sincronizzazione..."
+                            ) : calendarSyncSuccess[contract.id] ? (
+                              <>
+                                <Check size={11} className="text-white shrink-0" />
+                                Sincronizzato
+                              </>
+                            ) : (
+                              <>
+                                <Calendar size={11} className="text-white shrink-0" />
+                                Sincronizza Google Calendar
+                              </>
+                            )}
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -2145,7 +2190,10 @@ export default function DashboardView({
                     {/* Google Calendar Authorization warning and success / failure messages */}
                     {!googleAccessToken && !calendarSyncSuccess[contract.id] && (
                       <div className="bg-amber-100/80 border border-amber-200 p-2.5 rounded-lg text-[10px] text-amber-900 flex items-center justify-between">
-                        <span>⚠️ Google Calendar non connesso. Effettua il login per poter inserire la scadenza direttamente sul tuo calendario reale.</span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <AlertTriangle size={12} className="text-amber-600 shrink-0" />
+                          Google Calendar non connesso. Effettua il login per poter inserire la scadenza direttamente sul tuo calendario reale.
+                        </span>
                         <button
                           onClick={onConnectGoogleCalendar}
                           className="bg-slate-900 hover:bg-slate-800 text-white font-black text-[9px] px-2.5 py-1 rounded-md cursor-pointer shrink-0 transition-all ml-2"
@@ -2157,7 +2205,10 @@ export default function DashboardView({
 
                     {calendarSyncErrors[contract.id] && (
                       <div className="bg-rose-100 border border-rose-200 p-2.5 rounded-lg text-[10px] text-rose-900 flex items-center justify-between">
-                        <span>❌ {calendarSyncErrors[contract.id]}</span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <XCircle size={12} className="text-rose-600 shrink-0" />
+                          {calendarSyncErrors[contract.id]}
+                        </span>
                         <button
                           onClick={onConnectGoogleCalendar}
                           className="bg-rose-900 hover:bg-rose-800 text-white font-black text-[9px] px-2 py-0.5 rounded-md cursor-pointer shrink-0 ml-2"
@@ -2168,8 +2219,9 @@ export default function DashboardView({
                     )}
 
                     {calendarSyncSuccess[contract.id] && (
-                      <div className="bg-emerald-100 border border-emerald-200 p-2.5 rounded-lg text-[10px] text-emerald-900">
-                        ✓ Scadenza inserita con successo nel tuo account Google Calendar! Riceverai una notifica email 7 giorni prima.
+                      <div className="bg-emerald-100 border border-emerald-200 p-2.5 rounded-lg text-[10px] text-emerald-900 flex items-center gap-1.5">
+                        <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                        Scadenza inserita con successo nel tuo account Google Calendar! Riceverai una notifica email 7 giorni prima.
                       </div>
                     )}
                   </div>
@@ -2184,14 +2236,14 @@ export default function DashboardView({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0">📄</span>
+                      <FileText size={20} className="text-indigo-700 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-extrabold text-xs text-indigo-950 leading-snug">
                             {rem.title}: {rem.propertyName}
                           </h4>
-                          <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full uppercase ${rem.daysRemaining <= 0 ? "bg-rose-200 text-rose-900" : "bg-indigo-200 text-indigo-900"}`}>
-                            {rem.daysRemaining <= 0 ? "⚠️ Termine Scaduto" : `⏳ Scade tra ${rem.daysRemaining} gg`}
+                          <span className={`inline-flex items-center gap-1.5 text-[8px] font-bold px-2 py-0.5 rounded-full uppercase ${rem.daysRemaining <= 0 ? "bg-rose-200 text-rose-900" : "bg-indigo-200 text-indigo-900"}`}>
+                            {rem.daysRemaining <= 0 ? (<><AlertTriangle size={10} className="text-rose-700 shrink-0" />Termine Scaduto</>) : (<><Hourglass size={10} className="text-indigo-700 shrink-0" />Scade tra {rem.daysRemaining} gg</>)}
                           </span>
                         </div>
                         <p className="text-[10px] text-indigo-900/80 mt-1 leading-relaxed">
@@ -2223,7 +2275,7 @@ export default function DashboardView({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0">⏳</span>
+                      <Hourglass size={20} className="text-amber-700 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-extrabold text-xs text-amber-950 leading-snug">
@@ -2259,7 +2311,7 @@ export default function DashboardView({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0">💰</span>
+                      <Euro size={20} className="text-rose-700 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-extrabold text-xs text-rose-950 leading-snug">
@@ -2296,14 +2348,14 @@ export default function DashboardView({
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0">🛡️</span>
+                      <Shield size={20} className="text-indigo-700 mt-0.5 shrink-0" />
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-extrabold text-xs text-indigo-950 leading-snug">
                             Scadenza Polizza Assicurativa: {alert.propertyName}
                           </h4>
-                          <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full uppercase ${alert.daysRemaining <= 0 ? "bg-rose-200 text-rose-900 animate-none" : "bg-indigo-200 text-indigo-900"}`}>
-                            {alert.daysRemaining <= 0 ? "⚠️ Scaduta" : `⏳ Scade tra ${alert.daysRemaining} gg`}
+                          <span className={`inline-flex items-center gap-1.5 text-[8px] font-bold px-2 py-0.5 rounded-full uppercase ${alert.daysRemaining <= 0 ? "bg-rose-200 text-rose-900 animate-none" : "bg-indigo-200 text-indigo-900"}`}>
+                            {alert.daysRemaining <= 0 ? (<><AlertTriangle size={10} className="text-rose-700 shrink-0" />Scaduta</>) : (<><Hourglass size={10} className="text-indigo-700 shrink-0" />Scade tra {alert.daysRemaining} gg</>)}
                           </span>
                         </div>
                         <p className="text-[10px] text-indigo-900/80 mt-1 leading-relaxed">
@@ -2334,7 +2386,10 @@ export default function DashboardView({
                customDueRentReminders.length === 0 &&
                insuranceExpiryAlerts.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed">
-                  📢 Nessun avviso o sollecito di pagamento in bacheca al momento. Il sistema è aggiornato!
+                  <span className="inline-flex items-center gap-1.5">
+                    <Info size={14} className="text-indigo-600 shrink-0" />
+                    Nessun avviso o sollecito di pagamento in bacheca al momento. Il sistema è aggiornato!
+                  </span>
                 </div>
               ) : null}
             </>
@@ -2388,7 +2443,13 @@ export default function DashboardView({
                   ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.4)]" 
                   : "bg-amber-500/15 text-amber-300 border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
               }`}>
-                {timeLeftManual.unlocked ? "🟢 SBLOCCATA" : "🔒 BLOCCATA FINO AL 20"}
+                <span className="inline-flex items-center gap-1.5">
+                  {timeLeftManual.unlocked ? (
+                    <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />SBLOCCATA</>
+                  ) : (
+                    <><Lock size={10} className="text-amber-300 shrink-0" />BLOCCATA FINO AL 20</>
+                  )}
+                </span>
               </span>
             </div>
             <h4 className="text-lg font-sans font-black text-cyan-400 mt-2 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">
@@ -2474,11 +2535,13 @@ export default function DashboardView({
                       
                       {isPastHardDeadline ? (
                         <div className="bg-red-600 text-white font-extrabold px-3 py-1 rounded-lg animate-bounce flex items-center space-x-1 uppercase tracking-wider text-[10px]">
-                          <span>⚠️ TERMINE LEGALE DI 6 MESI SCADUTO DA {Math.abs(daysRemaining)} GIORNI!</span>
+                          <AlertTriangle size={11} className="text-white shrink-0" />
+                          <span>TERMINE LEGALE DI 6 MESI SCADUTO DA {Math.abs(daysRemaining)} GIORNI!</span>
                         </div>
                       ) : (
                         <div className="bg-amber-500 text-slate-950 font-extrabold px-3 py-1 rounded-lg flex items-center space-x-1 uppercase tracking-wider text-[10px]">
-                          <span>⏳ Mancano {daysRemaining} giorni al limite legale dei 6 mesi</span>
+                          <Hourglass size={11} className="text-slate-950 shrink-0" />
+                          <span>Mancano {daysRemaining} giorni al limite legale dei 6 mesi</span>
                         </div>
                       )}
                     </div>
@@ -2486,12 +2549,15 @@ export default function DashboardView({
 
                   {/* Active Simulated / Real Post receipt loader inside the dashboard alert widget */}
                   <div className="shrink-0 bg-red-900/30 border border-red-800/40 p-4 rounded-2xl flex flex-col items-center justify-center min-w-[240px] text-center">
-                    <span className="text-2xl mb-1.5">📮</span>
+                    <Mail size={22} className="text-red-300 mb-1.5" />
                     <span className="text-[10px] font-black uppercase text-red-200 tracking-wider">Ricevuta Raccomandata</span>
                     <p className="text-[9px] text-slate-400 mt-0.5 max-w-[180px] leading-tight">Traccia la spedizione postale caricando la ricevuta di ritorno.</p>
-                    
+
                     <label className="mt-3.5 inline-flex items-center space-x-2 bg-red-600 hover:bg-red-500 text-white font-black text-xs px-4 py-2.5 rounded-xl -2 border-red-800 hover:-0 transition-all cursor-pointer shadow-md">
-                      <span>📤 Carica Ricevuta Postale</span>
+                      <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                        <Upload size={11} className="text-white" />
+                      </span>
+                      <span>Carica Ricevuta Postale</span>
                       <input 
                         type="file"
                         accept="image/*,application/pdf"
@@ -2519,7 +2585,7 @@ export default function DashboardView({
       <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-xs">
         <div className="flex items-center justify-between pb-4 border-slate-50">
           <div className="flex items-center space-x-2.5">
-            <span className="text-xl">🔑</span>
+            <Key size={20} className="text-indigo-700 shrink-0" />
             <h3 className="font-sans font-extrabold text-slate-900 text-base">
               I Tuoi Immobili nel Portafoglio ({totalProperties})
             </h3>
@@ -2592,10 +2658,10 @@ export default function DashboardView({
               // ----------------------------------------------------
               if (!activeContract) {
                 const getIcon = (type: string) => {
-                  if (type === "Monolocale") return "🏢";
-                  if (type === "Ufficio") return "🏬";
-                  if (type === "Garage/Box") return "🚗";
-                  return "🏠";
+                  if (type === "Monolocale") return <Building2 size={18} className="text-indigo-700" />;
+                  if (type === "Ufficio") return <Building size={18} className="text-indigo-700" />;
+                  if (type === "Garage/Box") return <Car size={18} className="text-indigo-700" />;
+                  return <Home size={18} className="text-indigo-700" />;
                 };
 
                 return (
@@ -2617,7 +2683,10 @@ export default function DashboardView({
                           className="text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200 animate-pulse cursor-pointer hover:bg-rose-200 transition-colors"
                           title="Vedi Pratica di 2° Livello"
                         >
-                          🔴 DA LOCARE / DISPONIBILE
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0" />
+                            DA LOCARE / DISPONIBILE
+                          </span>
                         </span>
                       </div>
                       
@@ -2668,7 +2737,12 @@ export default function DashboardView({
               
               // Determine Dynamic Classification using the central helper!
               let borderClass = "border-amber-300 bg-amber-50/30 text-amber-950";
-              let statusLabel = "👍 Relazione Regolare";
+              let statusLabel: React.ReactNode = (
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle2 size={10} className="text-emerald-700 shrink-0" />
+                  Relazione Regolare
+                </span>
+              );
               let isMora = false;
               let isCritical = false;
 
@@ -2688,7 +2762,12 @@ export default function DashboardView({
                 }
               } else if (!activeContract) {
                 borderClass = "border-amber-400 bg-amber-50/15 text-amber-950";
-                statusLabel = "⚠️ Contratto Mancante";
+                statusLabel = (
+                  <span className="inline-flex items-center gap-1">
+                    <AlertTriangle size={10} className="text-amber-700 shrink-0" />
+                    Contratto Mancante
+                  </span>
+                );
               }
 
               return (
@@ -2745,7 +2824,8 @@ export default function DashboardView({
                           </span>
                         ) : (
                           <span className="font-black text-rose-600 uppercase tracking-tight flex items-center space-x-1 animate-pulse">
-                            <span>❌ Mancante</span>
+                            <XCircle size={11} className="text-rose-600 shrink-0" />
+                            <span>Mancante</span>
                           </span>
                         )}
                       </div>
@@ -2766,7 +2846,10 @@ export default function DashboardView({
 
                       {condoConstituted && (
                         <div className="flex justify-between items-center text-[9px] text-slate-500 pt-1 border-t border-slate-200/50">
-                          <span className="truncate max-w-[120px]">🏢 {condoConstituted.name}</span>
+                          <span className="inline-flex items-center gap-1 truncate max-w-[120px]">
+                            <Building2 size={10} className="text-indigo-700 shrink-0" />
+                            {condoConstituted.name}
+                          </span>
                           <span className="font-mono text-slate-400 shrink-0 text-[8px]">Amm: {condoConstituted.administrator?.split(" ").slice(-1)[0]}</span>
                         </div>
                       )}
@@ -2822,7 +2905,10 @@ export default function DashboardView({
         <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono tracking-wider text-slate-400 uppercase font-bold">🏢 Immobili</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 uppercase font-bold">
+                <Building2 size={14} className="text-indigo-700 shrink-0" />
+                Immobili
+              </span>
               <div className="bg-indigo-50 text-indigo-600 p-2 rounded-lg">
                 <Building2 size={16} />
               </div>
@@ -2847,7 +2933,10 @@ export default function DashboardView({
         <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono tracking-wider text-slate-400 uppercase font-bold">📄 Contratti Attivi</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 uppercase font-bold">
+                <FileText size={14} className="text-indigo-700 shrink-0" />
+                Contratti Attivi
+              </span>
               <div className="bg-emerald-50 text-emerald-600 p-2 rounded-lg">
                 <TrendingUp size={16} />
               </div>
@@ -2874,7 +2963,10 @@ export default function DashboardView({
         <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono tracking-wider text-slate-400 uppercase font-bold">⚖️ Pratiche Legali</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 uppercase font-bold">
+                <Scale size={14} className="text-indigo-700 shrink-0" />
+                Pratiche Legali
+              </span>
               <div className="bg-amber-50 text-amber-600 p-2 rounded-lg">
                 <CalendarClock size={16} />
               </div>
@@ -2901,7 +2993,10 @@ export default function DashboardView({
         <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono tracking-wider text-slate-400 uppercase font-bold">🚨 Solleciti Attivi</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 uppercase font-bold">
+                <AlertTriangle size={14} className="text-rose-600 shrink-0" />
+                Solleciti Attivi
+              </span>
               <div className="bg-rose-50 text-rose-600 p-2 rounded-lg">
                 <AlertTriangle size={16} />
               </div>
@@ -2929,7 +3024,10 @@ export default function DashboardView({
         
         {/* Quick actions box */}
         <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-lg border border-slate-800">
-          <h3 className="font-sans font-black text-white text-base">🪄 Operazioni Rapide AI</h3>
+          <h3 className="font-sans font-black text-white text-base inline-flex items-center gap-1.5">
+            <Wand2 size={16} className="text-indigo-400 shrink-0" />
+            Operazioni Rapide AI
+          </h3>
           <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">Carica un documento per compilare o riconciliare istantaneamente.</p>
           
           <div className="mt-5 space-y-3">
@@ -2938,7 +3036,7 @@ export default function DashboardView({
               className="w-full flex items-center justify-between p-3.5 bg-slate-800 hover:bg-slate-750 text-white font-bold text-xs rounded-xl active:transition-all text-left"
             >
               <div className="flex items-center space-x-3">
-                <span className="text-sm">📄</span>
+                <FileText size={14} className="text-indigo-400 shrink-0" />
                 <span>Estrai da Contratto PDF</span>
               </div>
               <ArrowRight size={12} className="text-slate-400" />
@@ -2949,7 +3047,7 @@ export default function DashboardView({
               className="w-full flex items-center justify-between p-3.5 bg-slate-800 hover:bg-slate-750 text-white font-bold text-xs rounded-xl active:transition-all text-left"
             >
               <div className="flex items-center space-x-3">
-                <span className="text-sm">🏢</span>
+                <Building2 size={14} className="text-indigo-400 shrink-0" />
                 <span>Estrai Riparti Condominio</span>
               </div>
               <ArrowRight size={12} className="text-slate-400" />
@@ -2960,7 +3058,7 @@ export default function DashboardView({
               className="w-full flex items-center justify-between p-3.5 bg-slate-800 hover:bg-slate-750 text-white font-bold text-xs rounded-xl active:transition-all text-left"
             >
               <div className="flex items-center space-x-3">
-                <span className="text-sm">💰</span>
+                <Euro size={14} className="text-emerald-400 shrink-0" />
                 <span>Riconcilia Estratto Conto</span>
               </div>
               <ArrowRight size={12} className="text-slate-400" />
@@ -2974,7 +3072,10 @@ export default function DashboardView({
           <div className="flex items-start space-x-4 relative">
             <Sparkles size={24} className="text-amber-400 mt-0.5 shrink-0 animate-pulse" />
             <div>
-              <h4 className="text-sm font-black text-white font-sans uppercase tracking-wider">Suggerimento AI 💡</h4>
+              <h4 className="text-sm font-black text-white font-sans uppercase tracking-wider inline-flex items-center gap-1.5">
+                Suggerimento AI
+                <Lightbulb size={14} className="text-amber-400 shrink-0" />
+              </h4>
               <p className="text-xs text-slate-300 mt-3 leading-relaxed">
                 Puoi trascinare o incollare contratti, preventivi o movimenti bancari nell'<strong>Area AI</strong>.
                 La nostra intelligenza artificiale integrata estrarrà automaticamente i dati compilando gli immobili, i contratti, le anagrafiche e persino le scadenze del condominio in un click.
@@ -3002,7 +3103,7 @@ export default function DashboardView({
           <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-2xl max-w-md w-full overflow-hidden">
             <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <span className="text-xl">⚖️</span>
+                <Scale size={20} className="text-indigo-300 shrink-0" />
                 <div>
                   <h3 className="font-sans font-black text-sm tracking-tight">Costituzione Fascicolo Legale</h3>
                   <p className="text-[9px] text-slate-400">Area Urgente → Area Legale</p>
@@ -3012,7 +3113,7 @@ export default function DashboardView({
                 onClick={() => setTransferringReminder(null)} 
                 className="text-slate-400 hover:text-white text-xs cursor-pointer font-bold"
               >
-                ✕
+                <X size={14} />
               </button>
             </div>
 

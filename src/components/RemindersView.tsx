@@ -1,23 +1,24 @@
 
 import React, { useState, useEffect, useMemo } from "react";
-import { 
-  Plus, 
-  AlertTriangle, 
-  Send, 
-  Copy, 
-  Clipboard, 
-  Check, 
-  X, 
-  Sparkles, 
-  User, 
-  AlertCircle, 
-  Upload, 
-  Landmark, 
-  FileText, 
+import {
+  Plus,
+  AlertTriangle,
+  Send,
+  Copy,
+  Clipboard,
+  Check,
+  X,
+  Sparkles,
+  User,
+  AlertCircle,
+  Upload,
+  Landmark,
+  FileText,
   Scale,
   Camera,
   Image as ImageIcon,
-  ArrowLeft
+  ArrowLeft,
+  FlaskConical
 } from "lucide-react";
 import JSZip from "jszip";
 import { Reminder, Tenant, BankMovement, FastClosingItem, Communication, OwnerProfile, Owner } from "../types";
@@ -308,12 +309,11 @@ export default function RemindersView({
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // ⚠️⚠️⚠️ CORREZIONE Y — GATING 15 GIORNI TEMPORANEAMENTE DISATTIVATO ⚠️⚠️⚠️
-  // Disattivato su richiesta esplicita dell'utente il 24/07/2026 per testare tutta la
-  // sequenza dei Solleciti senza aspettare i tempi reali. RIATTIVARE rimettendo questa
-  // costante a `false` non appena il test è concluso — NON deve mai restare disattivato
-  // in un utilizzo reale, altrimenti si perdono i termini procedurali di legge.
-  const DISABLE_15_DAY_GATING_FOR_TESTING = true;
+  // Gating dei 15 giorni tra un passaggio e l'altro dei Solleciti: RIATTIVATO il 05/08/2026.
+  // Era stato disattivato il 24/07/2026 solo per testare la sequenza senza aspettare i tempi
+  // reali. Deve restare `false` in ogni utilizzo reale: altrimenti si perdono i termini
+  // procedurali di legge sulla morosità.
+  const DISABLE_15_DAY_GATING_FOR_TESTING = false;
 
   const handleOpenStepWizard = (reminder: Reminder) => {
     const step = reminder.step || 1;
@@ -410,7 +410,7 @@ export default function RemindersView({
         return; // avviso già mostrato una volta sotto, non ripeterlo per ogni destinatario
       }
       if (!recipientEmail || !recipientEmail.includes("@")) {
-        alert(`⚠️ EMAIL ASSENTE:\n"${recipientName}" non ha un indirizzo email valido impostato in anagrafica. Invio email saltato per questo destinatario.`);
+        alert(`EMAIL ASSENTE:\n"${recipientName}" non ha un indirizzo email valido impostato in anagrafica. Invio email saltato per questo destinatario.`);
         return;
       }
       try {
@@ -424,26 +424,26 @@ export default function RemindersView({
           items_list: listText
         };
         await emailjs.send(serviceId, templateId, templateParams, publicKey);
-        alert(`📧 E-mail inviata con successo tramite EmailJS all'indirizzo: ${recipientEmail}`);
+        alert(`E-mail inviata con successo tramite EmailJS all'indirizzo: ${recipientEmail}`);
       } catch (err: any) {
         console.error("Errore EmailJS:", err);
-        alert(`❌ Errore durante l'invio dell'e-mail a ${recipientName} tramite EmailJS:\n${err?.text || err?.message || JSON.stringify(err)}`);
+        alert(`Errore durante l'invio dell'e-mail a ${recipientName} tramite EmailJS:\n${err?.text || err?.message || JSON.stringify(err)}`);
       }
     };
 
     const openWhatsAppFor = (recipientName: string, recipientPhone?: string) => {
       if (!recipientPhone || !recipientPhone.trim()) {
-        alert(`⚠️ TELEFONO ASSENTE:\n"${recipientName}" non ha un numero di telefono WhatsApp salvato in anagrafica.\nImpossibile inviare il messaggio tramite WhatsApp a questo destinatario.`);
+        alert(`TELEFONO ASSENTE:\n"${recipientName}" non ha un numero di telefono WhatsApp salvato in anagrafica.\nImpossibile inviare il messaggio tramite WhatsApp a questo destinatario.`);
         return;
       }
       const phoneClean = recipientPhone.replace(/[^0-9+]/g, "");
       const waUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(messageBody)}`;
       window.open(waUrl, "_blank");
-      alert(`💬 Apertura della chat di WhatsApp per ${recipientName} (${recipientPhone}) in corso in una nuova scheda... Premere "Invia" manualmente per spedire il testo precompilato.`);
+      alert(`Apertura della chat di WhatsApp per ${recipientName} (${recipientPhone}) in corso in una nuova scheda... Premere "Invia" manualmente per spedire il testo precompilato.`);
     };
 
     if (!serviceId || !templateId || !publicKey) {
-      alert("⚠️ CONFIGURAZIONE EMAILJS MANCANTE:\nLe credenziali EmailJS non sono ancora configurate nel tuo profilo.\nVai nelle Impostazioni per inserire Service ID, Template ID e Public Key.\n\nL'invio dell'e-mail reale è stato saltato, ma procederemo con l'apertura di WhatsApp.");
+      alert("CONFIGURAZIONE EMAILJS MANCANTE:\nLe credenziali EmailJS non sono ancora configurate nel tuo profilo.\nVai nelle Impostazioni per inserire Service ID, Template ID e Public Key.\n\nL'invio dell'e-mail reale è stato saltato, ma procederemo con l'apertura di WhatsApp.");
     } else {
       for (const recipient of allRecipients) {
         await sendEmailTo(recipient.name, recipient.email);
@@ -752,7 +752,7 @@ export default function RemindersView({
               {/* Group header bar — nome debitore + subtotale (il tasto di passaggio ora è in fondo, in linea con gli altri) */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
                 <div className="flex items-center gap-2">
-                  <span className="text-base">👤</span>
+                  <User size={16} className="text-indigo-700 shrink-0" />
                   <h4 className="font-black text-sm text-slate-900">{group.debtorName}</h4>
                 </div>
                 {group.subtotal > 0 && (
@@ -1227,7 +1227,7 @@ export default function RemindersView({
                       </div>
 
                       <div className="border-t border-slate-150 pt-4 space-y-4">
-                        {/* ⚠️ CORREZIONE Y — Tasto di comodo SOLO per test: compila al volo le due
+                        {/* CORREZIONE Y — Tasto di comodo SOLO per test: compila al volo le due
                             ricevute simulate, per poter provare tutta la sequenza fino al passaggio
                             all'Area Legale senza dover scrivere ogni volta un nome file a mano. */}
                         <button
@@ -1236,9 +1236,10 @@ export default function RemindersView({
                             setProofOfSendingFile("TEST_prova_spedizione_raccomandata.pdf");
                             setReceiptOfReturnFile("TEST_ricevuta_ritorno_firmata.pdf");
                           }}
-                          className="w-full py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-[10px] font-black border border-dashed border-amber-300"
+                          className="w-full py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-[10px] font-black border border-dashed border-amber-300 inline-flex items-center justify-center gap-1.5"
                         >
-                          🧪 Compila con Dati di Prova (solo per test)
+                          <FlaskConical size={11} className="text-amber-800 shrink-0" />
+                          <span>Compila con Dati di Prova (solo per test)</span>
                         </button>
 
                         <div>

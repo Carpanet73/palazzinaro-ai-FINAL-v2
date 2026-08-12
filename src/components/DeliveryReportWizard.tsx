@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, addDoc, updateDoc, doc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
+import { X, Trash2 } from "lucide-react";
 import { db } from "../firebase";
 import { Contract, DeliveryReport, DeliveryReportItem } from "../types";
 
@@ -195,6 +196,9 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
         // Data di riferimento per cancellare le righe future: usa la data di
         // terminazione REALE già esistente se c'era, altrimenti la data della riconsegna.
         const cutoffDate = contract.earlyTerminationDate || reportDate;
+        const cancellationReason = alreadyHadTermination
+          ? `Annullata per riconsegna dell'immobile del ${reportDate} (contratto già chiuso anticipatamente il ${contract.earlyTerminationDate}).`
+          : `Annullata per chiusura contratto alla riconsegna del ${reportDate}${hasDamages ? " (con danni riscontrati)" : ""}.`;
         // CORREZIONE CD — stesso bug delle due query sopra: serve il filtro userId
         // nella query stessa, altrimenti Firestore nega l'intera list per prudenza.
         const fcSnap = await getDocs(query(
@@ -202,11 +206,21 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
           where("userId", "==", user.uid),
           where("sourceId", "==", contract.id)
         ));
-        const rowsToCancel = fcSnap.docs
+        // CORREZIONE CL (05/08/2026) — le righe F24 collegate a questo contratto NON hanno
+        // sourceId === contract.id (hanno "f24-{contractId}-yN"), quindi la query sopra non
+        // le trova: serve una seconda query "a prefisso" (range su stringa, pattern standard
+        // Firestore) per includerle e non lasciarle dovute su un contratto già chiuso.
+        const f24Snap = await getDocs(query(
+          collection(db, "fastClosing"),
+          where("userId", "==", user.uid),
+          where("sourceId", ">=", `f24-${contract.id}-`),
+          where("sourceId", "<", `f24-${contract.id}-`)
+        ));
+        const rowsToCancel = [...fcSnap.docs, ...f24Snap.docs]
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
-          .filter((fc: any) => fc.source === "contract" && (fc.status === "Pending" || fc.status === "Overdue") && new Date(fc.dueDate) > new Date(cutoffDate));
+          .filter((fc: any) => (fc.status === "Pending" || fc.status === "Overdue") && new Date(fc.dueDate) > new Date(cutoffDate));
         for (const row of rowsToCancel) {
-          await updateDoc(doc(db, "fastClosing", row.id), { status: "Cancelled" });
+          await updateDoc(doc(db, "fastClosing", row.id), { status: "Cancelled", cancellationReason });
         }
       }
 
@@ -238,7 +252,7 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
             <h2 className="text-lg font-black text-slate-900">{isRiconsegna ? "Verbale di Riconsegna" : "Verbale di Consegna"}</h2>
             <p className="text-xs text-slate-500">{contract.propertyName || "Immobile"} · {contract.tenantName || "Inquilino"} · Step {step}/{totalSteps}</p>
           </div>
-          <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100">✕</button>
+          <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100"><X size={16} /></button>
         </div>
 
         <div className="px-6 py-5">
@@ -289,7 +303,7 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
                       <option>Ottimo</option><option>Buono</option><option>Da riparare</option><option>Danneggiato</option>
                     </select>
                     <input className="col-span-3 text-xs border border-slate-200 rounded-lg px-3 py-2.5 outline-hidden" placeholder="Note" value={it.notes || ""} onChange={(e) => updateItem(it.id, { notes: e.target.value })} />
-                    <button onClick={() => removeRow(it.id)} className="col-span-1 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500" title="Rimuovi">🗑</button>
+                    <button onClick={() => removeRow(it.id)} className="col-span-1 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center" title="Rimuovi"><Trash2 size={14} /></button>
                   </div>
                 ))}
               </div>

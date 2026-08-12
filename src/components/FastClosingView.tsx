@@ -41,6 +41,10 @@ interface FastClosingViewProps {
   reminders?: Reminder[];
   onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">) => Promise<void>;
   onUpdateClosingItemStatus: (id: string, status: "Pending" | "Paid" | "Overdue" | "Cancelled") => Promise<void>;
+  // Come onUpdateClosingItemStatus, ma senza l'effetto collaterale di creare/agganciare un
+  // Sollecito — usato solo dove il Sollecito consolidato per debitore viene già gestito a
+  // parte (chiusura Fast Closing), per non generarne uno duplicato.
+  onSetClosingItemStatusRaw?: (id: string, status: "Pending" | "Paid" | "Overdue" | "Cancelled") => Promise<void>;
   onPostponeClosingItem: (id: string, newDueDate: string) => Promise<void>;
   onReconcileMovement: (movementId: string, closingItemId: string) => Promise<void>;
   onDeleteClosingItem: (id: string) => Promise<void>;
@@ -65,6 +69,7 @@ export default function FastClosingView({
   reminders = [],
   onAddClosingItem,
   onUpdateClosingItemStatus,
+  onSetClosingItemStatusRaw,
   onPostponeClosingItem,
   onReconcileMovement,
   onDeleteClosingItem,
@@ -72,7 +77,6 @@ export default function FastClosingView({
   onAddReminder,
   onUpdateReminderStatus
 }: FastClosingViewProps) {
-  const [showModal, setShowModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>("current"); // "current", "2026-06", "2026-05"
 
@@ -150,13 +154,6 @@ export default function FastClosingView({
   const [closedItemsCount, setClosedItemsCount] = useState(0);
   const [reproposedItemsList, setReproposedItemsList] = useState<string[]>([]);
   // CORREZIONE S — rimosso "forceUnlock": il giorno 20 è un limite assoluto, mai bypassabile
-
-  // Form fields for new item
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState<number>(0);
-  const [dueDate, setDueDate] = useState("");
-  const [source, setSource] = useState<"contract" | "condominium" | "manual">("manual");
 
   // Real-time timer ticks
   useEffect(() => {
@@ -477,38 +474,6 @@ export default function FastClosingView({
       });
   }, [filteredItems, tenants]);
 
-  const handleOpenAddModal = () => {
-    setTitle("");
-    setDescription("");
-    setAmount(0);
-    setDueDate("");
-    setSource("manual");
-    setShowModal(true);
-  };
-
-  // Handle single item submit
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || amount <= 0 || !dueDate) {
-      alert("Titolo, importo maggiore di zero e scadenza sono obbligatori.");
-      return;
-    }
-
-    try {
-      await onAddClosingItem({
-        title,
-        description,
-        amount,
-        dueDate,
-        source,
-        status: "Pending"
-      });
-      setShowModal(false);
-    } catch (err) {
-      console.error("Error creating deadline item", err);
-    }
-  };
-
   // Status updates
   const handleStatusChange = async (id: string, nextStatus: "Pending" | "Paid" | "Overdue" | "Cancelled") => {
     try {
@@ -814,15 +779,43 @@ export default function FastClosingView({
     const todayStr = new Date().toISOString().split('T')[0];
 
     try {
-      // 1. Create consolidated Solleciti for each debtor group
+      // 1. Create consolidated Solleciti for each debtor group — o aggancia quello già
+      // attivo, stessa identica logica usata per il pulsante "Insoluto" (App.tsx
+      // handleUpdateClosingItemStatus) e per il cron server-side equivalente
+      // (api/cron-close-fast-closing.ts): mai un secondo Sollecito per lo stesso debitore
+      // con una sequenza già in corso.
       for (const debtorName of Object.keys(preCloseData.sollecitiGroups)) {
         const group = preCloseData.sollecitiGroups[debtorName];
         if (group.items.length === 0) continue;
 
+        // I Proprietari non generano mai Solleciti.
+        if (group.tenant === null && (owners || []).some(o => o.name === debtorName)) continue;
+
+        // Se ha già una pratica legale attiva affidata a un avvocato, non si tocca il Sollecito.
+        const activeLegalCase = (legalCases || []).find(
+          lc => lc.tenantName === debtorName && lc.status !== "Closed" && !!lc.assignedLawyerId
+        );
+        if (activeLegalCase) continue;
+
         const itemsListText = group.items.map(item => `${item.title.split(" - ")[1] || item.title} (€${item.amount.toFixed(2)})`).join(", ");
         const associatedItemsIds = group.items.map(item => item.id);
 
-        if (onAddReminder) {
+        const existingActiveReminder = (reminders || []).find(r =>
+          r.tenantName === debtorName && r.status !== "Closed" && r.status !== "Cancelled" && r.status !== "Paid"
+        );
+
+        if (existingActiveReminder && onUpdateReminderStatus) {
+          const updatedIds = Array.from(new Set([...(existingActiveReminder.associatedItemsIds || []), ...associatedItemsIds]));
+          const updatedAmount = (existingActiveReminder.amount || 0) + group.total;
+          const updatedReason = existingActiveReminder.reason
+            ? `${existingActiveReminder.reason} + Chiusura Fast Closing: ${itemsListText}`
+            : `Sollecito automatico Fast Closing: ${itemsListText}`;
+          await onUpdateReminderStatus(existingActiveReminder.id, existingActiveReminder.status as any, existingActiveReminder.followUpNotes, {
+            associatedItemsIds: updatedIds,
+            amount: updatedAmount,
+            reason: updatedReason
+          });
+        } else if (onAddReminder) {
           await onAddReminder({
             tenantId: group.tenant?.id || "",
             tenantName: debtorName,
@@ -837,10 +830,14 @@ export default function FastClosingView({
         }
       }
 
-      // 2. Update statuses of the items
+      // 2. Update statuses of the items — usa la versione SENZA effetto collaterale sui
+      // Solleciti (già creati/agganciati per gruppo al passo 1 sopra): usare qui
+      // onUpdateClosingItemStatus duplicherebbe il Sollecito appena creato.
+      const setStatus = onSetClosingItemStatusRaw || onUpdateClosingItemStatus;
+
       // Rigid items -> Set status to Overdue and Re-propose to next month
       for (const item of preCloseData.rigidItems) {
-        await onUpdateClosingItemStatus(item.id, "Overdue");
+        await setStatus(item.id, "Overdue");
         closedCount++;
 
         const d = new Date(item.dueDate);
@@ -853,14 +850,17 @@ export default function FastClosingView({
           amount: item.amount,
           dueDate: nextDueDate,
           source: "contract",
-          status: "Pending"
-        });
+          sourceId: item.sourceId,
+          status: "Pending",
+          debtorId: item.debtorId,
+          debtorType: item.debtorType
+        } as any);
         reproposedTitles.push(`${item.title} (€${item.amount.toFixed(2)})`);
       }
 
       // Accessory Overdue items -> Set status to Overdue
       for (const item of preCloseData.accessoryOverdueItems) {
-        await onUpdateClosingItemStatus(item.id, "Overdue");
+        await setStatus(item.id, "Overdue");
         closedCount++;
       }
 
@@ -872,21 +872,32 @@ export default function FastClosingView({
         await onPostponeClosingItem(item.id, nextDueDate);
       }
 
-      // CORREZIONE AN — Indennità di Occupazione: se un contratto è scaduto (o è stata
-      // inviata disdetta) ma l'immobile NON risulta riconsegnato (nessun Verbale di
-      // Riconsegna registrato), il canone deve continuare a fluire regolarmente nel Fast
-      // Closing ogni mese, semplicemente cambiando nome in "Indennità di Occupazione" e
-      // mantenendo lo stesso importo — finché non viene registrata la riconsegna.
-      // CORREZIONE BZ — Massimo ha chiarito (29/07/2026) che l'Indennità di Occupazione
-      // riguarda SOLO la scadenza naturale (mancato accordo sul rinnovo alla decorrenza,
-      // es. fine dell'ottavo anno) — periodo in cui locatore e conduttore mantengono di
-      // comune accordo il possesso mentre trattano. NON si applica alla disdetta
-      // anticipata, che invece cancella le righe future (vedi handleEarlyTerminateContract
-      // in App.tsx) invece di trasformarle in indennità.
+      // CORREZIONE AN — Indennità di Occupazione: se un contratto è terminato (scadenza
+      // naturale O disdetta anticipata) ma l'immobile NON risulta riconsegnato (nessun
+      // Verbale di Riconsegna registrato), il canone deve continuare a fluire regolarmente
+      // nel Fast Closing ogni mese, semplicemente cambiando nome in "Indennità di
+      // Occupazione" e mantenendo lo stesso importo — finché non viene registrata la
+      // riconsegna.
+      // CORREZIONE CL (05/08/2026) — Massimo ha chiarito (05/08/2026) che questo meccanismo
+      // deve valere ANCHE per la disdetta anticipata, non solo per la scadenza naturale:
+      // supera la scelta precedente del 29/07/2026 (CORREZIONE BZ), che era stata presa
+      // prima che il modulo di Disdetta Anticipata fosse specificato nel dettaglio. Dal
+      // momento della disdetta le righe di canone NON vengono più generate/riproposte (la
+      // disdetta cancella le righe canone future già programmate, vedi
+      // handleEarlyTerminateContract in App.tsx): l'unica prosecuzione economica possibile
+      // oltre la data di decorrenza è questa Indennità di Occupazione, se l'immobile non è
+      // stato riconsegnato.
       const today = new Date();
       for (const contract of contracts) {
-        if (!contract.endDate || !contract.rentAmount) continue;
-        const contractEnded = new Date(contract.endDate) < today;
+        if (!contract.rentAmount) continue;
+        // La data di riferimento è la disdetta anticipata se presente (sostituisce la
+        // scadenza naturale, essendo il vero motivo per cui il rapporto è finito prima),
+        // altrimenti la scadenza naturale del contratto.
+        const referenceEndDate = contract.earlyTerminationDate
+          ? new Date(contract.earlyTerminationDate)
+          : (contract.endDate ? new Date(contract.endDate) : null);
+        if (!referenceEndDate) continue;
+        const contractEnded = referenceEndDate < today;
         if (!contractEnded) continue;
 
         const hasRiconsegna = deliveryReports.some(
@@ -910,9 +921,12 @@ export default function FastClosingView({
         if (alreadyExists) continue;
 
         const dueDate = `${nextMonthKey}-01`;
+        const description = contract.earlyTerminationDate
+          ? `Contratto chiuso anticipatamente il ${referenceEndDate.toLocaleDateString("it-IT")} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`
+          : `Contratto scaduto il ${referenceEndDate.toLocaleDateString("it-IT")} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`;
         await onAddClosingItem({
           title: `Indennità di Occupazione - ${contract.tenantName}`,
-          description: `Contratto scaduto il ${new Date(contract.endDate).toLocaleDateString("it-IT")} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`,
+          description,
           amount: contract.rentAmount,
           dueDate,
           source: "contract",
@@ -1286,12 +1300,31 @@ export default function FastClosingView({
                         const alreadySentDirectly = (activeLegalCaseForItem?.additionalSentItems || []).some(ai => ai.itemId === item.id);
                         const needsDirectLawyerSend = !!assignedLawyerForItem && item.status === "Overdue" && !alreadySentDirectly;
 
+                        // Debitore già "critico": ha già ricevuto il Primo Sollecito (firstRequestDate
+                        // valorizzato su un Sollecito ancora attivo) e questa è una nuova voce ancora
+                        // in attesa (non ancora Insoluta/Saldata) a suo carico — es. una spesa
+                        // condominiale non ancora marcata. Su richiesta esplicita di Massimo (05/08/2026)
+                        // NON confluisce automaticamente nel Sollecito: viene solo evidenziata in rosso
+                        // lampeggiante, così l'utente può valutare se inviarla manualmente in Solleciti.
+                        // Segue comunque tutte le altre regole (rinvio al mese successivo se non marcata).
+                        const debtorNameForItem = getDebtorName(item);
+                        const activeReminderForItem = debtorNameForItem
+                          ? (reminders || []).find(r =>
+                              r.tenantName === debtorNameForItem &&
+                              r.status !== "Paid" && r.status !== "Cancelled" && r.status !== "Closed" &&
+                              !!r.firstRequestDate
+                            )
+                          : undefined;
+                        const isCriticalPendingDebtor = item.status === "Pending" && !!activeReminderForItem;
+
                         return (
-                          <tr 
-                            key={item.id} 
+                          <tr
+                            key={item.id}
                             className={`group hover:bg-slate-50 transition-colors ${
                               isCriticalTenantItem ? "bg-rose-50/20" : ""
-                            } ${needsDirectLawyerSend ? "animate-pulse ring-2 ring-inset ring-rose-400" : ""}`}
+                            } ${needsDirectLawyerSend ? "animate-pulse ring-2 ring-inset ring-rose-400" : ""} ${
+                              isCriticalPendingDebtor ? "animate-pulse ring-2 ring-inset ring-rose-500 bg-rose-50/40" : ""
+                            }`}
                           >
                             {/* Stato Cell */}
                             <td className={`p-2.5 border border-slate-300 text-center font-bold transition-opacity ${isHandled ? "opacity-40 group-hover:opacity-90 group-active:opacity-90" : ""}`}>
@@ -1333,6 +1366,14 @@ export default function FastClosingView({
                                 {isCriticalTenantItem && (
                                   <span className="text-[7px] bg-rose-150 text-rose-800 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
                                     Contenzioso Legale
+                                  </span>
+                                )}
+                                {isCriticalPendingDebtor && (
+                                  <span
+                                    className="text-[7px] bg-rose-600 text-white px-1.5 py-0.5 rounded font-black uppercase tracking-wider animate-pulse"
+                                    title={`${debtorNameForItem} ha già ricevuto il Primo Sollecito: valuta se inviare anche questa voce in Solleciti`}
+                                  >
+                                    ⚠️ Inquilino Critico
                                   </span>
                                 )}
                               </div>
@@ -1481,111 +1522,6 @@ export default function FastClosingView({
           })
         )}
       </div>
-
-      {/* Manual Deadline Modal (no-print) */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs no-print">
-          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <h3 className="font-sans font-bold text-base">Nuova Scadenza Manuale</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Titolo Scadenza *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Es: Rata TARI, Spesa Idraulico, Cedolare Secca"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Importo Dovuto (€) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    step="0.01"
-                    min="0.01"
-                    placeholder="150.00"
-                    value={amount || ""}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Data di Scadenza *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Origine / Categoria
-                </label>
-                <select
-                  value={source}
-                  onChange={(e) => setSource(e.target.value as any)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500"
-                >
-                  <option value="manual">Spesa Manuale</option>
-                  <option value="contract">Affitto (Contratto)</option>
-                  <option value="condominium">Spese Condominiali</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Descrizione o Dettagli aggiuntivi
-                </label>
-                <textarea
-                  placeholder="Fattura n. 45 idraulico, pagamento canone in ritardo..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={2}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end space-x-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
-                >
-                  Annulla
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
-                >
-                  Aggiungi Scadenza
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Cumulative / Single Bank Transfer Reconciliation Modal (no-print) */}
       {cumulativeTenant && (

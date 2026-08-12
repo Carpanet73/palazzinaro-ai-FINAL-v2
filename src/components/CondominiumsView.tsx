@@ -1,11 +1,12 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
-import { 
-  Plus, Edit3, Trash2, Building, Calendar, UserCheck, 
-  Sparkles, X, AlertCircle, Eye, Info, MapPin, User, 
+import {
+  Plus, Edit3, Trash2, Building, Building2, Calendar, UserCheck,
+  Sparkles, X, AlertCircle, Eye, Info, MapPin, User,
   FileText, Upload, RefreshCw, CheckCircle2, ChevronRight,
-  ShieldCheck, ShieldAlert, CreditCard, Receipt, FileUp, DollarSign
+  ShieldCheck, ShieldAlert, CreditCard, Receipt, FileUp, DollarSign,
+  Home, Phone, Mail, Briefcase, FolderOpen, Save, Camera
 } from "lucide-react";
 import { Condominium, CondoRate, Property, Tenant, FastClosingItem, Administrator } from "../types";
 
@@ -301,9 +302,9 @@ export default function CondominiumsView({
       setExpenseAmount(Number(parsed.amount) || 0);
       if (parsed.date) setExpenseDueDate(parsed.date);
       setShowAddExpense(true);
-      alert("📄 Documento letto! Controlla i dati precompilati prima di confermare la ripartizione.");
+      alert("Documento letto! Controlla i dati precompilati prima di confermare la ripartizione.");
     } catch (err: any) {
-      alert(`❌ Errore durante la lettura del documento: ${err?.message || err}`);
+      alert(`Errore durante la lettura del documento: ${err?.message || err}`);
     } finally {
       setProcessingExpensePhoto(false);
       if (expensePhotoInputRef.current) expensePhotoInputRef.current.value = "";
@@ -607,7 +608,7 @@ export default function CondominiumsView({
     const selectedMonthStr = expenseDueDate.slice(0, 7);
     if (selectedMonthStr < currentMonthStr) {
       alert(
-        "⚠️ Mese già passato: non è possibile inserire una spesa in un Fast Closing già chiuso.\n\nScegli il mese corrente o un mese futuro."
+        "Mese già passato: non è possibile inserire una spesa in un Fast Closing già chiuso.\n\nScegli il mese corrente o un mese futuro."
       );
       return;
     }
@@ -803,7 +804,10 @@ export default function CondominiumsView({
             viewMode === "administrators" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
           }`}
         >
-          👤 Amministratori
+          <span className="inline-flex items-center gap-1.5">
+            <User size={13} />
+            Amministratori
+          </span>
         </button>
         <button
           onClick={() => setViewMode("condominiums")}
@@ -811,7 +815,10 @@ export default function CondominiumsView({
             viewMode === "condominiums" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
           }`}
         >
-          🏢 Condomini & Immobili
+          <span className="inline-flex items-center gap-1.5">
+            <Building2 size={13} />
+            Condomini & Immobili
+          </span>
         </button>
       </div>
 
@@ -820,8 +827,9 @@ export default function CondominiumsView({
         <div className="space-y-4">
           {unassignedCondominiums.length > 0 && (
             <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4">
-              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3">
-                🏢 Condomini da Assegnare — trascina su un Amministratore
+              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <Building2 size={13} className="text-indigo-700 shrink-0" />
+                Condomini da Assegnare — trascina su un Amministratore
               </h3>
               <div className="flex flex-wrap gap-2.5">
                 {unassignedCondominiums.map(c => (
@@ -833,7 +841,10 @@ export default function CondominiumsView({
                       mergingIds?.from === c.id ? "animate-pulse scale-95 opacity-50" : ""
                     }`}
                   >
-                    🏢 {c.name}
+                    <span className="inline-flex items-center gap-1.5">
+                      <Building2 size={12} className="text-indigo-700 shrink-0" />
+                      {c.name}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -898,11 +909,11 @@ export default function CondominiumsView({
 
                   <div className="space-y-1.5 text-[11px] border-t border-slate-100 pt-3">
                     <div className="flex items-center gap-1.5 text-slate-600">
-                      <span className="text-slate-400">📞</span>
+                      <Phone size={12} className="text-indigo-700 shrink-0" />
                       <span>{admin.phone || "Nessun telefono"}</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-600 truncate">
-                      <span className="text-slate-400">✉️</span>
+                      <Mail size={12} className="text-indigo-700 shrink-0" />
                       <span className="truncate">{admin.email || "Nessuna email"}</span>
                     </div>
                   </div>
@@ -912,7 +923,10 @@ export default function CondominiumsView({
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Condomini Gestiti</span>
                       {managedCondos.slice(0, 3).map(c => (
                         <div key={c.id} className="flex items-center justify-between text-[10px] text-slate-700 group">
-                          <span className="truncate">🏢 {c.name}</span>
+                          <span className="truncate inline-flex items-center gap-1">
+                            <Building2 size={11} className="text-indigo-700 shrink-0" />
+                            {c.name}
+                          </span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -933,8 +947,9 @@ export default function CondominiumsView({
                   )}
 
                   {managedProperties.length > 0 && (
-                    <div className="text-[10px] text-slate-400">
-                      🏠 {managedProperties.length} immobili collegati
+                    <div className="text-[10px] text-slate-400 inline-flex items-center gap-1">
+                      <Home size={11} className="text-indigo-700 shrink-0" />
+                      {managedProperties.length} immobili collegati
                     </div>
                   )}
                 </div>
@@ -949,8 +964,9 @@ export default function CondominiumsView({
       <>
       {unassignedConstitutedProperties.length > 0 && (
         <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4 mb-4">
-          <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3">
-            🏠 Immobili da Collegare — trascina su un Condominio
+          <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <Home size={13} className="text-indigo-700 shrink-0" />
+            Immobili da Collegare — trascina su un Condominio
           </h3>
           <div className="flex flex-wrap gap-2.5">
             {unassignedConstitutedProperties.map(p => (
@@ -962,7 +978,10 @@ export default function CondominiumsView({
                   mergingIds?.from === p.id ? "animate-pulse scale-95 opacity-50" : ""
                 }`}
               >
-                🏠 {p.name}
+                <span className="inline-flex items-center gap-1.5">
+                  <Home size={12} className="text-indigo-700 shrink-0" />
+                  {p.name}
+                </span>
               </div>
             ))}
           </div>
@@ -1022,11 +1041,13 @@ export default function CondominiumsView({
                       </button>
                       <div className="flex justify-between items-start gap-1">
                         <div>
-                          <h4 className="font-sans font-extrabold text-xs text-slate-900 truncate max-w-[180px]">
-                            🏠 {prop.name}
+                          <h4 className="font-sans font-extrabold text-xs text-slate-900 truncate max-w-[180px] flex items-center gap-1">
+                            <Home size={11} className="text-indigo-700 shrink-0" />
+                            {prop.name}
                           </h4>
-                          <span className="text-[10px] text-slate-400 mt-0.5 block truncate max-w-[170px]">
-                            📍 {prop.address}
+                          <span className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 truncate max-w-[170px]">
+                            <MapPin size={10} className="text-rose-700 shrink-0" />
+                            {prop.address}
                           </span>
                         </div>
                         
@@ -1046,8 +1067,9 @@ export default function CondominiumsView({
                       <div className="bg-white/90 p-2.5 rounded-lg border border-slate-100/60 text-[10px] space-y-1">
                         <div className="flex justify-between">
                           <span className="text-slate-400">Condominio:</span>
-                          <span className="font-semibold text-slate-700 truncate max-w-[120px]">
-                            🏢 {condo?.name || "N/A"}
+                          <span className="font-semibold text-slate-700 truncate max-w-[120px] inline-flex items-center gap-1">
+                            <Building2 size={11} className="text-indigo-700 shrink-0" />
+                            {condo?.name || "N/A"}
                           </span>
                         </div>
                         <div className="flex justify-between font-mono pt-1 border-t border-slate-50">
@@ -1183,8 +1205,9 @@ export default function CondominiumsView({
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] font-mono text-slate-400 uppercase">Stato Relazione</p>
-                      <span className="text-xs font-extrabold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100 mt-1 inline-block">
-                        CONSTITUITO 🏢
+                      <span className="text-xs font-extrabold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100 mt-1 inline-flex items-center gap-1.5">
+                        CONSTITUITO
+                        <Building2 size={13} className="shrink-0" />
                       </span>
                     </div>
                   </div>
@@ -1206,7 +1229,10 @@ export default function CondominiumsView({
                         onClick={() => setCurrentSection && setCurrentSection("properties")}
                         className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 text-left flex items-center space-x-1 mt-2"
                       >
-                        <span>🏠 Dettagli Immobile</span>
+                        <span className="inline-flex items-center gap-1">
+                          <Home size={11} />
+                          Dettagli Immobile
+                        </span>
                         <ChevronRight size={10} />
                       </button>
                     </div>
@@ -1240,7 +1266,10 @@ export default function CondominiumsView({
                           }}
                           className="text-[10px] font-black text-amber-600 hover:text-amber-800 text-left flex items-center space-x-1 mt-2"
                         >
-                          <span>👤 Mastrino Inquilino</span>
+                          <span className="inline-flex items-center gap-1">
+                            <User size={11} />
+                            Mastrino Inquilino
+                          </span>
                           <ChevronRight size={10} />
                         </button>
                       )}
@@ -1294,9 +1323,15 @@ export default function CondominiumsView({
                             <div className="min-w-0">
                               <p className="font-bold text-slate-800 truncate" title={doc.name}>{doc.name}</p>
                               <p className="text-[9px] text-slate-400 flex items-center space-x-1 mt-0.5">
-                                <span>📅 {doc.date}</span>
+                                <span className="inline-flex items-center gap-0.5">
+                                  <Calendar size={9} className="text-indigo-700 shrink-0" />
+                                  {doc.date}
+                                </span>
                                 <span>•</span>
-                                <span>💾 {doc.size}</span>
+                                <span className="inline-flex items-center gap-0.5">
+                                  <Save size={9} className="text-indigo-700 shrink-0" />
+                                  {doc.size}
+                                </span>
                               </p>
                             </div>
                           </div>
@@ -1331,7 +1366,14 @@ export default function CondominiumsView({
                         disabled={processingExpensePhoto}
                         className="inline-flex items-center space-x-1.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer"
                       >
-                        {processingExpensePhoto ? "⏳ Lettura in corso..." : "📷 Fotografa Rendiconto"}
+                        <span className="w-[14px] h-[14px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                          {processingExpensePhoto ? (
+                            <span className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Camera size={9} className="text-white" />
+                          )}
+                        </span>
+                        <span>{processingExpensePhoto ? "Lettura in corso..." : "Fotografa Rendiconto"}</span>
                       </button>
                       <button
                         onClick={() => setShowAddExpense(!showAddExpense)}
@@ -1543,19 +1585,20 @@ export default function CondominiumsView({
 
                     <div className="flex bg-slate-100 p-1 rounded-lg space-x-1 shrink-0">
                       {[
-                        { id: "tenant", label: "Inquilino 👤" },
-                        { id: "owner", label: "Proprietario 💼" },
-                        { id: "general", label: "Generale 📂" }
+                        { id: "tenant", label: "Inquilino", icon: User },
+                        { id: "owner", label: "Proprietario", icon: Briefcase },
+                        { id: "general", label: "Generale", icon: FolderOpen }
                       ].map(tab => (
                         <button
                           key={tab.id}
                           onClick={() => setActiveQueryTab(tab.id as any)}
-                          className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                            activeQueryTab === tab.id 
-                              ? "bg-white text-slate-900 shadow-3xs" 
+                          className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer inline-flex items-center gap-1 ${
+                            activeQueryTab === tab.id
+                              ? "bg-white text-slate-900 shadow-3xs"
                               : "text-slate-500 hover:text-slate-800"
                           }`}
                         >
+                          <tab.icon size={11} />
                           {tab.label}
                         </button>
                       ))}

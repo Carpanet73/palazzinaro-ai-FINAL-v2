@@ -13,7 +13,8 @@ import {
   Clock, 
   Coffee,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Settings
 } from "lucide-react";
 import { OwnerProfile } from "../types";
 import { guessProvinceFromCity } from "../lib/italianCities";
@@ -197,7 +198,7 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl gap-4">
         <div>
           <h1 className="font-sans font-black text-lg sm:text-xl text-white tracking-tight flex items-center gap-2">
-            <span>⚙️</span> Impostazioni Account & Notifiche
+            <Settings size={18} className="text-slate-300 shrink-0" /> Impostazioni Account & Notifiche
           </h1>
           <p className="text-[10px] text-slate-400 font-mono uppercase tracking-widest mt-1">Configura il tuo profilo e le regole di ricezione</p>
         </div>

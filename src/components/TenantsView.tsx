@@ -47,6 +47,13 @@ interface TenantsViewProps {
   onDeleteTenant: (id: string) => Promise<void>;
   // CORREZIONE E — consente al tasto flottante globale di aprire QUESTA stessa procedura
   registerAddHandler?: (fn: () => void) => void;
+  // CORREZIONE CJ (05/08/2026) — Fase 2 Condomini: consente di montare questa stessa vista
+  // (già completa e testata) dentro un overlay/modale richiamato da un'altra pagina (oggi
+  // Proprietari) mostrando SOLO il mastrino del singolo inquilino, senza navigare via dalla
+  // pagina di origine. Nessun secondo componente/flusso parallelo: stesso identico mastrino,
+  // stessa logica, solo montato in un contesto diverso.
+  ledgerOnlyMode?: boolean;
+  onCloseLedgerOnlyMode?: () => void;
 }
 
 export default function TenantsView({
@@ -62,7 +69,9 @@ export default function TenantsView({
   onAddTenant,
   onEditTenant,
   onDeleteTenant,
-  registerAddHandler
+  registerAddHandler,
+  ledgerOnlyMode = false,
+  onCloseLedgerOnlyMode
 }: TenantsViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
@@ -618,6 +627,13 @@ export default function TenantsView({
     window.print();
   };
 
+  // In ledgerOnlyMode questa vista mostra SOLO il mastrino (mai la lista completa Inquilini,
+  // che non avrebbe senso dentro un overlay richiamato da un'altra pagina): finché il
+  // tenant non è ancora stato risolto dall'effect sopra, non renderizza nulla.
+  if (ledgerOnlyMode && !selectedTenantLedger) {
+    return null;
+  }
+
   // --- RENDERING SEPARATE LEDGER PAGE ---
   if (selectedTenantLedger && tenantLedgerData) {
     const t = selectedTenantLedger;
@@ -720,6 +736,10 @@ Cordiali saluti.`;
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 no-print">
           <button
             onClick={() => {
+              if (ledgerOnlyMode && onCloseLedgerOnlyMode) {
+                onCloseLedgerOnlyMode();
+                return;
+              }
               setSelectedTenantLedger(null);
               setLedgerSearchQuery("");
               setActiveLedgerCategory("all");
@@ -727,7 +747,7 @@ Cordiali saluti.`;
             className="inline-flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl active:transition-all self-start"
           >
             <ArrowLeft size={14} />
-            <span>Torna all'Anagrafica</span>
+            <span>{ledgerOnlyMode ? "Chiudi" : "Torna all'Anagrafica"}</span>
           </button>
 
           <button
@@ -1334,7 +1354,9 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                               </span>
                             )}
                           </h3>
-                          <span className="text-[10px] text-slate-400 font-mono">ID: {tenant.id.slice(0, 8)}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {tenant.registryNumber ? `N. Registro ${tenant.registryNumber}` : `ID: ${tenant.id.slice(0, 8)}`}
+                          </span>
                         </div>
                       </div>
                       

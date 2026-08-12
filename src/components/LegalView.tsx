@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
 import { Plus, Scale, FolderOpen, AlertCircle, CheckCircle, X, Trash2, UserCheck, Briefcase, Download, FileText, Check, ShieldAlert } from "lucide-react";
-import { LegalCase, Property, Lawyer, Tenant, OwnerProfile } from "../types";
+import { LegalCase, Property, Lawyer, Tenant, OwnerProfile, Contract, Reminder, DeliveryReport } from "../types";
 import JSZip from "jszip";
 import emailjs from "@emailjs/browser";
 
@@ -10,6 +10,9 @@ interface LegalViewProps {
   legalCases: LegalCase[];
   properties: Property[];
   tenants?: Tenant[]; // CORREZIONE G — per includere i dati del Garante nel fascicolo ZIP
+  contracts?: Contract[]; // per il contratto reale nel fascicolo ZIP
+  reminders?: Reminder[]; // per i Solleciti/Messa in Mora reali nel fascicolo ZIP
+  deliveryReports?: DeliveryReport[]; // per i Verbali di Consegna/Riconsegna reali nel fascicolo ZIP
   lawyers?: Lawyer[];
   onAddLegalCase: (caseData: Omit<LegalCase, "id" | "userId" | "createdAt">) => Promise<void>;
   onUpdateLegalCaseStatus: (id: string, status: "Active" | "Pending" | "Closed") => Promise<void>;
@@ -37,6 +40,9 @@ export default function LegalView({
   legalCases,
   properties,
   tenants = [],
+  contracts = [],
+  reminders = [],
+  deliveryReports = [],
   lawyers = [],
   onAddLegalCase,
   onUpdateLegalCaseStatus,
@@ -210,113 +216,139 @@ export default function LegalView({
     }
   };
 
+  // Piccolo formattatore di indirizzo strutturato, stessa logica usata in RemindersView
+  // (tenuto locale qui per non introdurre una dipendenza incrociata tra i due componenti).
+  const formatAddressForDossier = (addr?: { via?: string; civico?: string; interno?: string; citta?: string; provincia?: string; cap?: string }): string => {
+    if (!addr) return "";
+    const parts: string[] = [];
+    if (addr.via) parts.push(`${addr.via}${addr.civico ? ` ${addr.civico}` : ""}${addr.interno ? `, int. ${addr.interno}` : ""}`);
+    if (addr.cap || addr.citta || addr.provincia) {
+      parts.push([addr.cap, addr.citta, addr.provincia ? `(${addr.provincia})` : ""].filter(Boolean).join(" "));
+    }
+    return parts.filter(Boolean).join(", ");
+  };
+
   // CORREZIONE R — Estratta per essere riutilizzabile sia dal download manuale
   // sia dall'invio email automatico del fascicolo.
+  // CORREZIONE CI (05/08/2026) — Ricostruito con dati REALI presi dagli atti dell'app
+  // (Contratto, Solleciti, Verbali di Consegna/Riconsegna), al posto del contenuto di
+  // esempio precompilato (date, importi e codici finti) usato finora. Dove un dato reale
+  // non esiste ancora nell'app (es. Registrazione F24, non ancora implementata — vedi punto
+  // pendente dedicato), il fascicolo lo dichiara esplicitamente invece di inventarlo: un
+  // codice o un importo falso in un fascicolo destinato a un avvocato per una causa reale
+  // sarebbe pericoloso, non solo scorretto.
   const buildDossierZipBlob = async (lawsuit: LegalCase): Promise<Blob> => {
     const zip = new JSZip();
-      
-      const divider = "================================================================================\n";
-      const timestamp = new Date().toLocaleDateString("it-IT") + " " + new Date().toLocaleTimeString("it-IT");
-      
-      // 1. Contratto di Locazione
-      const contractText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - CONTRATTO DI LOCAZIONE REGISTRATO\n${divider}
-Data Generazione: ${timestamp}
-Immobile: ${lawsuit.propertyName || "Non Specificato"}
+
+    const divider = "================================================================================\n";
+    const timestamp = new Date().toLocaleDateString("it-IT") + " " + new Date().toLocaleTimeString("it-IT");
+
+    const relatedContract = contracts.find(c => c.id === lawsuit.contractId);
+    const relatedTenant = tenants.find(t => t.name.toLowerCase().trim() === (lawsuit.tenantName || "").toLowerCase().trim());
+
+    // Il Sollecito collegato a questa pratica: tra quelli con lo stesso nome debitore,
+    // prende quello più avanti nella sequenza (più vicino o già arrivato in Messa in Mora),
+    // stessa logica di riconoscimento per nome già usata altrove in questo file per il Garante.
+    const relatedReminders = reminders
+      .filter(r => (r.tenantName || "").toLowerCase().trim() === (lawsuit.tenantName || "").toLowerCase().trim())
+      .sort((a, b) => (b.step || 0) - (a.step || 0));
+    const relatedReminder = relatedReminders[0];
+
+    const relatedDeliveryReports = deliveryReports.filter(dr =>
+      (lawsuit.relatedDeliveryReportIds || []).includes(dr.id) ||
+      (relatedContract && dr.contractId === relatedContract.id)
+    );
+
+    // 1. Contratto di Locazione
+    let contractText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - CONTRATTO DI LOCAZIONE\n${divider}\nData Generazione: ${timestamp}\nImmobile: ${lawsuit.propertyName || "Non Specificato"}\nInquilino: ${lawsuit.tenantName || "Non Specificato"}\n\n`;
+    if (relatedContract) {
+      contractText += `Stato Contratto: ${relatedContract.status}\nDecorrenza: ${relatedContract.startDate ? new Date(relatedContract.startDate).toLocaleDateString("it-IT") : "-"}\nScadenza: ${relatedContract.endDate ? new Date(relatedContract.endDate).toLocaleDateString("it-IT") : "-"}\nCanone: ${relatedContract.rentAmount?.toLocaleString("it-IT", { minimumFractionDigits: 2 })} € (${relatedContract.frequency || "Mensile"})\nRegime Fiscale: ${relatedContract.taxRegime === "CedolareSecca" ? "Cedolare Secca" : relatedContract.taxRegime === "Ordinaria" ? "Ordinaria" : "Non specificato in anagrafica contratto"}\n\n`;
+      contractText += relatedContract.generatedContractText
+        ? `TESTO INTEGRALE DEL CONTRATTO GENERATO DAL WIZARD:\n\n${relatedContract.generatedContractText}\n`
+        : `NOTA: il testo integrale del contratto non risulta generato tramite il Wizard Generatore Contratti di Palazzinaro AI. Allegare manualmente la copia firmata.\n`;
+    } else {
+      contractText += `NOTA: nessun contratto risulta collegato a questa pratica legale in Palazzinaro AI (contractId non impostato o contratto non trovato). Verificare e collegare manualmente.\n`;
+    }
+    zip.file("1_contratto_locazione.txt", contractText);
+
+    // 2. Registrazione F24 — funzionalità non ancora implementata in Palazzinaro AI
+    const f24Text = `${divider}FASCICOLO LEGALE PALAZZINARO AI - REGISTRAZIONE F24\n${divider}\nNOTA: la gestione delle registrazioni F24 reali non è ancora stata implementata in\nPalazzinaro AI (funzionalità pianificata, non ancora costruita). Questo fascicolo non può\nquindi includere una ricevuta F24 reale. Verificare la registrazione del contratto\ndirettamente con il commercialista o sul portale dell'Agenzia delle Entrate.\n`;
+    zip.file("2_registrazione_f24.txt", f24Text);
+
+    // 3/4. Solleciti — dati reali dal Sollecito collegato (date, importo, causale, testo
+    // effettivamente proposto per l'invio se presente in suggestedLetterBody)
+    if (relatedReminder) {
+      const request1Text = `${divider}FASCICOLO LEGALE PALAZZINARO AI - CRONOLOGIA SOLLECITI: PRIMO SOLLECITO\n${divider}\nData Invio: ${relatedReminder.firstRequestDate ? new Date(relatedReminder.firstRequestDate).toLocaleDateString("it-IT") : "Non risulta ancora inviato in Palazzinaro AI"}\nDestinatario: ${relatedReminder.tenantName}\nImporto al momento del Sollecito: ${relatedReminder.amount?.toLocaleString("it-IT", { minimumFractionDigits: 2 })} €\nCausale (voci insolute collegate): ${relatedReminder.reason || "Non specificata"}\n${relatedReminder.suggestedLetterBody ? `\nTesto del messaggio:\n"${relatedReminder.suggestedLetterBody}"\n` : ""}`;
+      zip.file("3_primo_sollecito.txt", request1Text);
+
+      const request2Text = relatedReminder.secondRequestDate || (relatedReminder.step || 0) >= 3
+        ? `${divider}FASCICOLO LEGALE PALAZZINARO AI - CRONOLOGIA SOLLECITI: SECONDO SOLLECITO\n${divider}\nData Invio: ${relatedReminder.secondRequestDate ? new Date(relatedReminder.secondRequestDate).toLocaleDateString("it-IT") : "Non risulta ancora inviato in Palazzinaro AI"}\nDestinatario: ${relatedReminder.tenantName}\nImporto: ${relatedReminder.amount?.toLocaleString("it-IT", { minimumFractionDigits: 2 })} €\n`
+        : `${divider}FASCICOLO LEGALE PALAZZINARO AI - CRONOLOGIA SOLLECITI: SECONDO SOLLECITO\n${divider}\nNOTA: il secondo sollecito non risulta ancora inviato per questo debitore in Palazzinaro AI.\n`;
+      zip.file("4_secondo_sollecito.txt", request2Text);
+    } else {
+      zip.file("3_primo_sollecito.txt", `${divider}NOTA: nessun Sollecito collegato trovato in Palazzinaro AI per "${lawsuit.tenantName}".\n`);
+      zip.file("4_secondo_sollecito.txt", `${divider}NOTA: nessun Sollecito collegato trovato in Palazzinaro AI per "${lawsuit.tenantName}".\n`);
+    }
+
+    // 5. Messa in mora — stessi dati reali (debitore, importo, immobile, proprietario,
+    // garante) usati per generare il PDF reale in Solleciti (jsPDF, generateMessaInMoraPDF).
+    // Il PDF stampato non viene salvato in modo persistente da quella funzione: qui se ne
+    // ricostruisce il contenuto testuale equivalente dagli stessi dati reali, non da un
+    // modello fittizio con importi/codici inventati.
+    const linkedProperty = properties.find(p => p.id === lawsuit.propertyId);
+    const demandText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - DIFFIDA AD ADEMPIERE E MESSA IN MORA (ART. 1219 C.C.)\n${divider}
+Mittente (Proprietario): ${ownerProfile?.name || "Non impostato in Impostazioni"}${ownerProfile?.fiscalCode ? ` — C.F. ${ownerProfile.fiscalCode}` : ""}
+Residenza Mittente: ${formatAddressForDossier(ownerProfile?.structuredAddress) || ownerProfile?.address || "Non impostata in Impostazioni"}
+Destinatario: ${lawsuit.tenantName || "Non Specificato"}
+Residenza Destinatario: ${formatAddressForDossier(relatedTenant?.address) || "Non disponibile in anagrafica Inquilino"}
+Immobile Oggetto della Locazione: ${linkedProperty?.address || lawsuit.propertyName || "Non specificato"}
+Importo Oggetto della Diffida: ${(relatedReminder?.amount ?? lawsuit.unpaidBalance)?.toLocaleString("it-IT", { minimumFractionDigits: 2 }) || "Non quantificato"} €
+Causale: ${relatedReminder?.reason || "Canoni di locazione e/o spese accessorie scaduti e non versati"}
+${relatedTenant?.guarantor?.name ? `Garante citato per conoscenza: ${relatedTenant.guarantor.name}\n` : ""}
+Stato: ${(relatedReminder?.step || 0) >= 3 || relatedReminder?.status === "MessaInMora" ? "Generata e avviata a stampa per raccomandata A/R (da Solleciti in Palazzinaro AI)" : "NON risulta ancora generata per questa pratica in Palazzinaro AI"}
+`;
+    zip.file("5_diffida_messa_in_mora.txt", demandText);
+
+    // 6. Ricevuta di ritorno (Raccomandata) — campi reali del Sollecito se presenti
+    let receiptText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - RICEVUTA DI RITORNO / CONSEGNA RACCOMANDATA\n${divider}\n`;
+    if (relatedReminder?.registeredLetterReceiptName) {
+      receiptText += `Ricevuta Raccomandata Caricata:\n- Nome File: ${relatedReminder.registeredLetterReceiptName}\n${relatedReminder.registeredLetterReceiptUrl ? `- Collegamento: ${relatedReminder.registeredLetterReceiptUrl}\n` : ""}`;
+    } else if (lawsuit.notes && lawsuit.notes.includes("Ricevuta raccomandata:")) {
+      const match = lawsuit.notes.match(/Ricevuta raccomandata: ([^\.]+)/);
+      receiptText += `Ricevuta Raccomandata Caricata (da note pratica):\n- ${match ? match[0] : lawsuit.notes}\n`;
+    } else {
+      receiptText += `NOTA: nessuna ricevuta di ritorno della raccomandata risulta ancora caricata in Palazzinaro AI per questa pratica.\n`;
+    }
+    zip.file("6_ricevuta_ritorno.txt", receiptText);
+
+    // 7. Mastrino Saldo — importo reale + causale reale del Sollecito
+    const balanceText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - ESTRATTO CONTO DELLA MOROSITA'\n${divider}
+Situazione al ${timestamp}
 Inquilino: ${lawsuit.tenantName || "Non Specificato"}
-Stato Contratto: Registrato e Attivo (4+4 anni ad uso abitativo)
-
-Dettagli:
-- Codice di Registrazione AdE: REG-49281-XM2-2026
-- Imposta di Registro Assolta: Sì
-- Canone Annuale Convenuto: 12.000,00 € (Ripartito in rate mensili anticipate da 1.000,00 €)
-- Clausola Risolutiva Espressa: Attiva ai sensi dell'art. 1456 c.c. in caso di morosità superiore a 20 giorni.
-
-Note di Cancelleria:
-Il contratto originale firmato digitalmente è depositato presso l'archivio AdE. L'estratto contabile allegato attesta il mancato adempimento dei canoni concordati.
+Posizione Debitoria Rilevata: ${lawsuit.unpaidBalance ? lawsuit.unpaidBalance.toLocaleString("it-IT", { minimumFractionDigits: 2 }) + " €" : "Non ancora quantificata in Palazzinaro AI"}
+Voci Insolute Collegate: ${relatedReminder?.reason || "Vedere il registro Fast Closing/Solleciti in Palazzinaro AI per il dettaglio delle singole voci"}
+Numero Voci Contabili Associate: ${relatedReminder?.associatedItemsIds?.length ?? "Non disponibile"}
 `;
-      zip.file("1_contratto_locazione_registrato.txt", contractText);
+    zip.file("7_mastrino_saldo.txt", balanceText);
 
-      // 2. F24 Registro
-      const f24Text = `${divider}FASCICOLO LEGALE PALAZZINARO AI - MODELLO F24 E RICEVUTA DI VERSAMENTO\n${divider}
-Data Versamento Imposta di Registro: 12/01/2026
-Codice Tributo: 1500 (Locazione e affitto di beni immobili - prima annualità)
-Soggetto Versante: Proprietario (Palazzinaro AI Gestione Fondiaria)
-Importo Versato: 240,00 €
+    // 9. Verbali di Consegna/Riconsegna reali, se presenti
+    if (relatedDeliveryReports.length > 0) {
+      relatedDeliveryReports.forEach((dr, idx) => {
+        const checklistText = (dr.checklist || []).map(it => `- ${it.item}: ${it.status}${it.notes ? ` (${it.notes})` : ""}`).join("\n") || "Nessuna voce checklist registrata.";
+        const drText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - VERBALE DI ${dr.type === "riconsegna" ? "RICONSEGNA" : "CONSEGNA"}\n${divider}
+Data Verbale: ${dr.date ? new Date(dr.date).toLocaleDateString("it-IT") : "Non specificata"}
+Firma Proprietario: ${dr.signatures?.ownerSigned ? `Sì (${dr.signatures.ownerSignedAt || "data non tracciata"})` : "Non firmato"}
+Firma Inquilino: ${dr.signatures?.tenantSigned ? `Sì (${dr.signatures.tenantSignedAt || "data non tracciata"})` : "Non firmato"}
+Danni Riscontrati: ${dr.hasDamages ? `Sì — ${dr.damagesDescription || "descrizione non specificata"}${dr.estimatedDamagesAmount ? ` (stima: ${dr.estimatedDamagesAmount.toLocaleString("it-IT", { minimumFractionDigits: 2 })} €)` : ""}` : "No"}
 
-Stato Pagamento: PERFEZIONATO CON QUIETANZA TELEMATICA SUL PORTALE SISTER
-Identificativo Ricevuta AdE: AdE.F24.RCV.928104.2026
+Checklist:
+${checklistText}
 `;
-      zip.file("2_ricevuta_registrazione_f24.txt", f24Text);
-
-      // 3. Primo Sollecito
-      const request1Text = `${divider}FASCICOLO LEGALE PALAZZINARO AI - CRONOLOGIA SOLLECITI: STEP 1 (AMICHEVOLE)\n${divider}
-Data Invio: Rilevata dalle comunicazioni di sistema (Step 1)
-Destinatario: ${lawsuit.tenantName || "Non Specificato"}
-Canali di Invio: Email Ordinaria e Messaggio WhatsApp Business certificato
-
-Oggetto: Sollecito amichevole di pagamento canone scaduto
-
-Corpo del Messaggio Trasmesso:
-"Gentile ${lawsuit.tenantName || "inquilino"}, con la presente le ricordiamo bonariamente che non abbiamo ancora ricevuto il saldo delle scadenze in essere. La invitiamo ad effettuare il pagamento a mezzo bonifico bancario il prima possibile per evitare l'accumulo di ulteriori oneri. Restiamo a disposizione per qualsiasi chiarimento."
-`;
-      zip.file("3_primo_sollecito_pagamento.txt", request1Text);
-
-      // 4. Secondo Sollecito
-      const request2Text = `${divider}FASCICOLO LEGALE PALAZZINARO AI - CRONOLOGIA SOLLECITI: STEP 2 (FORMALE)\n${divider}
-Data Invio: 15 giorni successivi allo Step 1
-Destinatario: ${lawsuit.tenantName || "Non Specificato"}
-Canali di Invio: Email formale di sollecito e avviso telematico
-
-Oggetto: SECONDO SOLLECITO FORMALE E DIFFIDA AD ADEMPIERE - Morosità persistente
-
-Corpo del Messaggio Trasmesso:
-"Gentile ${lawsuit.tenantName || "inquilino"}, facendo seguito al nostro precedente sollecito rimasto privo di riscontro, constatiamo con rammarico il persistere della morosità. La invitiamo formalmente a saldare l'importo insoluto entro e non oltre 7 giorni dalla presente. In difetto, saremo costretti ad adire le vie legali per la risoluzione del contratto e lo sfratto per morosità."
-`;
-      zip.file("4_secondo_sollecito_formale.txt", request2Text);
-
-      // 5. Messa in mora
-      const demandText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - STEP 3 (DIFFIDA AD ADEMPIERE E MESSA IN MORA EX ART. 1219 C.C.)\n${divider}
-Data Redazione: Generato in preparazione della raccomandata A.R.
-Soggetto Mittente: Per conto del Proprietario di ${lawsuit.propertyName || "Immobile"}
-Destinatario: ${lawsuit.tenantName || "Non Specificato"}
-
-DOCUMENTO DI DIFFIDA FORMALE:
-"Spett.le ${lawsuit.tenantName || "Inquilino"},
-In relazione al contratto di locazione registrato in epigrafe, La COSTITUISCO IN MORA ai sensi e per gli effetti dell'art. 1219 del Codice Civile.
-La invito e formulo formale diffida a corrispondere la somma residua di canoni e spese condominiali insolute entro 15 giorni dal ricevimento della presente raccomandata.
-Decorso inutilmente tale termine senza che si sia provveduto al saldo, il contratto di locazione si intenderà RISOLTO di diritto ex art. 1456 c.c. con conseguente avvio della procedura giudiziale di sfratto ed esecuzione forzata per il recupero delle somme e rilascio dell'immobile."
-
-Impronta Digitale Documento: SHA256-MIM-9281-FF88A
-`;
-      zip.file("5_diffida_messa_in_mora_raccomandata.txt", demandText);
-
-      // 6. Ricevuta di ritorno (Raccomandata)
-      let receiptText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - RICEVUTA DI RITORNO / CONSEGNA RACCOMANDATA\n${divider}\n`;
-      if (lawsuit.notes && lawsuit.notes.includes("Ricevuta raccomandata:")) {
-        const match = lawsuit.notes.match(/Ricevuta raccomandata: ([^\.]+)/);
-        const fileName = match ? match[0] : "ricevuta_caricata.pdf";
-        receiptText += `Ricevuta Raccomandata Caricata Correttamente:\n- Nome File Originale: ${fileName}\n- Stato: Certificata da Poste Italiane\n- Data Firma Consegna: Rilevata telematicamente\n- Firmato da: ${lawsuit.tenantName || "Destinatario o delegato"}\n`;
-      } else {
-        receiptText += `NOTA INFORMATIVA:\nLa ricevuta cartacea firmata dall'inquilino per avvenuta consegna della raccomandata di messa in mora è stata digitalizzata.\nIn mancanza di file binario PDF specifico, si attesta che il termine dei 15 giorni per adempiere è decorso e la prova di invio postale è conservata agli atti.\nCodice Spedizione: RAC-AR-91048201-IT\n`;
-      }
-      zip.file("6_ricevuta_ritorno_signed.txt", receiptText);
-
-      // 7. Mastrino Saldo
-      const balanceText = `${divider}FASCICOLO LEGALE PALAZZINARO AI - ESTRATTO CONTO E MASTRINO DELLE MOROSITA' ACCUMULATE\n${divider}
-Situazione Contabile al ${timestamp}
-Inquilino: ${lawsuit.tenantName || "Non Specificato"}
-Posizione Debitoria Totale Rilevata nel Fast Closing: ${lawsuit.unpaidBalance ? lawsuit.unpaidBalance.toLocaleString("it-IT", { minimumFractionDigits: 2 }) + " €" : "Morosità Importante in corso di quantificazione"}
-
-Elenco Voci Contabili Insolute Raggruppate:
-- Canoni d'Affitto Arretrati: Registrati insoluti nel periodo di Fast Closing.
-- Oneri Accessori e Spese Condominiali Ripartite: Marcate come insolute ed esigibili.
-
-Le somme sopra indicate costituiscono credito liquido ed esigibile ai fini del ricorso per decreto ingiuntivo ex art. 633 c.p.c. unitamente alla richiesta di convalida di sfratto.
-`;
-      zip.file("7_mastrino_saldo_inquilino_ripartito.txt", balanceText);
+        zip.file(`9_verbale_${dr.type}_${idx + 1}.txt`, drText);
+      });
+    }
 
       // 8. CORREZIONE G — Dati del Garante (se presente), con dati fiscali reali e documenti allegati
-      const relatedTenant = tenants.find(t => t.name.toLowerCase().trim() === (lawsuit.tenantName || "").toLowerCase().trim());
       if (relatedTenant?.guarantor?.name) {
         const g = relatedTenant.guarantor;
         const docsList = (g.documents && g.documents.length > 0)
