@@ -63,6 +63,7 @@ import OwnerOnboarding from "./components/OwnerOnboarding";
 import SettingsView from "./components/SettingsView";
 import MasterDataWizard from "./components/MasterDataWizard";
 import UniversalAddButton from "./components/UniversalAddButton";
+import { earlyTerminationReasonLabel } from "./lib/earlyTermination";
 
 // Lucide Icons for Landing Page and Alerts
 import { Sparkles, CheckCircle2, ShieldCheck, Database, FileText, Menu, Building2, AlertCircle } from "lucide-react";
@@ -189,6 +190,11 @@ export default function App() {
   };
   const [fastClosingActivePeriod, setFastClosingActivePeriod] = useState<string>(getRealCurrentPeriod());
   const [selectedTenantIdForLedger, setSelectedTenantIdForLedger] = useState<string | null>(null);
+  // CORREZIONE CJ (05/08/2026) — Fase 2 Condomini: "Vedi posizione inquilino" da Proprietari
+  // apre il mastrino in un overlay SENZA cambiare pagina (prima faceva setCurrentSection,
+  // perdendo il contesto di Proprietari). Stato separato da selectedTenantIdForLedger, che
+  // resta quello usato dalla navigazione classica verso la pagina Inquilini.
+  const [ownerLedgerTenantId, setOwnerLedgerTenantId] = useState<string | null>(null);
 
   // Owner profile for onboarding flow
   const [ownerProfile, setOwnerProfile] = useState<OwnerProfile | null>(null);
@@ -495,14 +501,14 @@ export default function App() {
   const handleSeedTwoTestProperties = async () => {
     if (!user) return;
     const confirmed = confirm(
-      "⚠️ ATTENZIONE: questa azione CANCELLA TUTTI i dati attuali (immobili, inquilini, contratti, Fast Closing, Solleciti, tutto) e li sostituisce con due sole case di prova.\n\nÈ irreversibile. Procedere?"
+      "ATTENZIONE: questa azione CANCELLA TUTTI i dati attuali (immobili, inquilini, contratti, Fast Closing, Solleciti, tutto) e li sostituisce con due sole case di prova.\n\nÈ irreversibile. Procedere?"
     );
     if (!confirmed) return;
     const confirmedAgain = confirm("Confermi DEFINITIVAMENTE di voler cancellare tutti i dati attuali?");
     if (!confirmedAgain) return;
 
     try {
-      showSuccess("Pulizia dati in corso... 🧹");
+      showSuccess("Pulizia dati in corso...");
       const deleteCollectionDocs = async (collectionName: string) => {
         try {
           const colRef = collection(db, collectionName);
@@ -537,7 +543,7 @@ export default function App() {
         deleteCollectionDocs("insurancePolicies")
       ]);
 
-      showSuccess("Dati puliti. Creazione delle due case di prova... 🏗️");
+      showSuccess("Dati puliti. Creazione delle due case di prova...");
 
       // ── PROPRIETARIO SINGOLO (per la Casa A, con Condominio) ──
       const ownerA = await addDoc(collection(db, "owners"), {
@@ -732,7 +738,7 @@ export default function App() {
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      showSuccess("✅ Fatto! Create le due case di prova: Casa A (con Condominio, proprietario singolo) e Casa B (senza Condominio, comproprietà).");
+      showSuccess("Fatto! Create le due case di prova: Casa A (con Condominio, proprietario singolo) e Casa B (senza Condominio, comproprietà).");
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.CREATE, "test-seed");
       showError("Errore durante la creazione dei dati di prova: " + errInfo.error);
@@ -742,7 +748,7 @@ export default function App() {
   const handleSeedSimulationData = async () => {
     if (!user) return;
     try {
-      showSuccess("Inizializzazione simulazione co-proprietà... 🚀");
+      showSuccess("Inizializzazione simulazione co-proprietà...");
 
       // 1. Create Property co-owned by Bobo Vieri and Massimo Laucci
       const propDoc = await addDoc(collection(db, "properties"), {
@@ -925,7 +931,7 @@ export default function App() {
   const handleSeedDemoData = async () => {
     if (!user) return;
     try {
-      showSuccess("Iniezione dati demo in corso... 🚀");
+      showSuccess("Iniezione dati demo in corso...");
       
       // 0. Purge existing user-specific data to avoid duplicate records!
       const deleteCollectionDocs = async (collectionName: string) => {
@@ -1251,7 +1257,7 @@ export default function App() {
         createdAt: serverTimestamp()
       });
 
-      showSuccess("Dati demo caricati con successo su tutte le pagine! Emojis e indicatori pronti! 🎉");
+      showSuccess("Dati demo caricati con successo su tutte le pagine! Emojis e indicatori pronti!");
     } catch (error) {
       console.error("Seeding failed", error);
       showError("Errore durante il caricamento dei dati demo: " + String(error));
@@ -1358,6 +1364,15 @@ export default function App() {
   };
 
   // Tenants CRUD
+  // Numero di registro progressivo: calcolato dal massimo registryNumber già assegnato tra
+  // gli inquilini dell'utente (stato realtime già caricato), +1. Usato da tutti i punti reali
+  // di creazione Inquilino (pagina Inquilini, Wizard Immobile, Wizard Contratto) per garantire
+  // un solo flusso di numerazione, mai duplicato tra le pagine.
+  const getNextTenantRegistryNumber = () => {
+    const maxNum = tenants.reduce((max, t) => Math.max(max, t.registryNumber || 0), 0);
+    return maxNum + 1;
+  };
+
   const handleAddTenant = async (data: any) => {
     if (!user) return;
     try {
@@ -1366,6 +1381,7 @@ export default function App() {
       Object.entries(data).forEach(([key, value]) => { if (value !== undefined) tenantClean[key] = value; });
       await addDoc(collection(db, "tenants"), {
         ...tenantClean,
+        registryNumber: getNextTenantRegistryNumber(),
         userId: user.uid,
         createdAt: serverTimestamp()
       });
@@ -1576,6 +1592,7 @@ export default function App() {
         const tenantDoc = await addDoc(collection(db, "tenants"), {
           ...stripUndefined(data.newTenant),
           propertyId: finalPropertyId, // link newly created property
+          registryNumber: getNextTenantRegistryNumber(),
           userId: user.uid,
           createdAt: serverTimestamp()
         });
@@ -1603,6 +1620,7 @@ export default function App() {
         ownerName: finalOwnerName || "Proprietario",
         isBareOwnership: data.isBareOwnership || false,
         taxRegime: data.taxRegime,
+        f24OwnerSplitPct: data.f24OwnerSplitPct,
         documents: data.documents,
         userId: user.uid,
         createdAt: serverTimestamp()
@@ -1642,6 +1660,73 @@ export default function App() {
           monthIndex++;
         }
       }
+
+      // CORREZIONE CK (05/08/2026) — Registrazioni F24 reali: solo per regime Ordinaria
+      // (Cedolare Secca non deve mai avere righe, solo il promemoria in Dashboard — vedi
+      // DashboardView.tsx). Una riga per annualità (1ª alla decorrenza + successive ogni
+      // anno, fino alla fine del contratto o all'8° anno), divisa tra Locatore e Conduttore
+      // con lo stesso sistema a percentuale libera già usato per le Manutenzioni (default
+      // 50/50, personalizzabile in f24OwnerSplitPct). Ogni riga segue da qui in poi lo
+      // stesso identico ciclo di vita di tutte le altre voci Fast Closing (rinvio, Insoluto,
+      // Sollecito) — nessun flusso parallelo dedicato.
+      if (data.taxRegime === "Ordinaria" && rentAmount > 0 && data.startDate) {
+        const yearlyTaxAmount = Math.max(67, Math.round(rentAmount * 12 * 0.02));
+        const rawOwnerPct = data.f24OwnerSplitPct !== undefined && data.f24OwnerSplitPct !== null
+          ? Number(data.f24OwnerSplitPct)
+          : 50;
+        const ownerPct = Math.max(0, Math.min(100, isNaN(rawOwnerPct) ? 50 : rawOwnerPct));
+        const tenantPct = 100 - ownerPct;
+        const resolvedOwnerId = properties.find(p => p.id === finalPropertyId)?.ownerId
+          || data.newProperty?.ownerId
+          || null;
+
+        const start = new Date(data.startDate);
+        const end = data.endDate ? new Date(data.endDate) : new Date(start.getTime() + 4 * 365 * 24 * 3600 * 1000);
+        let currentYearDate = new Date(start);
+        let yearNum = 1;
+
+        while (currentYearDate <= end && yearNum <= 8) {
+          const dueDateStr = currentYearDate.toISOString().split("T")[0];
+          const yearLabel = yearNum === 1 ? "1ª annualità (registrazione iniziale)" : `${yearNum}ª annualità`;
+
+          if (ownerPct > 0) {
+            await addDoc(collection(db, "fastClosing"), {
+              userId: user.uid,
+              propertyId: finalPropertyId,
+              title: `F24 Imposta di Registro - ${yearLabel} - Quota Locatore (${ownerPct}%) - ${finalPropertyName}`,
+              description: `Imposta di registro annuale del contratto con ${finalTenantName}, quota a carico del Locatore.`,
+              amount: Math.round(yearlyTaxAmount * ownerPct) / 100,
+              dueDate: dueDateStr,
+              source: "manual",
+              sourceId: `f24-${contractDoc.id}-y${yearNum}`,
+              status: "Pending",
+              debtorId: resolvedOwnerId,
+              debtorType: "owner",
+              createdAt: serverTimestamp()
+            });
+          }
+          if (tenantPct > 0) {
+            await addDoc(collection(db, "fastClosing"), {
+              userId: user.uid,
+              propertyId: finalPropertyId,
+              title: `F24 Imposta di Registro - ${yearLabel} - Quota Conduttore (${tenantPct}%) - ${finalPropertyName}`,
+              description: `Imposta di registro annuale del contratto con ${finalTenantName}, quota a carico del Conduttore.`,
+              amount: Math.round(yearlyTaxAmount * tenantPct) / 100,
+              dueDate: dueDateStr,
+              source: "manual",
+              sourceId: `f24-${contractDoc.id}-y${yearNum}`,
+              status: "Pending",
+              debtorId: finalTenantId || null,
+              debtorType: "tenant",
+              createdAt: serverTimestamp()
+            });
+          }
+
+          currentYearDate.setFullYear(currentYearDate.getFullYear() + 1);
+          yearNum++;
+        }
+      }
+
       showSuccess("Relazione contrattuale e scadenze create con successo!");
       // CORREZIONE CA — restituisce il contratto appena creato (TASK 1: apre subito
       // il wizard del Verbale di Consegna in modo tracciato, non bloccante)
@@ -1682,9 +1767,25 @@ export default function App() {
   // durata vengono create subito, vedi handleAddContract) — altrimenti restano lì a
   // "prendere polvere" e rompono l'aderenza tra mastrini e realtà (principio cardine,
   // sezione 2 delle regole di progetto).
+  // CORREZIONE CL (05/08/2026) — Modulo Risoluzione/Disdetta Anticipata completato secondo
+  // le indicazioni dirette di Massimo: motivo libero per "Altro", testo della comunicazione
+  // (bozza rivista dall'utente), verifica OTP via email (traccia soltanto, la validazione
+  // vera avviene nel wizard prima di chiamare questa funzione). Le righe Fast Closing future
+  // (canoni E righe F24 collegate a questo contratto) vengono annullate con una causale
+  // esplicita — non più un "Cancelled" muto. Da qui in poi il contratto NON genera più righe
+  // canone: l'eventuale prosecuzione economica fino alla riconsegna avviene esclusivamente
+  // tramite l'Indennità di Occupazione (vedi FastClosingView.tsx), mai più righe di canone.
   const handleEarlyTerminateContract = async (
     contractId: string,
-    data: { date: string; party: "Locatore" | "Conduttore"; reason: string; notes?: string }
+    data: {
+      date: string;
+      party: "Locatore" | "Conduttore";
+      reason: string;
+      reasonFreeText?: string;
+      notes?: string;
+      letterText?: string;
+      otpVerifiedAt?: string;
+    }
   ) => {
     try {
       const cleanData: any = {};
@@ -1693,22 +1794,34 @@ export default function App() {
         earlyTerminationDate: data.date,
         earlyTerminationParty: data.party,
         earlyTerminationReason: data.reason,
-        earlyTerminationNotes: data.notes
+        earlyTerminationReasonFreeText: data.reasonFreeText,
+        earlyTerminationNotes: data.notes,
+        earlyTerminationLetterText: data.letterText,
+        earlyTerminationOtpVerifiedAt: data.otpVerifiedAt
       };
       Object.keys(contractUpdate).forEach((key) => {
         if ((contractUpdate as any)[key] !== undefined) cleanData[key] = (contractUpdate as any)[key];
       });
       await updateDoc(doc(db, "contracts", contractId), cleanData);
 
-      // Cancella tutte le righe Fast Closing future non ancora saldate per questo contratto
+      const reasonLabel = earlyTerminationReasonLabel(data.reason, data.reasonFreeText);
+      const cancellationReason =
+        `Annullata per disdetta anticipata del contratto (parte: ${data.party} — causale: ${reasonLabel})` +
+        (data.notes ? `. Note: ${data.notes}` : "");
+
+      // Cancella le righe Fast Closing future non ancora saldate per questo contratto:
+      // canoni (source "contract") E righe F24 collegate (source "manual", sourceId
+      // f24-{contractId}-yN) — prima solo i canoni venivano annullati, le F24 future
+      // restavano dovute nonostante il contratto fosse già chiuso.
       const rowsToCancel = fastClosing.filter(
-        fc => fc.source === "contract" &&
-              fc.sourceId === contractId &&
-              (fc.status === "Pending" || fc.status === "Overdue") &&
-              new Date(fc.dueDate) > new Date(data.date)
+        fc =>
+          ((fc.source === "contract" && fc.sourceId === contractId) ||
+           (fc.source === "manual" && typeof fc.sourceId === "string" && fc.sourceId.startsWith(`f24-${contractId}-`))) &&
+          (fc.status === "Pending" || fc.status === "Overdue") &&
+          new Date(fc.dueDate) > new Date(data.date)
       );
       for (const row of rowsToCancel) {
-        await updateDoc(doc(db, "fastClosing", row.id), { status: "Cancelled" });
+        await updateDoc(doc(db, "fastClosing", row.id), { status: "Cancelled", cancellationReason });
       }
 
       showSuccess(`Contratto chiuso anticipatamente. ${rowsToCancel.length} righe contabili future annullate.`);
@@ -1917,6 +2030,7 @@ export default function App() {
         }).forEach(([key, value]) => { if (value !== undefined) tenantPayloadClean[key] = value; });
         const tenantDoc = await addDoc(collection(db, "tenants"), {
           ...tenantPayloadClean,
+          registryNumber: getNextTenantRegistryNumber(),
           createdAt: serverTimestamp(),
         });
         tenantId = tenantDoc.id;
@@ -2208,6 +2322,23 @@ export default function App() {
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.CREATE, "fastClosing");
       showError("Impossibile salvare la scadenza: " + errInfo.error);
+    }
+  };
+
+  // Aggiorna SOLO lo stato della voce, senza alcun effetto collaterale sui Solleciti.
+  // Serve ai punti del codice (es. handleConfirmCloseFastClosing) che gestiscono già da soli,
+  // in un unico passaggio raggruppato per debitore, la creazione/aggancio dei Solleciti —
+  // usare qui la versione "piena" handleUpdateClosingItemStatus creerebbe un secondo
+  // Sollecito duplicato per lo stesso debitore, perché il suo controllo "esiste già un
+  // Sollecito attivo?" legge lo stato React `reminders`, che durante un ciclo di più
+  // aggiornamenti consecutivi nella stessa chiusura resta quello di PRIMA che il ciclo
+  // iniziasse (Firestore aggiorna lo stato in modo asincrono, non nel mezzo dello stesso ciclo).
+  const handleUpdateClosingItemStatusRaw = async (id: string, status: "Pending" | "Paid" | "Overdue" | "Cancelled") => {
+    try {
+      await updateDoc(doc(db, "fastClosing", id), { status });
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `fastClosing/${id}`);
+      showError("Impossibile aggiornare la scadenza: " + errInfo.error);
     }
   };
 
@@ -3031,7 +3162,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         )}
 
         {currentSection === "contracts" && (
-          <ContractsView 
+          <ContractsView
             contracts={contracts}
             properties={properties}
             tenants={tenants}
@@ -3039,6 +3170,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             owners={owners}
             user={user}
             showSuccess={showSuccess}
+            ownerProfile={ownerProfile}
             deliveryReports={deliveryReports}
             fastClosing={fastClosing}
             onAddDeliveryReport={handleAddDeliveryReport}
@@ -3109,6 +3241,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             reminders={reminders}
             onAddClosingItem={handleAddClosingItem}
             onUpdateClosingItemStatus={handleUpdateClosingItemStatus}
+            onSetClosingItemStatusRaw={handleUpdateClosingItemStatusRaw}
             onPostponeClosingItem={handlePostponeClosingItem}
             onReconcileMovement={handleReconcileMovement}
             onDeleteClosingItem={handleDeleteClosingItem}
@@ -3153,10 +3286,13 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         )}
 
         {currentSection === "legal" && (
-          <LegalView 
+          <LegalView
             legalCases={legalCases}
             properties={properties}
             tenants={tenants}
+            contracts={contracts}
+            reminders={reminders}
+            deliveryReports={deliveryReports}
             lawyers={lawyers}
             onAddLegalCase={handleAddLegalCase}
             onUpdateLegalCaseStatus={handleUpdateLegalCaseStatus}
@@ -3185,10 +3321,35 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             onAddOwner={handleAddOwner}
             setCurrentSection={setCurrentSection}
             onViewTenantLedger={(tenantId) => {
-              setSelectedTenantIdForLedger(tenantId);
-              setCurrentSection("tenants");
+              setOwnerLedgerTenantId(tenantId);
             }}
           />
+        )}
+
+        {/* CORREZIONE CJ (05/08/2026) — "Vedi posizione inquilino" da Proprietari: stesso
+            identico mastrino di TenantsView, montato in overlay sopra la pagina corrente,
+            senza navigare via. Nessun secondo flusso: è la stessa vista, in ledgerOnlyMode. */}
+        {ownerLedgerTenantId && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-4 sm:p-8">
+            <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-2xl border border-slate-100 p-4 sm:p-6">
+              <TenantsView
+                tenants={tenants}
+                properties={properties}
+                fastClosing={fastClosing}
+                contracts={contracts}
+                maintenance={maintenance}
+                legalCases={legalCases}
+                reminders={reminders}
+                initialSelectedTenantId={ownerLedgerTenantId}
+                onClearInitialSelectedTenantId={() => {}}
+                onAddTenant={handleAddTenant}
+                onEditTenant={handleEditTenant}
+                onDeleteTenant={handleDeleteTenant}
+                ledgerOnlyMode
+                onCloseLedgerOnlyMode={() => setOwnerLedgerTenantId(null)}
+              />
+            </div>
+          </div>
         )}
 
         {currentSection === "ai_area" && (

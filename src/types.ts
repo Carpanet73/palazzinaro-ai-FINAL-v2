@@ -111,6 +111,10 @@ export interface StoredDocument {
 export interface Tenant {
   id: string;
   userId: string;
+  // Numero di registro progressivo, assegnato automaticamente e mai più modificato alla
+  // creazione dell'Inquilino (indipendentemente da quale dei flussi di creazione viene usato:
+  // pagina Inquilini, Wizard Immobile, Wizard Contratto). Progressivo per singolo utente.
+  registryNumber?: number;
   name: string;
   email: string;
   phone?: string;
@@ -296,6 +300,10 @@ export interface Contract {
   // costruite) e documenti agli atti (il contratto generato stesso, e i documenti raccolti
   // per generarlo: identità, permesso di soggiorno, visura, APE).
   taxRegime?: "CedolareSecca" | "Ordinaria";
+  // CORREZIONE CK (05/08/2026) — ripartizione dell'imposta di registro F24 tra Locatore e
+  // Conduttore quando il regime è Ordinaria (per legge di regola in parti uguali, ma libera
+  // e modificabile — solo % Locatore salvata, il resto è sempre 100 - questo valore).
+  f24OwnerSplitPct?: number;
   documents?: StoredDocument[];
   // Testo completo del contratto generato (per poterlo rivedere/rigenerare senza dover
   // rifare tutta la procedura guidata da capo)
@@ -327,6 +335,18 @@ export interface Contract {
     | "RisoluzioneConsensuale"
     | "Altro";
   earlyTerminationNotes?: string;
+  // CORREZIONE CL (05/08/2026) — testo libero quando earlyTerminationReason === "Altro"
+  // (motivo non tipico, richiesto esplicitamente da Massimo per la procedura guidata).
+  earlyTerminationReasonFreeText?: string;
+  // Bozza/testo finale della comunicazione di disdetta, modificabile nel wizard prima di
+  // generare il PDF reale — salvato per poterlo rivedere o rigenerare senza riscriverlo,
+  // stesso principio di generatedContractText.
+  earlyTerminationLetterText?: string;
+  // Timestamp di verifica del codice OTP inviato via email al momento della conferma
+  // definitiva (solo traccia/audit, non un dato bloccante).
+  earlyTerminationOtpVerifiedAt?: string;
+  // Timestamp dell'ultimo invio email della comunicazione di disdetta al Conduttore.
+  earlyTerminationLetterSentAt?: string;
   // CORREZIONE BY — Deposito Cauzionale, versato alla creazione del contratto in un certo
   // numero di mensilità anticipate. Alla riconsegna finale supporta la restituzione con
   // eventuale compensazione rispetto ai danni contestati (calcolo, non negoziazione).
@@ -438,6 +458,10 @@ export interface FastClosingItem {
   // come unico metodo prima di questa correzione (fragile e rischioso con nomi comuni).
   debtorId?: string;   // Tenant.id oppure Owner.id
   debtorType?: "owner" | "tenant";
+  // CORREZIONE CL (05/08/2026) — quando una riga viene annullata per una disdetta
+  // anticipata (o in futuro per altri annullamenti motivati), qui resta traccia del
+  // perché — prima uno stato "Cancelled" non spiegava mai la causale nel mastrino.
+  cancellationReason?: string;
 }
 
 export interface Reminder {
