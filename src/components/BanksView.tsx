@@ -408,9 +408,9 @@ export default function BanksView({
           amount: Number(m.amount) || 0
         })));
         if (discardedCount > 0) {
-          setImportError(`⚠️ ${discardedCount} movimento/i di uscita (importo negativo) scartato/i automaticamente. Vengono importate solo le entrate.`);
+          setImportError(`${discardedCount} movimento/i di uscita (importo negativo) scartato/i automaticamente. Vengono importate solo le entrate.`);
         } else if (positiveMovements.length === 0) {
-          setImportError("ℹ️ Nessun movimento di entrata trovato. L'AI estrae solo bonifici ricevuti, depositi assegni e versamenti contanti.");
+          setImportError("Nessun movimento di entrata trovato. L'AI estrae solo bonifici ricevuti, depositi assegni e versamenti contanti.");
         }
       } else {
         setImportError(result.error || "Formato estratto non supportato o errore AI.");
@@ -1261,7 +1261,10 @@ export default function BanksView({
                   </div>
 
                   {importError && (
-                    <p className="text-xs text-rose-600 font-semibold">{importError}</p>
+                    <p className="text-xs text-rose-600 font-semibold flex items-start gap-1.5">
+                      <AlertCircle size={13} className="text-rose-600 shrink-0 mt-0.5" />
+                      <span>{importError}</span>
+                    </p>
                   )}
 
                   <div className="flex justify-end pt-2">

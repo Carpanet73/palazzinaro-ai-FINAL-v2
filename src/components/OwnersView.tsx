@@ -2,26 +2,36 @@
 import React, { useState, useMemo } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
 import GenderToggle from "./GenderToggle";
-import { 
-  ArrowLeft, 
-  Building2, 
-  User, 
-  Users, 
-  CheckCircle2, 
-  Scale, 
-  ArrowRight, 
-  Search, 
-  Coins, 
-  AlertCircle, 
-  MapPin, 
+import {
+  ArrowLeft,
+  Building2,
+  Building,
+  User,
+  Users,
+  CheckCircle2,
+  Scale,
+  ArrowRight,
+  Search,
+  Coins,
+  MapPin,
   Home,
   X,
-  Calendar,
   FileText,
-  Tag,
-  Check,
+  Files,
   AlertTriangle,
-  Info
+  Info,
+  Phone,
+  Mail,
+  Link2,
+  Pencil,
+  Euro,
+  Car,
+  Printer,
+  Briefcase,
+  Landmark,
+  Plus,
+  Wrench,
+  Settings
 } from "lucide-react";
 import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, AppSection, BankMovement, Maintenance, Owner } from "../types";
 import { getTenantClassification } from "../lib/statusHelper";
@@ -193,18 +203,18 @@ export default function OwnersView({
           const matchedMovement = relatedMovements.find(m => m.reconciledWith?.id === item.id);
           
           let paymentDate = "-";
-          let reconciliationType = "📑 Scadenza non saldata";
+          let reconciliationType = "Scadenza non saldata";
           let notes = item.description || "";
 
           if (item.status === "Paid") {
             if (matchedMovement) {
               paymentDate = matchedMovement.date; // Actual payment date (Cassa!)
-              reconciliationType = "🏦 Bonifico Riconciliato";
+              reconciliationType = "Bonifico Riconciliato";
               notes = `Riconciliato il ${new Date(matchedMovement.date).toLocaleDateString("it-IT")} con: ${matchedMovement.description}`;
               pairedMovementIds.add(matchedMovement.id);
             } else {
               paymentDate = item.dueDate; // Manual payment on due date
-              reconciliationType = "📑 Manuale (Senza Bonifico)";
+              reconciliationType = "Manuale (Senza Bonifico)";
               notes = item.description || "Pagato manualmente";
             }
           } else {
@@ -233,7 +243,7 @@ export default function OwnersView({
             description: m.description,
             amount: Math.abs(m.amount),
             status: "Paid",
-            type: "🏦 Movimento Diretto",
+            type: "Movimento Diretto",
             notes: "Pagamento registrato direttamente in cassa"
           });
         }
@@ -377,9 +387,9 @@ export default function OwnersView({
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Errore sconosciuto durante l'invio.");
       }
-      alert(`✅ Conteggio inviato con successo a ${coOwner.name}.`);
+      alert(`Conteggio inviato con successo a ${coOwner.name}.`);
     } catch (err: any) {
-      alert(`❌ Errore durante l'invio: ${err?.message || err}\n\nVerifica che RESEND_API_KEY sia configurata su Vercel.`);
+      alert(`Errore durante l'invio: ${err?.message || err}\n\nVerifica che RESEND_API_KEY sia configurata su Vercel.`);
     } finally {
       setSendingCountToCoOwner(null);
     }
@@ -618,6 +628,19 @@ export default function OwnersView({
     };
   }, [selectedOwner, properties, contracts, fastClosing]);
 
+  // Icona coerente col tipo di tracciamento contabile (bonifico riconciliato/movimento
+  // diretto vs. scadenza/registrazione manuale), usata nelle colonne "Tracciamento / Nota".
+  const renderLedgerTypeLabel = (typeLabel: string) => {
+    const isBankMovement = typeLabel.includes("Bonifico") || typeLabel.includes("Movimento Diretto");
+    const TypeIcon = isBankMovement ? Landmark : Files;
+    return (
+      <span className="inline-flex items-center gap-1">
+        <TypeIcon size={11} className="text-indigo-700 shrink-0" />
+        {typeLabel}
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-6" id="owners-view-container">
       {/* HEADER SECTION */}
@@ -703,12 +726,16 @@ export default function OwnersView({
                           {owner.isCompound ? <Users size={20} /> : <User size={20} />}
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                            owner.isCompound 
-                              ? "bg-amber-100 text-amber-800" 
+                          <span className={`inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                            owner.isCompound
+                              ? "bg-amber-100 text-amber-800"
                               : "bg-indigo-100 text-indigo-800"
                           }`}>
-                            {owner.isCompound ? "👥 Comproprietà" : "👤 Proprietario Singolo"}
+                            {owner.isCompound ? (
+                              <><Users size={10} className="shrink-0" /> Comproprietà</>
+                            ) : (
+                              <><User size={10} className="shrink-0" /> Proprietario Singolo</>
+                            )}
                           </span>
                           <span
                             className={`w-2.5 h-2.5 rounded-full shrink-0 ${
@@ -731,11 +758,11 @@ export default function OwnersView({
 
                       <div className="mt-1.5 space-y-0.5 text-[10px] text-slate-500">
                         <div className="flex items-center gap-1">
-                          <span>📞</span>
+                          <Phone size={11} className="text-indigo-700 shrink-0" />
                           <span>{contactStatus.phone || "Nessun telefono in anagrafica"}</span>
                         </div>
                         <div className="flex items-center gap-1 truncate">
-                          <span>✉️</span>
+                          <Mail size={11} className="text-indigo-700 shrink-0" />
                           <span className="truncate">{contactStatus.email || "Nessuna email in anagrafica"}</span>
                         </div>
                       </div>
@@ -808,8 +835,12 @@ export default function OwnersView({
                   const cs = getOwnerContactAndStatus(selectedOwner);
                   return (
                     <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-slate-400 mt-1">
-                      <span>📞 {cs.phone || "Nessun telefono"}</span>
-                      <span>✉️ {cs.email || "Nessuna email"}</span>
+                      <span className="inline-flex items-center gap-1">
+                        <Phone size={11} className="shrink-0" /> {cs.phone || "Nessun telefono"}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Mail size={11} className="shrink-0" /> {cs.email || "Nessuna email"}
+                      </span>
                     </div>
                   );
                 })()}
@@ -843,7 +874,8 @@ export default function OwnersView({
                           }}
                           className="w-full text-left text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
                         >
-                          🔗 Vedi anche: comproprietà con {joint.name} — conto unico, registrato lì
+                          <Link2 size={12} className="shrink-0" />
+                          <span>Vedi anche: comproprietà con {joint.name} — conto unico, registrato lì</span>
                         </button>
                       ))}
                     </div>
@@ -856,18 +888,20 @@ export default function OwnersView({
                       <button
                         key={n}
                         onClick={() => handleOpenOwnerEdit(n)}
-                        className="text-[9px] font-bold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-md transition-colors"
+                        className="text-[9px] font-bold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-md transition-colors inline-flex items-center gap-1"
                       >
-                        ✏️ Modifica dati di {n}
+                        <Pencil size={10} className="shrink-0" />
+                        Modifica dati di {n}
                       </button>
                     ))}
                   </div>
                 ) : (
                   <button
                     onClick={() => handleOpenOwnerEdit(selectedOwner.name)}
-                    className="mt-2 text-[9px] font-bold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-md transition-colors"
+                    className="mt-2 text-[9px] font-bold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-md transition-colors inline-flex items-center gap-1"
                   >
-                    ✏️ Modifica Dati Proprietario
+                    <Pencil size={10} className="shrink-0" />
+                    Modifica Dati Proprietario
                   </button>
                 )}
               </div>
@@ -914,12 +948,16 @@ export default function OwnersView({
                   </p>
                 </div>
               </div>
-              <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
-                ownerFinancials.totalDebit > 0 
-                  ? "bg-amber-100 text-amber-800 border border-amber-200" 
+              <span className={`inline-flex items-center gap-1 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
+                ownerFinancials.totalDebit > 0
+                  ? "bg-amber-100 text-amber-800 border border-amber-200"
                   : "bg-emerald-100 text-emerald-800 border border-emerald-200"
               }`}>
-                {ownerFinancials.totalDebit > 0 ? "⚠️ Pendenze Attive" : "👍 Contabilità in Regola"}
+                {ownerFinancials.totalDebit > 0 ? (
+                  <><AlertTriangle size={11} className="shrink-0" /> Pendenze Attive</>
+                ) : (
+                  <><CheckCircle2 size={11} className="shrink-0" /> Contabilità in Regola</>
+                )}
               </span>
             </div>
 
@@ -977,12 +1015,14 @@ export default function OwnersView({
                 </div>
                 <div className="mt-2 text-[9px] leading-snug">
                   {ownerFinancials.totalDebit > 0 ? (
-                    <span className="text-rose-700 font-bold">
-                      ⚠️ Sono presenti pagamenti da effettuare per un totale di €{ownerFinancials.totalDebit.toLocaleString("it-IT")}.
+                    <span className="text-rose-700 font-bold inline-flex items-center gap-1">
+                      <AlertTriangle size={11} className="shrink-0" />
+                      <span>Sono presenti pagamenti da effettuare per un totale di €{ownerFinancials.totalDebit.toLocaleString("it-IT")}.</span>
                     </span>
                   ) : (
-                    <span className="text-emerald-700 font-bold">
-                      👍 Nessun debito o pendenza riscontrata sui condomini o adempimenti catastali.
+                    <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
+                      <CheckCircle2 size={11} className="shrink-0" />
+                      <span>Nessun debito o pendenza riscontrata sui condomini o adempimenti catastali.</span>
                     </span>
                   )}
                 </div>
@@ -993,7 +1033,7 @@ export default function OwnersView({
             {ownerFinancials.overdueRent > 0 && (
               <div className="bg-blue-50/60 border border-blue-200 p-3.5 rounded-xl text-blue-950 text-xs flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <span className="text-base">💰</span>
+                  <Euro size={16} className="text-emerald-700 shrink-0" />
                   <div>
                     <span className="font-extrabold block">Canoni di Affitto Arrearati da Incassare (Credito Proprietario)</span>
                     <span className="text-[10px] text-blue-700 leading-tight block">I conduttori hanno pendenze attive nei confronti di questo proprietario per un totale di €{ownerFinancials.overdueRent.toLocaleString("it-IT")}.</span>
@@ -1072,10 +1112,10 @@ export default function OwnersView({
                 // ----------------------------------------------------
                 if (!isRented) {
                   const getIcon = (typeStr: string) => {
-                    if (typeStr === "Monolocale") return "🏢";
-                    if (typeStr === "Ufficio") return "🏬";
-                    if (typeStr === "Garage/Box") return "🚗";
-                    return "🏠";
+                    if (typeStr === "Monolocale") return <Building2 size={18} className="text-indigo-700" />;
+                    if (typeStr === "Ufficio") return <Building size={18} className="text-indigo-700" />;
+                    if (typeStr === "Garage/Box") return <Car size={18} className="text-indigo-700" />;
+                    return <Home size={18} className="text-indigo-700" />;
                   };
 
                   return (
@@ -1093,14 +1133,20 @@ export default function OwnersView({
                           <div className="bg-white p-2 rounded-full border border-slate-200 text-lg shadow-2xs">
                             {getIcon(p.type)}
                           </div>
-                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          <span className={`inline-flex items-center gap-1.5 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
                             p.status === "Available"
                               ? "bg-blue-100 text-blue-800 border border-blue-200"
                               : "bg-amber-100 text-amber-800 border border-amber-200"
                           }`}>
-                            {p.status === "Available" && "🔵 Libero"}
-                            {p.status === "Maintenance" && "🟡 Manutenzione"}
-                            {p.status === "Archived" && "⚪ Archiviato"}
+                            {p.status === "Available" && (
+                              <><span className="w-1.5 h-1.5 rounded-full bg-indigo-600 shrink-0" /> Libero</>
+                            )}
+                            {p.status === "Maintenance" && (
+                              <><span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" /> Manutenzione</>
+                            )}
+                            {p.status === "Archived" && (
+                              <><span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" /> Archiviato</>
+                            )}
                           </span>
                         </div>
                         
@@ -1136,28 +1182,34 @@ export default function OwnersView({
                 // B. SHAPE 2: SQUARE ACTIVE COMPOSITE BADGE (RENTED / RELATIONSHIP)
                 // ----------------------------------------------------
                 let borderClass = "border-emerald-400 bg-emerald-50/15 text-emerald-950";
-                let statusLabel = "👍 Relazione Regolare";
+                let statusLabel = "Relazione Regolare";
+                let statusIcon: React.ReactNode = <CheckCircle2 size={11} className="shrink-0" />;
                 let badgeStyleClass = "bg-emerald-100 text-emerald-800 border-emerald-200";
                 let isCritical = false;
 
                 if (associatedTenant) {
                   const cls = getTenantClassification(associatedTenant, properties, contracts, fastClosing, legalCases, reminders);
-                  statusLabel = `${cls.emoji} ${cls.label}`;
+                  statusLabel = cls.label;
                   badgeStyleClass = cls.badgeClass;
                   if (cls.status === "critical") {
                     borderClass = "border-red-600 bg-red-50 text-red-950 shadow-[0_0_15px_rgba(220,38,38,0.25)] animate-pulse";
+                    statusIcon = <AlertTriangle size={11} className="shrink-0" />;
                     isCritical = true;
                   } else if (cls.status === "red") {
                     borderClass = "border-rose-500 bg-rose-50 text-rose-950 animate-pulse";
+                    statusIcon = <AlertTriangle size={11} className="shrink-0" />;
                     isCritical = true;
                   } else if (cls.status === "orange") {
                     borderClass = "border-amber-400 bg-amber-50 text-amber-950";
+                    statusIcon = <AlertTriangle size={11} className="shrink-0" />;
                   } else {
                     borderClass = "border-emerald-400 bg-emerald-50 text-emerald-950";
+                    statusIcon = <CheckCircle2 size={11} className="shrink-0" />;
                   }
                 } else if (!activeContract) {
                   borderClass = "border-amber-400 bg-amber-50 text-amber-950";
-                  statusLabel = "⚠️ Contratto Mancante";
+                  statusLabel = "Contratto Mancante";
+                  statusIcon = <AlertTriangle size={11} className="shrink-0" />;
                   badgeStyleClass = "bg-amber-150 text-amber-900 border-amber-300";
                 }
 
@@ -1177,7 +1229,8 @@ export default function OwnersView({
 
                     <div>
                       <div className="flex items-center justify-between">
-                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${badgeStyleClass}`}>
+                        <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${badgeStyleClass}`}>
+                          {statusIcon}
                           {statusLabel}
                         </span>
                         {activeLegal && (
@@ -1323,7 +1376,8 @@ export default function OwnersView({
                     <Coins size={10} className="mr-1" /> Regime di Possesso
                   </span>
                   <h4 className="text-sm font-black text-slate-900 mt-1 flex items-center space-x-1">
-                    <span>{selectedProperty.isBareOwnership ? "🟠 Nuda Proprietà" : "🟢 Piena Proprietà"}</span>
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${selectedProperty.isBareOwnership ? "bg-amber-600" : "bg-emerald-600"}`} />
+                    <span>{selectedProperty.isBareOwnership ? "Nuda Proprietà" : "Piena Proprietà"}</span>
                   </h4>
                   <p className="text-[10px] text-slate-600 mt-1.5 leading-snug">
                     {selectedProperty.isBareOwnership
@@ -1342,8 +1396,12 @@ export default function OwnersView({
                   <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center">
                     <Home size={10} className="mr-1" /> Regime Condominiale
                   </span>
-                  <h4 className="text-sm font-black text-slate-900 mt-1 truncate">
-                    {selectedProperty.isCondoConstituted ? "🏢 Condominio Costituito" : "⚠️ Condominio Assente"}
+                  <h4 className="text-sm font-black text-slate-900 mt-1 truncate flex items-center gap-1.5">
+                    {selectedProperty.isCondoConstituted ? (
+                      <><Building2 size={14} className="text-indigo-700 shrink-0" /> Condominio Costituito</>
+                    ) : (
+                      <><AlertTriangle size={14} className="text-rose-600 shrink-0" /> Condominio Assente</>
+                    )}
                   </h4>
                   <p className="text-[10px] text-slate-600 mt-1.5 leading-snug">
                     {selectedProperty.isCondoConstituted && propertyModalData.condo ? (
@@ -1443,7 +1501,8 @@ export default function OwnersView({
                       className="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white px-2.5 py-1.5 rounded-lg transition-colors no-print"
                       title="Stampa il mastrino di questo immobile"
                     >
-                      🖨️ Stampa
+                      <Printer size={12} className="shrink-0" />
+                      Stampa
                     </button>
                   </div>
                 </div>
@@ -1461,9 +1520,12 @@ export default function OwnersView({
                           key={idx}
                           disabled={sendingCountToCoOwner === co.name}
                           onClick={() => handleSendCountToCoOwner(co, realOwnerRecord!)}
-                          className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-2.5 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1"
+                          className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-2.5 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5"
                         >
-                          📧 {sendingCountToCoOwner === co.name ? "Invio in corso..." : `Invia Conteggio a ${co.name}`}
+                          <span className="w-[14px] h-[14px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                            <Mail size={9} className="text-white" />
+                          </span>
+                          {sendingCountToCoOwner === co.name ? "Invio in corso..." : `Invia Conteggio a ${co.name}`}
                         </button>
                       ))}
                     </div>
@@ -1496,53 +1558,58 @@ export default function OwnersView({
                 <div className="flex flex-wrap gap-1.5 p-1.5 bg-slate-50 rounded-xl">
                   <button
                     onClick={() => setActiveLedgerTab("rent")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all ${
+                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
                       activeLedgerTab === "rent"
                         ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    💶 Canoni ({propertyModalData.rentPayments.length})
+                    <Euro size={12} className="text-indigo-700 shrink-0" />
+                    Canoni ({propertyModalData.rentPayments.length})
                   </button>
                   <button
                     onClick={() => setActiveLedgerTab("condo")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all ${
+                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
                       activeLedgerTab === "condo"
                         ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    🏢 Condominio ({propertyModalData.condoPayments.length})
+                    <Building2 size={12} className="text-indigo-700 shrink-0" />
+                    Condominio ({propertyModalData.condoPayments.length})
                   </button>
                   <button
                     onClick={() => setActiveLedgerTab("taxes")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all ${
+                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
                       activeLedgerTab === "taxes"
                         ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    ⚖️ Registro ({propertyModalData.taxPayments.length})
+                    <Scale size={12} className="text-indigo-700 shrink-0" />
+                    Registro ({propertyModalData.taxPayments.length})
                   </button>
                   <button
                     onClick={() => setActiveLedgerTab("maintenance")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all ${
+                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
                       activeLedgerTab === "maintenance"
                         ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    🛠️ Manutenzioni ({propertyModalData.ownerMaintenance.length})
+                    <Wrench size={12} className="text-slate-600 shrink-0" />
+                    Manutenzioni ({propertyModalData.ownerMaintenance.length})
                   </button>
                   <button
                     onClick={() => setActiveLedgerTab("other")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all ${
+                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
                       activeLedgerTab === "other"
                         ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    ⚙️ Altro ({propertyModalData.otherPayments.length})
+                    <Settings size={12} className="text-slate-600 shrink-0" />
+                    Altro ({propertyModalData.otherPayments.length})
                   </button>
                 </div>
 
@@ -1603,7 +1670,7 @@ export default function OwnersView({
                                   </span>
                                 </td>
                                 <td className="p-3 border border-slate-300 font-semibold text-slate-500">
-                                  {item.type}
+                                  {renderLedgerTypeLabel(item.type)}
                                 </td>
                               </tr>
                             ))}
@@ -1633,12 +1700,12 @@ export default function OwnersView({
                         <div>
                           {selectedProperty.status !== "Rented" ? (
                             <div className="m-3 p-3 bg-amber-50/60 border border-amber-200/50 text-amber-950 rounded-xl text-[11px] font-semibold flex items-center gap-2">
-                              <span className="text-sm">⚠️</span>
+                              <AlertTriangle size={14} className="text-amber-600 shrink-0" />
                               <span><strong>Immobile sfitto:</strong> Tutte le spese condominiali qui elencate sono addebitate al 100% al proprietario <strong>{selectedProperty.owner}</strong>.</span>
                             </div>
                           ) : (
                             <div className="m-3 p-3 bg-indigo-50/60 border border-indigo-200/50 text-indigo-950 rounded-xl text-[11px] font-semibold flex items-center gap-2">
-                              <span className="text-sm">👤</span>
+                              <User size={14} className="text-indigo-700 shrink-0" />
                               <span><strong>Immobile locato:</strong> Il condominio è a carico della proprietà (competenza principale), salvo parziale rivalsa oneri accessori concordata con l'inquilino.</span>
                             </div>
                           )}
@@ -1687,7 +1754,7 @@ export default function OwnersView({
                                     </span>
                                   </td>
                                   <td className="p-3 border border-slate-300 font-semibold text-slate-500">
-                                    {item.type}
+                                    {renderLedgerTypeLabel(item.type)}
                                   </td>
                                 </tr>
                               ))}
@@ -1758,7 +1825,7 @@ export default function OwnersView({
                                   </span>
                                 </td>
                                 <td className="p-3 border border-slate-300 font-semibold text-slate-500">
-                                  {item.type}
+                                  {renderLedgerTypeLabel(item.type)}
                                 </td>
                               </tr>
                             ))}
@@ -1820,7 +1887,7 @@ export default function OwnersView({
                                   </span>
                                 </td>
                                 <td className="p-3 border border-slate-300 font-semibold text-slate-500">
-                                  {item.type}
+                                  {renderLedgerTypeLabel(item.type)}
                                 </td>
                               </tr>
                             ))}
@@ -1884,12 +1951,13 @@ export default function OwnersView({
                                     €{(item.cost || 0).toLocaleString("it-IT")}
                                   </td>
                                   <td className="p-3 border border-slate-300">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase ${
                                       selectedProperty.status !== "Rented"
                                         ? "bg-amber-100 text-amber-800 border border-amber-200"
                                         : "bg-indigo-100 text-indigo-800 border border-indigo-250"
                                     }`}>
-                                      {selectedProperty.status !== "Rented" ? "Sfitto: Proprietario 💼" : "Proprietario 💼"}
+                                      <Briefcase size={9} className="shrink-0" />
+                                      {selectedProperty.status !== "Rented" ? "Sfitto: Proprietario" : "Proprietario"}
                                     </span>
                                   </td>
                                 </tr>
@@ -1934,8 +2002,9 @@ export default function OwnersView({
             </div>
             <div className="p-6 space-y-4">
               {!existingRealOwnerId && (
-                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                  ⚠️ "{editingRealOwnerName}" esiste finora solo come nome scritto sull'immobile, senza un'anagrafica reale collegata. Compilando e salvando qui, creerai il suo record reale (email, telefono, ecc.).
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 flex items-start gap-1.5">
+                  <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                  <span>"{editingRealOwnerName}" esiste finora solo come nome scritto sull'immobile, senza un'anagrafica reale collegata. Compilando e salvando qui, creerai il suo record reale (email, telefono, ecc.).</span>
                 </p>
               )}
               <div>
@@ -2026,7 +2095,10 @@ export default function OwnersView({
                     <div className="min-w-0">
                       <span className="font-bold text-slate-800">{co.name}</span>
                       {co.linkedOwnerId && (
-                        <span className="ml-1.5 text-[9px] text-emerald-600 font-bold">🔗 collegato ad anagrafica esistente</span>
+                        <span className="ml-1.5 text-[9px] text-emerald-600 font-bold inline-flex items-center gap-1">
+                          <Link2 size={10} className="shrink-0" />
+                          collegato ad anagrafica esistente
+                        </span>
                       )}
                       <div className="text-[10px] text-slate-400 truncate">
                         {[co.fiscalCode, co.phone, co.email].filter(Boolean).join(" · ") || "Nessun dato aggiuntivo"}
@@ -2087,7 +2159,8 @@ export default function OwnersView({
                               }}
                               className="w-full text-left text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg px-2.5 py-2 flex items-center gap-1.5"
                             >
-                              🔗 <strong>{o.name}</strong> <span className="text-[10px] text-emerald-600">— usa questa anagrafica già esistente</span>
+                              <Link2 size={12} className="shrink-0" />
+                              <strong>{o.name}</strong> <span className="text-[10px] text-emerald-600">— usa questa anagrafica già esistente</span>
                             </button>
                           ))
                         }
@@ -2098,9 +2171,10 @@ export default function OwnersView({
                             setShowAddCoOwnerPicker(false);
                             setCoOwnerSearchTerm("");
                           }}
-                          className="w-full text-left text-xs bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg px-2.5 py-2"
+                          className="w-full text-left text-xs bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg px-2.5 py-2 flex items-center gap-1.5"
                         >
-                          ➕ Crea nuovo nominativo "{coOwnerSearchTerm.trim()}" (non ancora a sistema)
+                          <Plus size={12} className="shrink-0" />
+                          Crea nuovo nominativo "{coOwnerSearchTerm.trim()}" (non ancora a sistema)
                         </button>
                       </div>
                     )}

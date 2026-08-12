@@ -38,6 +38,9 @@ import {
   Loader2,
   Home,
   Sparkles,
+  Link2,
+  Plus,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Property,
@@ -1108,20 +1111,22 @@ export default function MasterDataWizard({
                       <button
                         type="button"
                         onClick={() => setOwnershipType("single")}
-                        className={`flex-1 text-xs font-bold py-2 rounded-lg border transition-colors ${
+                        className={`flex-1 text-xs font-bold py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
                           ownershipType === "single" ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"
                         }`}
                       >
-                        👤 Singolo
+                        <User size={12} />
+                        Singolo
                       </button>
                       <button
                         type="button"
                         onClick={() => setOwnershipType("multiple")}
-                        className={`flex-1 text-xs font-bold py-2 rounded-lg border transition-colors ${
+                        className={`flex-1 text-xs font-bold py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
                           ownershipType === "multiple" ? "bg-amber-500 text-slate-950 border-amber-500" : "bg-white text-slate-600 border-slate-200"
                         }`}
                       >
-                        👥 Comproprietà
+                        <Users size={12} />
+                        Comproprietà
                       </button>
                     </div>
                   </div>
@@ -1140,7 +1145,10 @@ export default function MasterDataWizard({
                           <div className="min-w-0">
                             <span className="font-bold text-slate-800">{co.name}</span>
                             {co.linkedOwnerId && (
-                              <span className="ml-1.5 text-[9px] text-emerald-600 font-bold">🔗 già a sistema</span>
+                              <span className="ml-1.5 text-[9px] text-emerald-600 font-bold inline-flex items-center gap-0.5">
+                                <Link2 size={9} />
+                                già a sistema
+                              </span>
                             )}
                           </div>
                           <button
@@ -1148,7 +1156,7 @@ export default function MasterDataWizard({
                             onClick={() => setNewOwnerCoOwners(prev => prev.filter((_, i) => i !== idx))}
                             className="text-slate-400 hover:text-rose-500 shrink-0 ml-2"
                           >
-                            ✕
+                            <X size={12} />
                           </button>
                         </div>
                       ))}
@@ -1190,9 +1198,10 @@ export default function MasterDataWizard({
                                       setShowAddCoOwnerPicker(false);
                                       setCoOwnerSearchTerm("");
                                     }}
-                                    className="w-full text-left text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg px-2.5 py-2"
+                                    className="w-full text-left text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg px-2.5 py-2 flex items-center gap-1.5"
                                   >
-                                    🔗 <strong>{o.name}</strong> <span className="text-[10px] text-emerald-600">— usa anagrafica esistente</span>
+                                    <Link2 size={12} className="text-emerald-700 shrink-0" />
+                                    <span><strong>{o.name}</strong> <span className="text-[10px] text-emerald-600">— usa anagrafica esistente</span></span>
                                   </button>
                                 ))}
                               <button
@@ -1202,9 +1211,10 @@ export default function MasterDataWizard({
                                   setShowAddCoOwnerPicker(false);
                                   setCoOwnerSearchTerm("");
                                 }}
-                                className="w-full text-left text-xs bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg px-2.5 py-2"
+                                className="w-full text-left text-xs bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg px-2.5 py-2 flex items-center gap-1.5"
                               >
-                                ➕ Crea nuovo nominativo "{coOwnerSearchTerm.trim()}"
+                                <Plus size={12} className="text-indigo-700 shrink-0" />
+                                Crea nuovo nominativo "{coOwnerSearchTerm.trim()}"
                               </button>
                             </div>
                           )}
@@ -1325,9 +1335,14 @@ export default function MasterDataWizard({
 
               {standaloneEntity === "tenant" && (
                 <InfoBox type="warning">
-                  ⚠️ Stai creando l'inquilino senza collegarlo a un immobile — è consentito
-                  (puoi assegnarlo in seguito), ma finché non lo colleghi comparirà come
-                  "Immobile da assegnare" nell'elenco Inquilini e nella bacheca della Dashboard.
+                  <span className="flex items-start gap-1.5">
+                    <AlertTriangle size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      Stai creando l'inquilino senza collegarlo a un immobile — è consentito
+                      (puoi assegnarlo in seguito), ma finché non lo colleghi comparirà come
+                      "Immobile da assegnare" nell'elenco Inquilini e nella bacheca della Dashboard.
+                    </span>
+                  </span>
                 </InfoBox>
               )}
 
@@ -1382,7 +1397,7 @@ export default function MasterDataWizard({
                         <option value="">— Scegli —</option>
                         {existingTenants.map((t) => (
                           <option key={t.id} value={t.id}>
-                            {!t.propertyId ? "🏠❗ " : ""}{t.name}
+                            {t.name}
                             {t.email ? ` · ${t.email}` : ""}
                             {!t.propertyId ? " (immobile da assegnare)" : ""}
                           </option>

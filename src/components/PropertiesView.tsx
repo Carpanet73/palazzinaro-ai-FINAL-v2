@@ -42,7 +42,8 @@ import {
   Shield,
   Loader2,
   Camera,
-  Paperclip
+  Paperclip,
+  Wand2
 } from "lucide-react";
 import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, Condominium, Maintenance, InsurancePolicy, DeliveryReport, StoredDocument } from "../types";
 import { getTenantClassification as getTenantClassificationHelper } from "../lib/statusHelper";
@@ -821,11 +822,11 @@ export default function PropertiesView({
 
               <div className="mt-4 space-y-2 text-xs text-slate-500 pl-1">
                 <div className="flex items-center space-x-2">
-                  <span className="text-slate-400 w-4">📋</span>
+                  <span className="w-4"><ClipboardList size={14} className="text-indigo-700" /></span>
                   <span>Registrazione contrattuale: <strong className="text-slate-700">In regola</strong></span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-slate-400 w-4">💸</span>
+                  <span className="w-4"><Euro size={14} className="text-rose-700" /></span>
                   <span>Imposta di registro: <strong className="text-slate-700">Ripartita al 50%</strong></span>
                 </div>
               </div>
@@ -845,7 +846,7 @@ export default function PropertiesView({
         {/* Quota Millesimale e Contatori Utenze Section */}
         <div className="bg-white rounded-2xl border-2 border-slate-100 p-6 shadow-sm">
           <div className="flex items-center space-x-2 text-slate-800 pb-3 mb-4">
-            <span className="text-lg">⚡</span>
+            <Zap size={18} className="text-amber-700" />
             <h3 className="text-sm font-mono font-black uppercase tracking-wider text-slate-900">
               Quota Millesimale & Contatori Utenze reali
             </h3>
@@ -871,7 +872,7 @@ export default function PropertiesView({
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-mono font-bold text-indigo-600 uppercase tracking-wider flex items-center space-x-1">
-                    <span>💡</span> <span>Utenza Luce</span>
+                    <Lightbulb size={12} /> <span>Utenza Luce</span>
                   </span>
                   <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                     prop.luceMeter?.activeFlag === "conduttore" 
@@ -896,7 +897,7 @@ export default function PropertiesView({
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-mono font-bold text-orange-600 uppercase tracking-wider flex items-center space-x-1">
-                    <span>🔥</span> <span>Utenza Gas</span>
+                    <Flame size={12} /> <span>Utenza Gas</span>
                   </span>
                   <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                     prop.gasMeter?.activeFlag === "conduttore" 
@@ -921,7 +922,7 @@ export default function PropertiesView({
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-mono font-bold text-sky-600 uppercase tracking-wider flex items-center space-x-1">
-                    <span>💧</span> <span>Utenza Acqua</span>
+                    <Droplets size={12} /> <span>Utenza Acqua</span>
                   </span>
                   <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                     prop.acquaMeter?.activeFlag === "conduttore" 
@@ -956,14 +957,16 @@ export default function PropertiesView({
                 className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded-xl active:transition-all cursor-pointer shadow-xs"
               >
                 <Receipt size={12} />
-                <span>Indaga Mastrino Inquilino 🔍</span>
+                <span>Indaga Mastrino Inquilino</span>
+                <Search size={11} className="text-white" />
               </button>
             )}
           </div>
 
           {!associatedTenant ? (
-            <div className="py-8 text-center text-slate-400 text-xs">
-              ℹ️ L'immobile risulta attualmente **Libero**. Non ci sono contratti di locazione attivi associati.
+            <div className="py-8 text-center text-slate-400 text-xs flex flex-col items-center gap-1.5">
+              <Info size={16} className="text-indigo-600" />
+              <span>L'immobile risulta attualmente **Libero**. Non ci sono contratti di locazione attivi associati.</span>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -979,7 +982,7 @@ export default function PropertiesView({
                     ? "text-rose-500 font-bold flex items-center gap-1.5"
                     : "text-slate-900"
                 }`}>
-                  {tenantClassification?.status === "critical" && <span className="text-sm shrink-0" title="Contenzioso Legale Attivo">⚖️</span>}
+                  {tenantClassification?.status === "critical" && <Scale size={13} className="text-rose-600 shrink-0" title="Contenzioso Legale Attivo" />}
                   <span>{associatedTenant.name}</span>
                 </h4>
 
@@ -1019,8 +1022,13 @@ export default function PropertiesView({
 
                   <div className="mt-3.5 pt-2 border-t border-current/15 flex justify-between items-center text-[9px] font-bold uppercase tracking-wider">
                     <span>Stato Contabile:</span>
-                    <span className="font-extrabold">
-                      {tenantClassification.status === "green" ? "In Regola ✓" : tenantClassification.status === "orange" ? "Pendenze Minime" : "Sofferenza Grave"}
+                    <span className="font-extrabold inline-flex items-center gap-1">
+                      {tenantClassification.status === "green" ? (
+                        <>
+                          <span>In Regola</span>
+                          <Check size={11} className="text-emerald-700" />
+                        </>
+                      ) : tenantClassification.status === "orange" ? "Pendenze Minime" : "Sofferenza Grave"}
                     </span>
                   </div>
                 </div>
@@ -1036,19 +1044,22 @@ export default function PropertiesView({
           <div className="bg-white rounded-2xl border-2 border-slate-100 p-6 shadow-sm flex flex-col">
             <div className="pb-3">
               <h3 className="font-sans font-bold text-slate-900 text-sm flex items-center space-x-1.5">
-                <span>🏢 Oneri e Spese Condominiali</span>
+                <Building2 size={14} className="text-indigo-700 shrink-0" />
+                <span>Oneri e Spese Condominiali</span>
               </h3>
               <p className="text-[10px] text-slate-500 mt-0.5">Spese condominiali registrate a carico della proprietà o dell'inquilino.</p>
             </div>
 
             <div className="flex-1 mt-3">
               {!prop.isCondoConstituted ? (
-                <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  📢 Condominio assente o autogestito. Non sono previste quote condominiali ordinarie esterne.
+                <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200 flex flex-col items-center gap-1.5">
+                  <Info size={16} className="text-indigo-600" />
+                  <span>Condominio assente o autogestito. Non sono previste quote condominiali ordinarie esterne.</span>
                 </div>
               ) : condoDebts.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  📢 Nessuna spesa condominiale registrata al momento per questo immobile.
+                <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200 flex flex-col items-center gap-1.5">
+                  <Info size={16} className="text-indigo-600" />
+                  <span>Nessuna spesa condominiale registrata al momento per questo immobile.</span>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -1095,7 +1106,8 @@ export default function PropertiesView({
           <div className="bg-white rounded-2xl border-2 border-slate-100 p-6 shadow-sm flex flex-col">
             <div className="pb-3">
               <h3 className="font-sans font-bold text-slate-900 text-sm flex items-center space-x-1.5">
-                <span>📄 Imposte di Registro & Marche da Bollo</span>
+                <FileText size={14} className="text-indigo-700 shrink-0" />
+                <span>Imposte di Registro & Marche da Bollo</span>
               </h3>
               <p className="text-[10px] text-slate-500 mt-0.5">Spese per imposte di registro annuali, divisa proporzionalmente al 50%.</p>
             </div>
@@ -1104,8 +1116,11 @@ export default function PropertiesView({
               {regCosts.length === 0 ? (
                 /* Generate initial registration cost items for the demonstration if list is empty */
                 <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  📢 Nessun movimento di imposta di registro inserito.
-                  <button 
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Info size={16} className="text-indigo-600" />
+                    <span>Nessun movimento di imposta di registro inserito.</span>
+                  </div>
+                  <button
                     type="button"
                     onClick={async () => {
                       // Add dummy registration costs
@@ -1148,16 +1163,22 @@ export default function PropertiesView({
                           </td>
                           <td className="py-2.5 text-right">
                             <div className="font-bold text-slate-700">€{(cost.amount / 2).toLocaleString("it-IT", { minimumFractionDigits: 2 })}</div>
-                            <span className={`text-[8px] font-black uppercase px-1 py-0.2 rounded ${
+                            <span className={`inline-flex items-center gap-1 text-[8px] font-black uppercase px-1 py-0.2 rounded ${
                               cost.status === "Paid" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
                             }`}>
-                              {cost.status === "Paid" ? "Reconciled ✓" : "In attesa"}
+                              {cost.status === "Paid" ? (
+                                <>
+                                  <span>Reconciled</span>
+                                  <Check size={9} />
+                                </>
+                              ) : "In attesa"}
                             </span>
                           </td>
                           <td className="py-2.5 text-right">
                             <div className="font-bold text-slate-700">€{(cost.amount / 2).toLocaleString("it-IT", { minimumFractionDigits: 2 })}</div>
-                            <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded bg-emerald-50 text-emerald-700">
-                              RECONCILED ✓
+                            <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase px-1 py-0.2 rounded bg-emerald-50 text-emerald-700">
+                              <span>RECONCILED</span>
+                              <Check size={9} />
                             </span>
                           </td>
                         </tr>
@@ -1175,7 +1196,8 @@ export default function PropertiesView({
           <div className="pb-3 flex justify-between items-center">
             <div>
               <h3 className="font-sans font-bold text-slate-900 text-sm flex items-center space-x-1.5">
-                <span>🛠️ Mastrino Manutenzioni & Ripartizioni Quote</span>
+                <Wrench size={14} className="text-slate-600 shrink-0" />
+                <span>Mastrino Manutenzioni & Ripartizioni Quote</span>
               </h3>
               <p className="text-[10px] text-slate-500 mt-0.5">
                 Resoconto contabile di tutti gli interventi tecnici e ripartizioni quote (inquilino / proprietario / comproprietari).
@@ -1201,8 +1223,9 @@ export default function PropertiesView({
 
               if (propertyMaintenanceTickets.length === 0) {
                 return (
-                  <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    📢 Nessuna spesa o ticket di manutenzione registrato per questo immobile.
+                  <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200 flex flex-col items-center gap-1.5">
+                    <Info size={16} className="text-indigo-600" />
+                    <span>Nessuna spesa o ticket di manutenzione registrato per questo immobile.</span>
                   </div>
                 );
               }
@@ -1286,12 +1309,13 @@ export default function PropertiesView({
                                   <td className="py-2.5 font-medium text-slate-800">
                                     <div className="font-bold text-slate-900">{debt.title}</div>
                                     <div className="text-[10px] text-slate-400 font-normal flex items-center gap-1.5 mt-0.5">
-                                      <span className={`px-1 py-0.2 rounded text-[8px] uppercase tracking-wider ${
-                                        isTenant 
-                                          ? "bg-indigo-50 text-indigo-700 border border-indigo-150" 
+                                      <span className={`inline-flex items-center gap-1 px-1 py-0.2 rounded text-[8px] uppercase tracking-wider ${
+                                        isTenant
+                                          ? "bg-indigo-50 text-indigo-700 border border-indigo-150"
                                           : "bg-amber-50 text-amber-700 border border-amber-150"
                                       }`}>
-                                        {isTenant ? "Inquilino 👤" : "Proprietario 💼"}
+                                        {isTenant ? <User size={9} /> : <Briefcase size={9} />}
+                                        {isTenant ? "Inquilino" : "Proprietario"}
                                       </span>
                                       <span>{debt.description}</span>
                                     </div>
@@ -1343,8 +1367,9 @@ export default function PropertiesView({
           </div>
 
           {docs.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-xs">
-              📂 Nessun documento salvato. Puoi caricare e associare planimetrie o APE cliccando su "Salva Nuovo Documento".
+            <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center gap-1.5">
+              <FolderOpen size={16} className="text-amber-700" />
+              <span>Nessun documento salvato. Puoi caricare e associare planimetrie o APE cliccando su "Salva Nuovo Documento".</span>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
@@ -1381,7 +1406,7 @@ export default function PropertiesView({
                         title="Invia a Conduttore / Avvocato / Amministratore / Proprietario"
                       >
                         <Send size={11} />
-                        <span>Invia 📤</span>
+                        <span>Invia</span>
                       </button>
                       
                       <button
@@ -1405,7 +1430,8 @@ export default function PropertiesView({
           <div className="pb-3 flex justify-between items-center">
             <div>
               <h3 className="font-sans font-bold text-slate-900 text-sm flex items-center space-x-1.5">
-                <span>🛡️ Polizze Assicurative Attive</span>
+                <Shield size={14} className="text-indigo-700 shrink-0" />
+                <span>Polizze Assicurative Attive</span>
               </h3>
               <p className="text-[10px] text-slate-500 mt-0.5">
                 Gestione polizze assicurative e scadenze coperture collegate a questo immobile.
@@ -1426,8 +1452,9 @@ export default function PropertiesView({
               const matchedPolicies = insurancePolicies.filter(ip => ip.propertyId === prop.id);
               if (matchedPolicies.length === 0) {
                 return (
-                  <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    📢 Nessuna polizza assicurativa registrata per questo immobile. Clicca su "Aggiungi Polizza" per registrarne una.
+                  <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200 flex flex-col items-center gap-1.5">
+                    <Info size={16} className="text-indigo-600" />
+                    <span>Nessuna polizza assicurativa registrata per questo immobile. Clicca su "Aggiungi Polizza" per registrarne una.</span>
                   </div>
                 );
               }
@@ -1468,16 +1495,19 @@ export default function PropertiesView({
                             <td className="py-3">
                               <div className="font-semibold text-slate-700">{expiryDateObj.toLocaleDateString("it-IT")}</div>
                               {isExpired ? (
-                                <span className="inline-block text-[8px] font-black uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 animate-pulse mt-0.5">
-                                  🔴 SCADUTA
+                                <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 animate-pulse mt-0.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0" />
+                                  SCADUTA
                                 </span>
                               ) : isNearExpiry ? (
-                                <span className="inline-block text-[8px] font-black uppercase px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 animate-pulse mt-0.5">
-                                  ⚠️ IN SCADENZA ({diffDays} gg)
+                                <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 animate-pulse mt-0.5">
+                                  <AlertTriangle size={9} className="shrink-0" />
+                                  IN SCADENZA ({diffDays} gg)
                                 </span>
                               ) : (
-                                <span className="inline-block text-[8px] font-black uppercase px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 mt-0.5">
-                                  🟢 ATTIVA
+                                <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 mt-0.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
+                                  ATTIVA
                                 </span>
                               )}
                             </td>
@@ -1580,11 +1610,11 @@ export default function PropertiesView({
                     onChange={(e) => setInsCoverageType(e.target.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500 transition-all"
                   >
-                    <option value="Incendio e Scoppio">Incendio e Scoppio 🔥</option>
-                    <option value="R.C. Fabbricato">R.C. Fabbricato 🏢</option>
-                    <option value="Tutela Legale">Tutela Legale ⚖️</option>
-                    <option value="Multirischio Fabbricati">Multirischio Fabbricati 🛡️</option>
-                    <option value="Kasko">Kasko Completa 🚗</option>
+                    <option value="Incendio e Scoppio">Incendio e Scoppio</option>
+                    <option value="R.C. Fabbricato">R.C. Fabbricato</option>
+                    <option value="Tutela Legale">Tutela Legale</option>
+                    <option value="Multirischio Fabbricati">Multirischio Fabbricati</option>
+                    <option value="Kasko">Kasko Completa</option>
                   </select>
                 </div>
 
@@ -1685,11 +1715,11 @@ export default function PropertiesView({
                     onChange={(e) => setUploadDocType(e.target.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white outline-hidden focus:border-indigo-500 transition-all"
                   >
-                    <option value="Planimetria Catastale">Planimetria Catastale 🗺️</option>
-                    <option value="Planimetria">Planimetria Semplice 🗺️</option>
-                    <option value="APE">Attestato APE (Prestazione Energetica) ⚡</option>
-                    <option value="Contratto">Contratto di Locazione 📄</option>
-                    <option value="Verbale">Verbale Assemblea Condominiale 🏢</option>
+                    <option value="Planimetria Catastale">Planimetria Catastale</option>
+                    <option value="Planimetria">Planimetria Semplice</option>
+                    <option value="APE">Attestato APE (Prestazione Energetica)</option>
+                    <option value="Contratto">Contratto di Locazione</option>
+                    <option value="Verbale">Verbale Assemblea Condominiale</option>
                   </select>
                 </div>
 
@@ -1753,11 +1783,11 @@ export default function PropertiesView({
                       >
                         <option value="">-- Seleziona destinatario abilitato --</option>
                         {associatedTenant && (
-                          <option value="tenant">👤 Inquilino: {associatedTenant.name}</option>
+                          <option value="tenant">Inquilino: {associatedTenant.name}</option>
                         )}
-                        <option value="owner">👤 Proprietario: {ownerName}</option>
-                        <option value="lawyer">⚖️ Avvocato: Studio Legale Associato</option>
-                        <option value="admin">🏢 Amministratore Condominio: Ing. Neri</option>
+                        <option value="owner">Proprietario: {ownerName}</option>
+                        <option value="lawyer">Avvocato: Studio Legale Associato</option>
+                        <option value="admin">Amministratore Condominio: Ing. Neri</option>
                       </select>
                     </div>
 
@@ -1911,19 +1941,21 @@ export default function PropertiesView({
 
                   {/* Badges for Bare Ownership & Condo Constituted at a glance */}
                   <div className="flex flex-wrap gap-1.5 mt-3 pt-2 border-t border-slate-50">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                      property.isBareOwnership 
-                        ? "bg-amber-50 text-amber-700 border border-amber-200/50" 
+                    <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      property.isBareOwnership
+                        ? "bg-amber-50 text-amber-700 border border-amber-200/50"
                         : "bg-emerald-50 text-emerald-700 border border-emerald-200/50"
                     }`}>
-                      {property.isBareOwnership ? "🟠 Nuda Proprietà" : "🟢 Piena Proprietà (Ammin. Ordinaria)"}
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${property.isBareOwnership ? "bg-amber-600" : "bg-emerald-600"}`} />
+                      {property.isBareOwnership ? "Nuda Proprietà" : "Piena Proprietà (Ammin. Ordinaria)"}
                     </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                      property.isCondoConstituted 
-                        ? "bg-indigo-50 text-indigo-700 border border-indigo-200/50" 
+                    <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      property.isCondoConstituted
+                        ? "bg-indigo-50 text-indigo-700 border border-indigo-200/50"
                         : "bg-rose-50 text-rose-700 border border-rose-200/50"
                     }`}>
-                      {property.isCondoConstituted ? "🏢 Condominio Costituito" : "⚠️ Condominio Assente / Non Costituito"}
+                      {property.isCondoConstituted ? <Building2 size={11} className="shrink-0" /> : <AlertTriangle size={11} className="shrink-0" />}
+                      {property.isCondoConstituted ? "Condominio Costituito" : "Condominio Assente / Non Costituito"}
                     </span>
                   </div>
 
@@ -1942,7 +1974,8 @@ export default function PropertiesView({
                     className="inline-flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs rounded-xl border border-indigo-200 transition-all cursor-pointer"
                     title="Analizza Scheda Immobile"
                   >
-                    <span>Analizza Scheda 🔍</span>
+                    <span>Analizza Scheda</span>
+                    <Search size={12} />
                   </button>
 
                   <div className="flex space-x-2">
@@ -2060,24 +2093,26 @@ export default function PropertiesView({
                   <button
                     type="button"
                     onClick={() => setOwnerMode("select")}
-                    className={`flex-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    className={`flex-1 inline-flex items-center justify-center gap-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
                       ownerMode === "select"
                         ? "bg-slate-900 text-white shadow-xs"
                         : "text-slate-500 hover:text-slate-900"
                     }`}
                   >
-                    Seleziona Esistente 👥
+                    <Users size={12} />
+                    Seleziona Esistente
                   </button>
                   <button
                     type="button"
                     onClick={() => setOwnerMode("guided")}
-                    className={`flex-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    className={`flex-1 inline-flex items-center justify-center gap-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
                       ownerMode === "guided"
                         ? "bg-slate-900 text-white shadow-xs"
                         : "text-slate-500 hover:text-slate-900"
                     }`}
                   >
-                    Procedura Guidata ✨
+                    <Wand2 size={12} />
+                    Procedura Guidata
                   </button>
                 </div>
 
@@ -2107,20 +2142,21 @@ export default function PropertiesView({
                     {/* Guided flow types */}
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        { id: "individual", label: "Privato 👤" },
-                        { id: "company", label: "Società 🏢" },
-                        { id: "multiple", label: "Multipli 👥" }
+                        { id: "individual", label: "Privato", icon: User },
+                        { id: "company", label: "Società", icon: Building2 },
+                        { id: "multiple", label: "Multipli", icon: Users }
                       ].map((t) => (
                         <button
                           key={t.id}
                           type="button"
                           onClick={() => setGuidedOwnerType(t.id as any)}
-                          className={`py-1.5 text-[10px] font-bold border rounded-lg text-center transition-all ${
+                          className={`inline-flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold border rounded-lg text-center transition-all ${
                             guidedOwnerType === t.id
                               ? "bg-indigo-50 text-indigo-700 border-indigo-300 font-black"
                               : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                           }`}
                         >
+                          <t.icon size={11} />
                           {t.label}
                         </button>
                       ))}
@@ -2276,7 +2312,7 @@ export default function PropertiesView({
                         const b = address.toLowerCase().trim();
                         if (a !== b && !a.includes(b) && !b.includes(a)) {
                           setCondoAddressMismatchWarning(
-                            `⚠️ Attenzione: questo condominio risulta all'indirizzo "${selectedCondo.address}", diverso da quello di questo immobile ("${address}"). Un condominio corrisponde a un edificio fisico: verifica di aver selezionato quello giusto.`
+                            `Attenzione: questo condominio risulta all'indirizzo "${selectedCondo.address}", diverso da quello di questo immobile ("${address}"). Un condominio corrisponde a un edificio fisico: verifica di aver selezionato quello giusto.`
                           );
                         } else {
                           setCondoAddressMismatchWarning(null);
@@ -2294,12 +2330,13 @@ export default function PropertiesView({
                         {c.name} {c.administrator ? `(Amministratore: ${c.administrator})` : ""}
                       </option>
                     ))}
-                    <option value="__new__">➕ Crea nuovo condominio per questo immobile…</option>
+                    <option value="__new__">Crea nuovo condominio per questo immobile…</option>
                   </select>
 
                   {condoAddressMismatchWarning && (
-                    <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 mt-1.5 leading-relaxed">
-                      {condoAddressMismatchWarning}
+                    <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 mt-1.5 leading-relaxed flex items-start gap-1.5">
+                      <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                      <span>{condoAddressMismatchWarning}</span>
                     </p>
                   )}
 
@@ -2353,7 +2390,7 @@ export default function PropertiesView({
 
                   {condominiums.length === 0 && !showInlineCondoCreate && (
                     <p className="text-[10px] text-amber-600">
-                      Nessun condominio esistente nel sistema. Usa "➕ Crea nuovo condominio" qui sopra.
+                      Nessun condominio esistente nel sistema. Usa "Crea nuovo condominio" qui sopra.
                     </p>
                   )}
                 </div>
@@ -2382,7 +2419,7 @@ export default function PropertiesView({
 
                 <div className="border-t border-slate-200/60 pt-3">
                   <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center space-x-1">
-                    <span>⚡</span>
+                    <Zap size={13} className="text-amber-700" />
                     <span>Gestione Contatori Utenze</span>
                   </h4>
                   <p className="text-[10px] text-slate-500 mb-3">Registra i dettagli dei contatori dell'immobile e indica a chi sono intestate le utenze (ON: conduttore, OFF: proprietario).</p>
@@ -2392,7 +2429,7 @@ export default function PropertiesView({
                     <div className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2">
                       <div className="flex items-center justify-between pb-1.5">
                         <span className="text-[11px] font-bold text-indigo-700 uppercase flex items-center space-x-1">
-                          <span>💡</span> <span>Utenza Luce</span>
+                          <Lightbulb size={12} /> <span>Utenza Luce</span>
                         </span>
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] font-semibold text-slate-500">Intestazione:</span>
@@ -2446,7 +2483,7 @@ export default function PropertiesView({
                     <div className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2">
                       <div className="flex items-center justify-between pb-1.5">
                         <span className="text-[11px] font-bold text-orange-700 uppercase flex items-center space-x-1">
-                          <span>🔥</span> <span>Utenza Gas</span>
+                          <Flame size={12} /> <span>Utenza Gas</span>
                         </span>
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] font-semibold text-slate-500">Intestazione:</span>
@@ -2500,7 +2537,7 @@ export default function PropertiesView({
                     <div className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2">
                       <div className="flex items-center justify-between pb-1.5">
                         <span className="text-[11px] font-bold text-sky-700 uppercase flex items-center space-x-1">
-                          <span>💧</span> <span>Utenza Acqua</span>
+                          <Droplets size={12} /> <span>Utenza Acqua</span>
                         </span>
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] font-semibold text-slate-500">Intestazione:</span>
@@ -2561,17 +2598,19 @@ export default function PropertiesView({
                           type="button"
                           onClick={() => setScannerOpenFor("cadastral")}
                           disabled={processingScan}
-                          className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-2.5 py-1.5 rounded-lg"
+                          className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-2.5 py-1.5 rounded-lg"
                         >
-                          {processingScan ? "⏳..." : "📷 Fotografa Visura Catastale"}
+                          {processingScan ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
+                          {processingScan ? "In corso..." : "Fotografa Visura Catastale"}
                         </button>
                         <button
                           type="button"
                           onClick={() => setScannerOpenFor("energy")}
                           disabled={processingScan}
-                          className="text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white px-2.5 py-1.5 rounded-lg"
+                          className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white px-2.5 py-1.5 rounded-lg"
                         >
-                          {processingScan ? "⏳..." : "📷 Fotografa APE"}
+                          {processingScan ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
+                          {processingScan ? "In corso..." : "Fotografa APE"}
                         </button>
                       </div>
                     </div>
@@ -2627,8 +2666,9 @@ export default function PropertiesView({
                       <div className="pt-1.5 border-t border-slate-200 space-y-1">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Documenti conservati agli atti</p>
                         {propertyDocuments.map(doc => (
-                          <a key={doc.id} href={doc.storageLink || "#"} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-indigo-600 hover:underline truncate">
-                            📎 {doc.category} — {doc.fileName}
+                          <a key={doc.id} href={doc.storageLink || "#"} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-indigo-600 hover:underline truncate">
+                            <Paperclip size={10} className="shrink-0 text-slate-600" />
+                            <span className="truncate">{doc.category} — {doc.fileName}</span>
                           </a>
                         ))}
                       </div>

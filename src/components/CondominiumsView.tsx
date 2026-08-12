@@ -1813,7 +1813,7 @@ export default function CondominiumsView({
                     {administrators.map(a => (
                       <option key={a.id} value={a.id}>{a.name}</option>
                     ))}
-                    <option value="__new__">➕ Crea nuovo amministratore…</option>
+                    <option value="__new__">+ Crea nuovo amministratore…</option>
                   </select>
                 </div>
 
@@ -1912,9 +1912,9 @@ export default function CondominiumsView({
                   onChange={(e) => setUploadedFileSender(e.target.value)}
                   className="w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2 outline-hidden focus:border-indigo-500 font-bold text-slate-700"
                 >
-                  <option value="Amministratore">🏢 Amministratore</option>
-                  <option value="Inquilino">👤 Inquilino</option>
-                  <option value="Proprietario">💼 Proprietario</option>
+                  <option value="Amministratore">Amministratore</option>
+                  <option value="Inquilino">Inquilino</option>
+                  <option value="Proprietario">Proprietario</option>
                 </select>
               </div>
 

@@ -2150,7 +2150,7 @@ export default function ContractsView({
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <h4 className="font-sans font-black text-xs text-slate-900 flex items-center space-x-1.5">
-                                <span className="text-base shrink-0">🏠</span>
+                                <Home size={16} className="text-indigo-700 shrink-0" />
                                 <span className="truncate max-w-[200px]" title={contract.propertyName}>{contract.propertyName}</span>
                               </h4>
                               {matchingProperty?.address && (
@@ -2167,8 +2167,9 @@ export default function ContractsView({
                           <div className="space-y-1 bg-white/85 p-2.5 rounded-xl border border-slate-100 text-[10px]">
                             <div className="flex justify-between items-center">
                               <span className="text-slate-400 font-medium">Conduttore / Inquilino:</span>
-                              <span className="font-extrabold text-slate-800">
-                                👤 {contract.tenantName}
+                              <span className="font-extrabold text-slate-800 inline-flex items-center gap-1">
+                                <User size={11} className="text-indigo-700 shrink-0" />
+                                {contract.tenantName}
                               </span>
                             </div>
 
@@ -2182,8 +2183,9 @@ export default function ContractsView({
                             {condoConstituted && (
                               <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[9px]">
                                 <span className="text-slate-400">Condominio:</span>
-                                <span className="font-extrabold text-slate-700 truncate max-w-[120px]">
-                                  🏢 {condoConstituted.name}
+                                <span className="font-extrabold text-slate-700 truncate max-w-[120px] inline-flex items-center gap-1">
+                                  <Building2 size={11} className="text-indigo-700 shrink-0" />
+                                  <span className="truncate">{condoConstituted.name}</span>
                                 </span>
                               </div>
                             )}
@@ -2200,7 +2202,8 @@ export default function ContractsView({
                               className="btn-nav-badge inline-flex items-center space-x-1 bg-amber-50/60 hover:bg-amber-100 text-amber-900 border border-amber-200/50 px-2 py-1 rounded-md text-[9px] font-black transition-all shadow-3xs"
                               title="Vai ai dettagli dell'immobile"
                             >
-                              <span>🏠 Immobile</span>
+                              <Home size={11} className="shrink-0" />
+                              <span>Immobile</span>
                             </button>
 
                             <button
@@ -2213,7 +2216,8 @@ export default function ContractsView({
                               className="btn-nav-badge inline-flex items-center space-x-1 bg-amber-50/60 hover:bg-amber-100 text-amber-900 border border-amber-200/50 px-2 py-1 rounded-md text-[9px] font-black transition-all shadow-3xs"
                               title="Vai ai dettagli del conduttore"
                             >
-                              <span>👤 Inquilino</span>
+                              <User size={11} className="shrink-0" />
+                              <span>Inquilino</span>
                             </button>
                           </div>
 
@@ -2226,7 +2230,8 @@ export default function ContractsView({
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline"
                               >
-                                📄 Vedi Documento Generato
+                                <FileText size={11} className="shrink-0" />
+                                <span>Vedi Documento Generato</span>
                               </a>
                               {sendPanelOpenForId !== contract.id ? (
                                 <button
@@ -2234,9 +2239,10 @@ export default function ContractsView({
                                     setSendPanelOpenForId(contract.id);
                                     setSendEmailInput(matchingTenant?.email || "");
                                   }}
-                                  className="block text-[10px] font-bold text-emerald-700 hover:underline"
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:underline"
                                 >
-                                  📧 Invia Contratto
+                                  <Mail size={11} className="shrink-0" />
+                                  <span>Invia Contratto</span>
                                 </button>
                               ) : (
                                 <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-200">
@@ -2284,12 +2290,14 @@ export default function ContractsView({
                             <span className="font-semibold">{new Date(contract.startDate).toLocaleDateString("it-IT")} - {new Date(contract.endDate).toLocaleDateString("it-IT")}</span>
                           </div>
                           {daysLeft > 0 && daysLeft < 90 ? (
-                            <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-bold inline-block">
-                              ⚠️ Scade tra {daysLeft} gg
+                            <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-bold inline-flex items-center gap-1">
+                              <AlertTriangle size={10} className="shrink-0" />
+                              Scade tra {daysLeft} gg
                             </span>
                           ) : daysLeft <= 0 ? (
-                            <span className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded font-bold inline-block">
-                              ❌ Scaduto
+                            <span className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded font-bold inline-flex items-center gap-1">
+                              <XCircle size={10} className="shrink-0" />
+                              Scaduto
                             </span>
                           ) : (
                             <span className="text-[9px] text-slate-400 font-semibold block">
@@ -2352,7 +2360,7 @@ export default function ContractsView({
             <div className="px-6 py-4 bg-slate-900 text-white flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <h3 className="font-sans font-black text-base flex items-center space-x-2">
-                  <span>🤝</span>
+                  <Handshake size={16} className="shrink-0" />
                   <span>{editingContract ? "Modifica Relazione d'Affitto" : "Crea Nuova Relazione Unica d'Affitto"}</span>
                 </h3>
                 <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors">
@@ -2491,9 +2499,10 @@ export default function ContractsView({
                       <button
                         type="button"
                         onClick={() => setWizardPropertyMode("create")}
-                        className={`px-3 py-1 rounded-md text-[10px] font-black transition-all ${wizardPropertyMode === "create" ? "bg-white text-slate-950 shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-[10px] font-black transition-all ${wizardPropertyMode === "create" ? "bg-white text-slate-950 shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
                       >
-                        ✨ Crea Nuovo Immobile
+                        <Sparkles size={10} className="text-amber-600 shrink-0" />
+                        Crea Nuovo Immobile
                       </button>
                     </div>
                   </div>
@@ -2519,7 +2528,10 @@ export default function ContractsView({
                     </div>
                   ) : (
                     <div className="space-y-3 bg-amber-50/20 p-4 rounded-xl border border-amber-200/40">
-                      <p className="text-[10px] text-amber-900 font-bold uppercase tracking-wider">✨ Nuovo Alloggio / Dwelling Parameters</p>
+                      <p className="text-[10px] text-amber-900 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Sparkles size={11} className="text-amber-700 shrink-0" />
+                        Nuovo Alloggio / Dwelling Parameters
+                      </p>
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -2621,9 +2633,10 @@ export default function ContractsView({
                       <button
                         type="button"
                         onClick={() => setWizardTenantMode("create")}
-                        className={`px-3 py-1 rounded-md text-[10px] font-black transition-all ${wizardTenantMode === "create" ? "bg-white text-slate-950 shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-[10px] font-black transition-all ${wizardTenantMode === "create" ? "bg-white text-slate-950 shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
                       >
-                        ✨ Crea Nuovo Inquilino
+                        <Sparkles size={10} className="text-amber-600 shrink-0" />
+                        Crea Nuovo Inquilino
                       </button>
                     </div>
                   </div>
@@ -2638,7 +2651,7 @@ export default function ContractsView({
                       >
                         <option value="">-- Seleziona conduttore nel database --</option>
                         {tenants.map(t => (
-                          <option key={t.id} value={t.id}>{!t.propertyId ? "🏠❗ " : ""}{t.name} ({t.email}){!t.propertyId ? " — immobile da assegnare" : ""}</option>
+                          <option key={t.id} value={t.id}>{t.name} ({t.email}){!t.propertyId ? " — immobile da assegnare" : ""}</option>
                         ))}
                       </select>
                       {tenants.length === 0 && (
@@ -2649,7 +2662,10 @@ export default function ContractsView({
                     </div>
                   ) : (
                     <div className="space-y-3 bg-amber-50/20 p-4 rounded-xl border border-amber-200/40">
-                      <p className="text-[10px] text-amber-900 font-bold uppercase tracking-wider">👤 Dati Anagrafici Conduttore</p>
+                      <p className="text-[10px] text-amber-900 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <User size={11} className="text-amber-700 shrink-0" />
+                        Dati Anagrafici Conduttore
+                      </p>
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -2860,10 +2876,13 @@ export default function ContractsView({
                         />
                         <div>
                           <span className="text-xs font-bold text-slate-800 block">Nuda Proprietà</span>
-                          <span className="text-[9px] text-rose-600 block mt-0.5 font-semibold">
-                            ⚠️ Il nudo proprietario non ha "titolo" sull'immobile ai fini della locazione: il
-                            contratto va di norma intestato all'usufruttuario, e la Cedolare Secca non è
-                            selezionabile in questo caso.
+                          <span className="text-[9px] text-rose-600 mt-0.5 font-semibold flex items-start gap-1">
+                            <AlertTriangle size={11} className="text-rose-600 shrink-0 mt-0.5" />
+                            <span>
+                              Il nudo proprietario non ha "titolo" sull'immobile ai fini della locazione: il
+                              contratto va di norma intestato all'usufruttuario, e la Cedolare Secca non è
+                              selezionabile in questo caso.
+                            </span>
                           </span>
                         </div>
                       </label>
@@ -2969,7 +2988,10 @@ export default function ContractsView({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Property recap */}
                       <div className="bg-white p-3 rounded-xl border border-amber-100">
-                        <span className="text-[9px] uppercase font-black text-slate-400">🏠 Immobile Collegato</span>
+                        <span className="text-[9px] uppercase font-black text-slate-400 inline-flex items-center gap-1">
+                          <Home size={10} className="text-indigo-700 shrink-0" />
+                          Immobile Collegato
+                        </span>
                         <p className="font-black text-slate-800 mt-1">{wizardPropertyMode === "create" ? newPropName : (properties.find(p => p.id === propertyId)?.name)}</p>
                         <p className="text-[10px] text-slate-500 mt-0.5">{wizardPropertyMode === "create" ? newPropAddress : (properties.find(p => p.id === propertyId)?.address)}</p>
                         <span className="inline-block mt-2 text-[8px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800 uppercase">
@@ -2979,7 +3001,10 @@ export default function ContractsView({
 
                       {/* Tenant recap */}
                       <div className="bg-white p-3 rounded-xl border border-amber-100">
-                        <span className="text-[9px] uppercase font-black text-slate-400">👤 Conduttore Collegato</span>
+                        <span className="text-[9px] uppercase font-black text-slate-400 inline-flex items-center gap-1">
+                          <User size={10} className="text-indigo-700 shrink-0" />
+                          Conduttore Collegato
+                        </span>
                         <p className="font-black text-slate-800 mt-1">{wizardTenantMode === "create" ? newTenantName : (tenants.find(t => t.id === tenantId)?.name)}</p>
                         <p className="text-[10px] text-slate-500 mt-0.5">{wizardTenantMode === "create" ? (newTenantEmail || "inquilino@email.com") : (tenants.find(t => t.id === tenantId)?.email)}</p>
                         <span className="inline-block mt-2 text-[8px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800 uppercase">
@@ -2990,7 +3015,10 @@ export default function ContractsView({
 
                     {/* Contract parameters recap */}
                     <div className="bg-white p-4 rounded-xl border border-amber-100 space-y-2.5">
-                      <span className="text-[9px] uppercase font-black text-slate-400 block pb-1">📄 Parametri di Locazione</span>
+                      <span className="text-[9px] uppercase font-black text-slate-400 flex items-center gap-1 pb-1">
+                        <FileText size={10} className="text-indigo-700 shrink-0" />
+                        Parametri di Locazione
+                      </span>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div>
                           <span className="text-[9px] text-slate-400 block font-bold">Canone</span>
@@ -3141,7 +3169,7 @@ export default function ContractsView({
               
               <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
                 <h3 className="font-sans font-black text-sm flex items-center space-x-2">
-                  <span>📝</span>
+                  <FileText size={16} className="shrink-0" />
                   <span>Compila Verbale di {delReportType === "consegna" ? "Consegna Immobile" : "Riconsegna Immobile"}</span>
                 </h3>
                 <button type="button" onClick={() => setShowDeliveryModal(false)} className="text-slate-400 hover:text-white transition-colors cursor-pointer">
@@ -3170,8 +3198,9 @@ export default function ContractsView({
                 {/* Checklist editor */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
-                      📋 Checklist Elementi da Verificare
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide flex items-center gap-1.5">
+                      <ClipboardList size={14} className="text-indigo-700 shrink-0" />
+                      Checklist Elementi da Verificare
                     </h4>
                     <span className="text-[10px] text-slate-400">Personalizza gli elementi della rilevazione</span>
                   </div>
@@ -3237,10 +3266,11 @@ export default function ContractsView({
                                 <button
                                   type="button"
                                   onClick={() => handleAddPhotoToItem(item.id)}
-                                  className="text-[10px] bg-slate-100 hover:bg-slate-200 border border-slate-250 font-bold px-1.5 py-1 rounded transition-all cursor-pointer"
+                                  className="inline-flex items-center gap-1 text-[10px] bg-slate-100 hover:bg-slate-200 border border-slate-250 font-bold px-1.5 py-1 rounded transition-all cursor-pointer"
                                   title="Allega foto"
                                 >
-                                  📷 {item.photos?.length > 0 ? `(${item.photos.length})` : "+"}
+                                  <Camera size={11} className="shrink-0" />
+                                  {item.photos?.length > 0 ? `(${item.photos.length})` : "+"}
                                 </button>
                                 <button
                                   type="button"
@@ -3290,7 +3320,7 @@ export default function ContractsView({
             
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="font-sans font-black text-sm flex items-center space-x-2">
-                <span>✍️</span>
+                <PenLine size={16} className="shrink-0" />
                 <span>Firma Elettronica Verbale di Consegna</span>
               </h3>
               <button type="button" onClick={() => setShowSignatureModal(false)} className="text-slate-400 hover:text-white transition-colors cursor-pointer">

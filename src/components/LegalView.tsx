@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
-import { Plus, Scale, FolderOpen, AlertCircle, CheckCircle, X, Trash2, UserCheck, Briefcase, Download, FileText, Check, ShieldAlert } from "lucide-react";
+import { Scale, FolderOpen, X, Trash2, Briefcase, Download, FileText, User, Pencil, CheckCircle2, Mail, AlertTriangle } from "lucide-react";
 import { LegalCase, Property, Lawyer, Tenant, OwnerProfile, Contract, Reminder, DeliveryReport } from "../types";
 import JSZip from "jszip";
 import emailjs from "@emailjs/browser";
@@ -398,7 +398,7 @@ Il presente garante è stato inserito in anagrafica a supporto del rapporto di l
   // ── CORREZIONE R — Invio email automatico del fascicolo (mai il client di posta) ──
   const handleSendDossierEmail = async (lawsuit: LegalCase, lawyer: Lawyer) => {
     if (!lawyer.email || !lawyer.email.includes("@")) {
-      alert(`⚠️ Lo studio legale "${lawyer.studioName}" non ha un indirizzo email valido in anagrafica. Impossibile inviare.`);
+      alert(`Lo studio legale "${lawyer.studioName}" non ha un indirizzo email valido in anagrafica. Impossibile inviare.`);
       return;
     }
 
@@ -475,10 +475,10 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         dossierSentToEmail: lawyer.email
       });
 
-      alert(`✅ Fascicolo inviato con successo a ${lawyer.email} (${lawyer.studioName}), con lo ZIP allegato per davvero.`);
+      alert(`Fascicolo inviato con successo a ${lawyer.email} (${lawyer.studioName}), con lo ZIP allegato per davvero.`);
     } catch (err: any) {
       console.error("Errore invio fascicolo via Resend:", err);
-      alert(`❌ Errore durante l'invio: ${err?.message || JSON.stringify(err)}\n\nVerifica che RESEND_API_KEY sia configurata su Vercel.`);
+      alert(`Errore durante l'invio: ${err?.message || JSON.stringify(err)}\n\nVerifica che RESEND_API_KEY sia configurata su Vercel.`);
     }
   };
 
@@ -525,8 +525,9 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* CORREZIONE Q — Colonna 1: Fascicoli da Associare (trascinabili) */}
           <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2.5">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              📂 Fascicoli da Associare ({unassignedCases.length})
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <FolderOpen size={13} className="text-amber-700 shrink-0" />
+              Fascicoli da Associare ({unassignedCases.length})
             </h3>
             {unassignedCases.length === 0 ? (
               <p className="text-[11px] text-slate-400 italic">Nessuna pratica in attesa di assegnazione.</p>
@@ -552,8 +553,9 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
 
           {/* Colonna 2: Studi Legali (avatar, zone di rilascio) */}
           <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2.5">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              👤 Studi Legali ({lawyers.length})
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <User size={13} className="text-indigo-700 shrink-0" />
+              Studi Legali ({lawyers.length})
             </h3>
             {lawyers.length === 0 ? (
               <p className="text-[11px] text-slate-400 italic">Nessuno studio legale creato. Usa il tasto "+ Aggiungi" in basso a destra.</p>
@@ -581,7 +583,9 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
                         <p className="text-xs font-bold text-slate-800 truncate">{l.studioName}</p>
                         <p className="text-[10px] text-slate-400 truncate">{l.name} · {count} pratiche</p>
                       </div>
-                      <span className="text-slate-300 group-hover:text-indigo-500 shrink-0 text-[10px]" title="Modifica dati">✏️</span>
+                      <span className="text-slate-300 group-hover:text-indigo-500 shrink-0" title="Modifica dati">
+                        <Pencil size={12} />
+                      </span>
                     </div>
                   );
                 })}
@@ -591,8 +595,9 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
 
           {/* Colonna 3: Pratiche Già Associate */}
           <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2.5">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              ✅ Pratiche Associate ({assignedCases.length})
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+              Pratiche Associate ({assignedCases.length})
             </h3>
             {assignedCases.length === 0 ? (
               <p className="text-[11px] text-slate-400 italic">Nessuna pratica ancora assegnata a uno studio legale.</p>
@@ -607,8 +612,9 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
                     <p className="text-xs font-bold text-slate-800 truncate">{c.title}</p>
                     <p className="text-[10px] text-emerald-700 truncate">→ {c.assignedLawyerName}</p>
                     {c.dossierSentAt && (
-                      <p className="text-[9px] text-slate-400 mt-0.5">
-                        📧 Inviato il {new Date(c.dossierSentAt).toLocaleDateString("it-IT")} a {c.dossierSentToEmail}
+                      <p className="text-[9px] text-slate-400 mt-0.5 flex items-center gap-1">
+                        <Mail size={10} className="text-indigo-700 shrink-0" />
+                        Inviato il {new Date(c.dossierSentAt).toLocaleDateString("it-IT")} a {c.dossierSentToEmail}
                       </p>
                     )}
                   </div>
@@ -709,12 +715,14 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
                           </button>
                         </div>
                         {lawsuit.dossierSentAt ? (
-                          <p className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-2 py-1.5">
-                            📧 Fascicolo inviato il {new Date(lawsuit.dossierSentAt).toLocaleDateString("it-IT")} alle {new Date(lawsuit.dossierSentAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} a {lawsuit.dossierSentToEmail}
+                          <p className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-2 py-1.5 flex items-start gap-1">
+                            <Mail size={10} className="text-indigo-700 shrink-0 mt-0.5" />
+                            <span>Fascicolo inviato il {new Date(lawsuit.dossierSentAt).toLocaleDateString("it-IT")} alle {new Date(lawsuit.dossierSentAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} a {lawsuit.dossierSentToEmail}</span>
                           </p>
                         ) : (
-                          <p className="text-[9px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
-                            ⚠️ Fascicolo non ancora inviato a questo studio.
+                          <p className="text-[9px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5 flex items-center gap-1">
+                            <AlertTriangle size={10} className="text-amber-600 shrink-0" />
+                            Fascicolo non ancora inviato a questo studio.
                           </p>
                         )}
                         <button
@@ -730,9 +738,12 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
                             if (!confirmed) return;
                             handleSendDossierEmail(lawsuit, lawyer);
                           }}
-                          className="w-full text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg py-1.5 transition-colors"
+                          className="w-full text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg py-1.5 transition-colors flex items-center justify-center gap-1.5"
                         >
-                          {lawsuit.dossierSentAt ? "📧 Invia di Nuovo il Fascicolo" : "📧 Invia il Fascicolo Ora"}
+                          <span className="w-[14px] h-[14px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                            <Mail size={9} className="text-white" />
+                          </span>
+                          {lawsuit.dossierSentAt ? "Invia di Nuovo il Fascicolo" : "Invia il Fascicolo Ora"}
                         </button>
                       </div>
                     ) : (

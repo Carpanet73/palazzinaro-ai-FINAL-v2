@@ -14,7 +14,9 @@ import {
   Coffee,
   CheckCircle2,
   AlertCircle,
-  Settings
+  Settings,
+  Lock,
+  Unlock
 } from "lucide-react";
 import { OwnerProfile } from "../types";
 import { guessProvinceFromCity } from "../lib/italianCities";
@@ -558,19 +560,21 @@ export default function SettingsView({ ownerProfile, onSaveProfile }: SettingsVi
               Configura le credenziali EmailJS per abilitare l'invio reale delle e-mail di sollecito dal pannello di controllo.
             </p>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                {emailCredsUnlocked ? "🔓 Modifica sbloccata" : "🔒 Credenziali protette"}
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider inline-flex items-center gap-1.5">
+                {emailCredsUnlocked ? <Unlock size={11} className="text-amber-400 shrink-0" /> : <Lock size={11} className="text-slate-500 shrink-0" />}
+                {emailCredsUnlocked ? "Modifica sbloccata" : "Credenziali protette"}
               </span>
               <button
                 type="button"
                 onClick={() => setEmailCredsUnlocked(v => !v)}
-                className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors inline-flex items-center gap-1.5 ${
                   emailCredsUnlocked
                     ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
                     : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                 }`}
               >
-                {emailCredsUnlocked ? "Blocca di nuovo" : "🔓 Sblocca per Modificare"}
+                {!emailCredsUnlocked && <Unlock size={11} className="shrink-0" />}
+                {emailCredsUnlocked ? "Blocca di nuovo" : "Sblocca per Modificare"}
               </button>
             </div>
             <div className="space-y-3.5">

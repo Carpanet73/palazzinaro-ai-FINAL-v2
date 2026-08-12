@@ -15,6 +15,7 @@
 
 import React, { useState, useRef } from "react";
 import { jsPDF } from "jspdf";
+import { Camera, X, Plus, CheckCircle2, Loader2 } from "lucide-react";
 
 interface CropRect {
   x: number;
@@ -202,8 +203,13 @@ export default function DocumentScanner({ isOpen, title, onClose, onComplete }: 
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
       <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col">
         <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
-          <h3 className="font-sans font-bold text-sm">📷 {title}</h3>
-          <button onClick={handleClose} className="text-slate-400 hover:text-white text-lg">✕</button>
+          <h3 className="font-sans font-bold text-sm flex items-center gap-1.5">
+            <Camera size={15} className="text-white shrink-0" />
+            {title}
+          </h3>
+          <button onClick={handleClose} className="text-slate-400 hover:text-white">
+            <X size={18} />
+          </button>
         </div>
 
         <div className="p-5 overflow-y-auto space-y-4">
@@ -219,9 +225,9 @@ export default function DocumentScanner({ isOpen, title, onClose, onComplete }: 
                       </span>
                       <button
                         onClick={() => removePage(idx)}
-                        className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        ✕
+                        <X size={11} />
                       </button>
                     </div>
                   ))}
@@ -238,18 +244,24 @@ export default function DocumentScanner({ isOpen, title, onClose, onComplete }: 
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold"
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
               >
-                {capturedPages.length === 0 ? "📷 Scatta / Carica Prima Pagina" : "➕ Aggiungi un'Altra Pagina"}
+                <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                  {capturedPages.length === 0 ? <Camera size={11} className="text-white" /> : <Plus size={11} className="text-white" />}
+                </span>
+                {capturedPages.length === 0 ? "Scatta / Carica Prima Pagina" : "Aggiungi un'Altra Pagina"}
               </button>
 
               {capturedPages.length > 0 && (
                 <button
                   onClick={generatePdf}
                   disabled={generating}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl text-sm font-bold"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
                 >
-                  {generating ? "⏳ Genero il PDF..." : `✅ Genera PDF (${capturedPages.length} pagin${capturedPages.length === 1 ? "a" : "e"})`}
+                  <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    {generating ? <Loader2 size={11} className="text-white animate-spin" /> : <CheckCircle2 size={11} className="text-white" />}
+                  </span>
+                  {generating ? "Genero il PDF..." : `Genera PDF (${capturedPages.length} pagin${capturedPages.length === 1 ? "a" : "e"})`}
                 </button>
               )}
             </>
@@ -299,9 +311,12 @@ export default function DocumentScanner({ isOpen, title, onClose, onComplete }: 
                 </button>
                 <button
                   onClick={confirmCrop}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
                 >
-                  ✅ Conferma Ritaglio
+                  <span className="w-[14px] h-[14px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <CheckCircle2 size={9} className="text-white" />
+                  </span>
+                  Conferma Ritaglio
                 </button>
               </div>
             </>

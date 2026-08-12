@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { User, Shield, Mail, Phone, MapPin, CreditCard, Percent, ArrowRight, Bell, Clock, Coffee } from "lucide-react";
+import { User, Shield, Mail, Phone, MapPin, CreditCard, Percent, ArrowRight, Bell, Clock, Coffee, AlertTriangle } from "lucide-react";
 import Logo from "./Logo";
 
 interface OwnerOnboardingProps {
@@ -160,8 +160,9 @@ export default function OwnerOnboarding({ userEmail, onSave, onLogout }: OwnerOn
           </div>
 
           {error && (
-            <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-3 text-rose-400 text-xs font-semibold animate-pulse" id="onboarding-error-box">
-              ⚠️ {error}
+            <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-3 text-rose-400 text-xs font-semibold animate-pulse flex items-center gap-1.5" id="onboarding-error-box">
+              <AlertTriangle size={13} className="shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 

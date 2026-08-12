@@ -4,29 +4,39 @@ import AddressFields, { AddressValue } from "./AddressFields";
 import GenderToggle from "./GenderToggle";
 import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
-import { 
-  Plus, 
-  Edit3, 
-  Trash2, 
-  Users, 
-  Mail, 
-  Phone, 
-  FileDigit, 
-  Landmark, 
-  X, 
-  Receipt, 
-  CheckCircle, 
-  ArrowLeft, 
-  Printer, 
-  Search, 
-  AlertTriangle, 
-  Calendar, 
-  Coins, 
-  Wrench, 
+import {
+  Plus,
+  Edit3,
+  Trash2,
+  Users,
+  Mail,
+  Phone,
+  FileDigit,
+  Landmark,
+  X,
+  Receipt,
+  CheckCircle,
+  ArrowLeft,
+  Printer,
+  Search,
+  AlertTriangle,
+  Wrench,
   FileText,
   Share2,
   Copy,
-  Check
+  Check,
+  Euro,
+  Building2,
+  ClipboardList,
+  MessageCircle,
+  CheckCircle2,
+  SlidersHorizontal,
+  Clock,
+  Scale,
+  User,
+  Loader2,
+  Camera,
+  Paperclip
 } from "lucide-react";
 import { Tenant, Property, FastClosingItem, Contract, Maintenance, LegalCase, Reminder, StoredDocument } from "../types";
 import { getTenantClassification as getTenantClassificationHelper } from "../lib/statusHelper";
@@ -305,9 +315,9 @@ export default function TenantsView({
         `Inquilini/${tName || "Nuovo Inquilino"}`
       );
       setTenantDocuments(prev => [...prev, storedDoc]);
-      alert("📄 Documento letto e salvato agli atti! Controlla i campi precompilati prima di salvare.");
+      alert("Documento letto e salvato agli atti! Controlla i campi precompilati prima di salvare.");
     } catch (err: any) {
-      alert(`❌ Errore durante la lettura/salvataggio del documento: ${err?.message || err}`);
+      alert(`Errore durante la lettura/salvataggio del documento: ${err?.message || err}`);
     } finally {
       setProcessingScan(false);
     }
@@ -326,7 +336,7 @@ export default function TenantsView({
     // prima di salvare, così la mancanza è una scelta consapevole e non una dimenticanza.
     if (!propertyId) {
       const proceedWithoutProperty = confirm(
-        "⚠️ Nessun immobile assegnato a questo inquilino.\n\nPuoi salvarlo comunque (ad esempio se l'immobile verrà creato in seguito), ma resterà segnalato come \"Immobile da assegnare\" nell'elenco e nella bacheca della Dashboard finché non lo colleghi.\n\nVuoi procedere comunque?"
+        "Nessun immobile assegnato a questo inquilino.\n\nPuoi salvarlo comunque (ad esempio se l'immobile verrà creato in seguito), ma resterà segnalato come \"Immobile da assegnare\" nell'elenco e nella bacheca della Dashboard finché non lo colleghi.\n\nVuoi procedere comunque?"
       );
       if (!proceedWithoutProperty) return;
     }
@@ -434,7 +444,7 @@ export default function TenantsView({
         dueDate: item.dueDate,
         paymentDate: item.status === "Paid" ? item.dueDate : "-",
         category: "rent",
-        categoryLabel: "💶 Canone Locazione",
+        categoryLabel: "Canone Locazione",
         title: item.title,
         description: item.description || "Rata canone d'affitto pattuito",
         amount: item.amount,
@@ -465,7 +475,7 @@ export default function TenantsView({
           dueDate: item.dueDate,
           paymentDate: item.status === "Paid" ? item.dueDate : "-",
           category: "condo",
-          categoryLabel: "🏢 Spese Condominiali",
+          categoryLabel: "Spese Condominiali",
           title: item.title,
           description: item.description || "Oneri accessori di condominio",
           amount: item.amount,
@@ -497,7 +507,7 @@ export default function TenantsView({
           dueDate: dateStr,
           paymentDate: isPast ? dateStr : "-",
           category: "registration",
-          categoryLabel: "📄 Registrazione Contratto",
+          categoryLabel: "Registrazione Contratto",
           title: `Imposta di Registro Annuale - Anno ${yearNum}`,
           description: `Versamento F24 per proroga/registrazione annuale del contratto di locazione di ${t.name}`,
           amount: 67.00, // standard minimum registration tax in Italy
@@ -524,7 +534,7 @@ export default function TenantsView({
         dueDate: ticket.date || "-",
         paymentDate: ticket.status === "Completed" ? (ticket.date || "Risolto") : "-",
         category: "maintenance",
-        categoryLabel: "🛠️ Manutenzione Inquilino",
+        categoryLabel: "Manutenzione Inquilino",
         title: ticket.title,
         description: ticket.description || "Intervento di manutenzione ordinaria a carico dell'inquilino",
         amount: ticket.cost || 0,
@@ -557,7 +567,7 @@ export default function TenantsView({
         dueDate: item.dueDate,
         paymentDate: item.status === "Paid" ? item.dueDate : "-",
         category: "maintenance",
-        categoryLabel: "🛠️ Manutenzione Inquilino (Quota)",
+        categoryLabel: "Manutenzione Inquilino (Quota)",
         title: item.title,
         description: item.description || "Quota manutenzione ripartita a carico inquilino",
         amount: item.amount,
@@ -772,8 +782,9 @@ Cordiali saluti.`;
               </div>
             </div>
             {copiedText && (
-              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[10px] px-2.5 py-1 rounded-lg self-start sm:self-auto animate-pulse shrink-0">
-                ✓ Copiato con successo!
+              <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[10px] px-2.5 py-1 rounded-lg self-start sm:self-auto animate-pulse shrink-0">
+                <Check size={11} className="text-emerald-700 shrink-0" />
+                <span>Copiato con successo!</span>
               </span>
             )}
           </div>
@@ -800,7 +811,10 @@ Cordiali saluti.`;
                   }}
                   className="flex-1 min-w-[110px] inline-flex items-center justify-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2 px-3 rounded-lg shadow-xs transition-colors cursor-pointer"
                 >
-                  <span>Invia WhatsApp 💬</span>
+                  <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <MessageCircle size={11} className="text-white" />
+                  </span>
+                  <span>Invia WhatsApp</span>
                 </button>
 
                 <button
@@ -811,7 +825,10 @@ Cordiali saluti.`;
                   }}
                   className="flex-1 min-w-[110px] inline-flex items-center justify-center space-x-1 bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs py-2 px-3 rounded-lg shadow-xs transition-colors cursor-pointer"
                 >
-                  <span>Invia Email ✉️</span>
+                  <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <Mail size={11} className="text-white" />
+                  </span>
+                  <span>Invia Email</span>
                 </button>
 
                 <button
@@ -851,9 +868,10 @@ Cordiali saluti.`;
                           const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
                           window.open(waUrl, "_blank");
                         }}
-                        className="flex-1 inline-flex items-center justify-center bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-250 font-bold text-[10px] py-1.5 px-2 rounded-md transition-all cursor-pointer"
+                        className="flex-1 inline-flex items-center justify-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-250 font-bold text-[10px] py-1.5 px-2 rounded-md transition-all cursor-pointer"
                       >
-                        <span>WhatsApp 💬</span>
+                        <MessageCircle size={11} className="text-emerald-800 shrink-0" />
+                        <span>WhatsApp</span>
                       </button>
 
                       <button
@@ -862,9 +880,10 @@ Cordiali saluti.`;
                           const mailUrl = `mailto:?subject=${encodeURIComponent(`Aggiornamento Mastrino Immobile - ${property?.name || ""}`)}&body=${encodeURIComponent(text)}`;
                           window.open(mailUrl, "_blank");
                         }}
-                        className="flex-1 inline-flex items-center justify-center bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold text-[10px] py-1.5 px-2 rounded-md transition-all cursor-pointer"
+                        className="flex-1 inline-flex items-center justify-center gap-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold text-[10px] py-1.5 px-2 rounded-md transition-all cursor-pointer"
                       >
-                        <span>Email ✉️</span>
+                        <Mail size={11} className="text-sky-800 shrink-0" />
+                        <span>Email</span>
                       </button>
 
                       <button
@@ -898,9 +917,19 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                       setCopiedText("both");
                       setTimeout(() => setCopiedText(null), 3000);
                     }}
-                    className="w-full text-center bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] py-2 rounded-lg transition-colors cursor-pointer mt-1"
+                    className="w-full inline-flex items-center justify-center gap-1.5 text-center bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] py-2 rounded-lg transition-colors cursor-pointer mt-1"
                   >
-                    {copiedText === "both" ? "✓ Riepilogo Copiato per Entrambi!" : "📋 Copia Riepilogo per Entrambi i Proprietari"}
+                    {copiedText === "both" ? (
+                      <>
+                        <Check size={11} className="text-white shrink-0" />
+                        <span>Riepilogo Copiato per Entrambi!</span>
+                      </>
+                    ) : (
+                      <>
+                        <ClipboardList size={11} className="text-white shrink-0" />
+                        <span>Copia Riepilogo per Entrambi i Proprietari</span>
+                      </>
+                    )}
                   </button>
                 )}
 
@@ -1075,25 +1104,32 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
             }`}>
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider opacity-85">Situazione Contabile (Saldo)</span>
-                <p className="text-xl font-black mt-1">
-                  {isInPari 
-                    ? "In Pari ✓" 
-                    : `In ritardo di €${Math.abs(currentBalance).toLocaleString("it-IT", { minimumFractionDigits: 2 })}`
-                  }
+                <p className="text-xl font-black mt-1 inline-flex items-center gap-1.5">
+                  {isInPari ? (
+                    <>
+                      <span>In Pari</span>
+                      <Check size={16} className="text-emerald-600 shrink-0" />
+                    </>
+                  ) : (
+                    <span>{`In ritardo di €${Math.abs(currentBalance).toLocaleString("it-IT", { minimumFractionDigits: 2 })}`}</span>
+                  )}
                 </p>
               </div>
               <div className="mt-2 text-[10px] font-extrabold uppercase tracking-wide">
                 {isInPari ? (
-                  <span className="text-emerald-700 bg-emerald-100/85 px-2 py-0.5 rounded-md inline-block border border-emerald-200">
-                    👍 È in pari e tutto ok!
+                  <span className="text-emerald-700 bg-emerald-100/85 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-emerald-200">
+                    <CheckCircle2 size={11} className="text-emerald-700 shrink-0" />
+                    <span>È in pari e tutto ok!</span>
                   </span>
                 ) : currentBalance < 0 ? (
-                  <span className="text-rose-700 bg-rose-100/85 px-2 py-0.5 rounded-md inline-block border border-rose-200">
-                    ⚠️ Risultano insoluti o pendenze
+                  <span className="text-rose-700 bg-rose-100/85 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-rose-200">
+                    <AlertTriangle size={11} className="text-rose-700 shrink-0" />
+                    <span>Risultano insoluti o pendenze</span>
                   </span>
                 ) : (
-                  <span className="text-indigo-700 bg-indigo-150 px-2 py-0.5 rounded-md inline-block">
-                    ✨ Eccedenza / Credito
+                  <span className="text-indigo-700 bg-indigo-150 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                    <CheckCircle2 size={11} className="text-indigo-700 shrink-0" />
+                    <span>Eccedenza / Credito</span>
                   </span>
                 )}
               </div>
@@ -1105,24 +1141,28 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
             {/* Category tabs */}
             <div className="flex flex-wrap gap-1.5">
               {[
-                { id: "all", label: "Tutti i Movimenti 📋" },
-                { id: "rent", label: "Affitti 💶" },
-                { id: "condo", label: "Condominio 🏢" },
-                { id: "registration", label: "Registrazione Contratto 📄" },
-                { id: "maintenance", label: "Manutenzioni 🛠️" }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveLedgerCategory(tab.id as any)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                    activeLedgerCategory === tab.id
-                      ? "bg-slate-900 text-white shadow-xs"
-                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+                { id: "all", label: "Tutti i Movimenti", icon: ClipboardList },
+                { id: "rent", label: "Affitti", icon: Euro },
+                { id: "condo", label: "Condominio", icon: Building2 },
+                { id: "registration", label: "Registrazione Contratto", icon: FileText },
+                { id: "maintenance", label: "Manutenzioni", icon: Wrench }
+              ].map(tab => {
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveLedgerCategory(tab.id as any)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                      activeLedgerCategory === tab.id
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    <TabIcon size={12} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Query Search */}
@@ -1143,7 +1183,7 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
           {/* CONTROL BAR FOR LEDGER SCALE & PRINT PREVIEW (no-print) */}
           <div className="bg-slate-50/50 p-3.5 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
             <div className="flex items-center space-x-2.5">
-              <span className="text-sm shrink-0">🎚️</span>
+              <SlidersHorizontal size={16} className="text-slate-600 shrink-0" />
               <div>
                 <span className="text-xs font-extrabold text-slate-800 block leading-none">Scala Caratteri Mastrino (Anteprima di Stampa)</span>
                 <span className="text-[10px] text-slate-500 mt-1 block">Adatta e ridimensiona i testi del mastrino per una visualizzazione ottimizzata senza sprechi.</span>
@@ -1220,6 +1260,11 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
 
                       const mPaidAmount = m.status === "Paid" ? m.amount : 0;
                       const isRowInPari = Math.abs(m.balance) < 0.01;
+                      const CategoryIcon = m.category === "rent" ? Euro
+                        : m.category === "condo" ? Building2
+                        : m.category === "registration" ? FileText
+                        : Wrench;
+                      const categoryIconColor = m.category === "maintenance" ? "text-slate-600" : "text-indigo-700";
 
                       return (
                         <tr key={`${m.id}-${idx}`} className="hover:bg-slate-50 transition-colors">
@@ -1227,14 +1272,30 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                             {new Date(m.date).toLocaleDateString("it-IT")}
                           </td>
                           <td className="border border-slate-300 whitespace-nowrap" style={{ padding: `${ledgerScale * 11}px` }}>
-                            <span style={{ padding: `${ledgerScale * 3}px ${ledgerScale * 7}px`, fontSize: `${ledgerScale * 8.5}px`, border: "1px solid currentColor" }} className={`rounded font-bold uppercase tracking-wider ${statusBadge}`}>
-                              {m.status === "Paid" ? "✓ Saldato" : m.status === "Overdue" ? "⚠ Insoluto" : "⏳ Pendente"}
+                            <span style={{ padding: `${ledgerScale * 3}px ${ledgerScale * 7}px`, fontSize: `${ledgerScale * 8.5}px`, border: "1px solid currentColor" }} className={`inline-flex items-center gap-1 rounded font-bold uppercase tracking-wider ${statusBadge}`}>
+                              {m.status === "Paid" ? (
+                                <>
+                                  <Check size={ledgerScale * 10} className="shrink-0" />
+                                  <span>Saldato</span>
+                                </>
+                              ) : m.status === "Overdue" ? (
+                                <>
+                                  <AlertTriangle size={ledgerScale * 10} className="shrink-0" />
+                                  <span>Insoluto</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Clock size={ledgerScale * 10} className="shrink-0" />
+                                  <span>Pendente</span>
+                                </>
+                              )}
                             </span>
                           </td>
                           <td className="border border-slate-300 font-sans" style={{ padding: `${ledgerScale * 11}px` }}>
                             <div className="flex items-center space-x-1.5 mb-1" style={{ marginBottom: `${ledgerScale * 4}px` }}>
-                              <span className="bg-slate-100 text-slate-800 border border-slate-200 px-1.5 py-0.5 rounded font-semibold" style={{ fontSize: `${ledgerScale * 8.5}px` }}>
-                                {m.categoryLabel}
+                              <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 border border-slate-200 px-1.5 py-0.5 rounded font-semibold" style={{ fontSize: `${ledgerScale * 8.5}px` }}>
+                                <CategoryIcon size={ledgerScale * 10} className={`${categoryIconColor} shrink-0`} />
+                                <span>{m.categoryLabel}</span>
                               </span>
                             </div>
                             <span className="font-extrabold text-slate-900 block leading-tight" style={{ fontSize: `${ledgerScale * 13}px` }}>{m.title}</span>
@@ -1258,8 +1319,13 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                           }`}>
                             <div className="leading-tight">
                               <span style={{ fontSize: `${ledgerScale * 13.5}px` }}>€{m.balance.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</span>
-                              <span className="block font-bold uppercase" style={{ fontSize: `${ledgerScale * 8}px`, marginTop: `${ledgerScale * 2}px` }}>
-                                {isRowInPari ? "In pari ✓" : m.balance < 0 ? "In debito" : "In credito"}
+                              <span className="inline-flex items-center gap-1 font-bold uppercase" style={{ fontSize: `${ledgerScale * 8}px`, marginTop: `${ledgerScale * 2}px` }}>
+                                {isRowInPari ? (
+                                  <>
+                                    <span>In pari</span>
+                                    <Check size={ledgerScale * 9} className="shrink-0" />
+                                  </>
+                                ) : m.balance < 0 ? "In debito" : "In credito"}
                               </span>
                             </div>
                           </td>
@@ -1330,7 +1396,7 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className={`w-10 h-10 ${tenant.isCompany ? "bg-amber-50 text-amber-600" : "bg-indigo-50 text-indigo-600"} rounded-full flex items-center justify-center font-bold`}>
-                          {tenant.isCompany ? "🏢" : (tenant.name.replace(/[^a-zA-Z]/g, "").slice(0, 1).toUpperCase() || "I")}
+                          {tenant.isCompany ? <Building2 size={18} /> : (tenant.name.replace(/[^a-zA-Z]/g, "").slice(0, 1).toUpperCase() || "I")}
                         </div>
                         <div>
                           <h3 className={`font-sans font-extrabold text-base leading-snug transition-colors duration-300 ${
@@ -1340,7 +1406,11 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                               ? "text-rose-500 font-bold flex items-center gap-1.5"
                               : "text-slate-900"
                           }`}>
-                            {cls.status === "critical" && <span className="text-sm shrink-0" title="Contenzioso Legale Attivo">⚖️</span>}
+                            {cls.status === "critical" && (
+                              <span className="shrink-0" title="Contenzioso Legale Attivo">
+                                <Scale size={14} className="text-rose-600" />
+                              </span>
+                            )}
                             <span>{tenant.name}</span>
                             {tenant.isCompany && (
                               <span className="ml-1.5 inline-block text-[9px] font-extrabold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-sm uppercase tracking-wide shrink-0">Società</span>
@@ -1350,7 +1420,8 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                                 className="ml-1.5 inline-flex items-center gap-1 text-[9px] font-extrabold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-sm uppercase tracking-wide shrink-0"
                                 title="Nessun immobile collegato a questo inquilino"
                               >
-                                🏠❗ Immobile da assegnare
+                                <AlertTriangle size={10} className="text-amber-800 shrink-0" />
+                                <span>Immobile da assegnare</span>
                               </span>
                             )}
                           </h3>
@@ -1367,7 +1438,10 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                         title="Analizza Mastrino Contabile Completo"
                       >
                         <Receipt size={13} />
-                        <span>Analizza 🔍</span>
+                        <span>Analizza</span>
+                        <span className="w-[16px] h-[16px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                          <Search size={9} className="text-white" />
+                        </span>
                       </button>
                     </div>
 
@@ -1380,8 +1454,13 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                           <span className="text-[10px] font-black block mt-0.5 leading-tight">{cls.label}</span>
                         </div>
                       </div>
-                      <span className="text-[9px] font-black opacity-90 px-1.5 py-0.5 rounded-md bg-white/45 uppercase tracking-wider leading-none shrink-0">
-                        {cls.status === "green" ? "OK ✓" : cls.status === "orange" ? "ATTESA" : cls.status === "red" ? "RITARDO" : "LEGALE"}
+                      <span className="inline-flex items-center gap-1 text-[9px] font-black opacity-90 px-1.5 py-0.5 rounded-md bg-white/45 uppercase tracking-wider leading-none shrink-0">
+                        {cls.status === "green" ? (
+                          <>
+                            <span>OK</span>
+                            <Check size={9} className="shrink-0" />
+                          </>
+                        ) : cls.status === "orange" ? "ATTESA" : cls.status === "red" ? "RITARDO" : "LEGALE"}
                       </span>
                     </div>
 
@@ -1428,7 +1507,10 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                           )}
                           {tenant.visuraCameraleFileName && (
                             <div className="text-[9px] bg-emerald-50 text-emerald-800 p-1.5 rounded-md flex items-center justify-between mt-1 border border-emerald-100">
-                              <span className="truncate max-w-[140px]" title={tenant.visuraCameraleFileName}>📄 {tenant.visuraCameraleFileName}</span>
+                              <span className="inline-flex items-center gap-1 truncate max-w-[140px]" title={tenant.visuraCameraleFileName}>
+                                <FileText size={10} className="text-emerald-700 shrink-0" />
+                                <span className="truncate">{tenant.visuraCameraleFileName}</span>
+                              </span>
                               <span className="font-bold text-[7px] uppercase bg-emerald-200 px-1 py-0.5 rounded-sm">Visura</span>
                             </div>
                           )}
@@ -1513,7 +1595,8 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                         : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                     }`}
                   >
-                    👤 Persona Fisica
+                    <User size={14} />
+                    <span>Persona Fisica</span>
                   </button>
                   <button
                     type="button"
@@ -1524,7 +1607,8 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                         : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                     }`}
                   >
-                    🏢 Società
+                    <Building2 size={14} />
+                    <span>Società</span>
                   </button>
                 </div>
               </div>
@@ -1665,32 +1749,58 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                         type="button"
                         onClick={() => setScannerOpenFor("identity")}
                         disabled={processingScan}
-                        className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-3 py-1.5 rounded-lg"
+                        className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-3 py-1.5 rounded-lg"
                       >
-                        {processingScan ? "⏳ Elaborazione..." : "📷 Fotografa Documento d'Identità"}
+                        {processingScan ? (
+                          <>
+                            <Loader2 size={11} className="animate-spin text-white" />
+                            <span>Elaborazione...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Camera size={11} className="text-white" />
+                            <span>Fotografa Documento d'Identità</span>
+                          </>
+                        )}
                       </button>
                       {isForeign && (
                         <button
                           type="button"
                           onClick={() => setScannerOpenFor("permit")}
                           disabled={processingScan}
-                          className="text-[10px] font-bold bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white px-3 py-1.5 rounded-lg"
+                          className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white px-3 py-1.5 rounded-lg"
                         >
-                          {processingScan ? "⏳ Elaborazione..." : "📷 Fotografa Permesso di Soggiorno"}
+                          {processingScan ? (
+                            <>
+                              <Loader2 size={11} className="animate-spin text-white" />
+                              <span>Elaborazione...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Camera size={11} className="text-white" />
+                              <span>Fotografa Permesso di Soggiorno</span>
+                            </>
+                          )}
                         </button>
                       )}
                     </div>
 
                     {identityDocument.number && (
-                      <p className="text-[10px] text-slate-500">
-                        ✓ {identityDocument.type || "Documento"} n. {identityDocument.number}
-                        {identityDocument.expiryDate ? ` — scade il ${new Date(identityDocument.expiryDate).toLocaleDateString("it-IT")}` : ""}
+                      <p className="text-[10px] text-slate-500 inline-flex items-start gap-1">
+                        <Check size={11} className="text-emerald-600 shrink-0 mt-0.5" />
+                        <span>
+                          {identityDocument.type || "Documento"} n. {identityDocument.number}
+                          {identityDocument.expiryDate ? ` — scade il ${new Date(identityDocument.expiryDate).toLocaleDateString("it-IT")}` : ""}
+                        </span>
                       </p>
                     )}
                     {isForeign && residencePermit.number && (
-                      <p className="text-[10px] text-slate-500">
-                        ✓ Permesso di soggiorno n. {residencePermit.number}
-                        {residencePermit.validity === "illimitata" ? " — validità illimitata" : (residencePermit.validity ? ` — scade il ${new Date(residencePermit.validity).toLocaleDateString("it-IT")}` : "")}
+                      <p className="text-[10px] text-slate-500 inline-flex items-start gap-1">
+                        <Check size={11} className="text-emerald-600 shrink-0 mt-0.5" />
+                        <span>
+                          Permesso di soggiorno n. {residencePermit.number}
+                          {residencePermit.validity === "illimitata" ? " — validità illimitata" : (residencePermit.validity ? ` — scade il ${new Date(residencePermit.validity).toLocaleDateString("it-IT")}` : "")}
+                        </span>
                       </p>
                     )}
                     {tenantDocuments.length > 0 && (
@@ -1702,9 +1812,10 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                             href={doc.storageLink || "#"}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block text-[10px] text-indigo-600 hover:underline truncate"
+                            className="flex items-center gap-1 text-[10px] text-indigo-600 hover:underline truncate"
                           >
-                            📎 {doc.category} — {doc.fileName}
+                            <Paperclip size={10} className="text-slate-600 shrink-0" />
+                            <span className="truncate">{doc.category} — {doc.fileName}</span>
                           </a>
                         ))}
                       </div>
@@ -1832,8 +1943,15 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                         className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                       />
                       <div className="space-y-1">
-                        <p className="text-xs font-bold text-slate-700">
-                          {visuraCameraleFileName ? `📄 ${visuraCameraleFileName}` : "Seleziona o trascina la Visura Camerale"}
+                        <p className="text-xs font-bold text-slate-700 inline-flex items-center gap-1.5">
+                          {visuraCameraleFileName ? (
+                            <>
+                              <FileText size={13} className="text-indigo-700 shrink-0" />
+                              <span>{visuraCameraleFileName}</span>
+                            </>
+                          ) : (
+                            <span>Seleziona o trascina la Visura Camerale</span>
+                          )}
                         </p>
                         <p className="text-[10px] text-slate-400">PDF, PNG, JPG fino a 10MB</p>
                       </div>
@@ -1942,8 +2060,9 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
 
                   {guarantorDocuments.map(doc => (
                     <div key={doc.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs">
-                      <span className="truncate">
-                        📄 {doc.name} <span className="text-slate-400">({doc.type})</span>
+                      <span className="inline-flex items-center gap-1 truncate">
+                        <FileText size={11} className="text-indigo-700 shrink-0" />
+                        <span className="truncate">{doc.name} <span className="text-slate-400">({doc.type})</span></span>
                       </span>
                       <button
                         type="button"

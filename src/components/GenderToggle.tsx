@@ -1,4 +1,5 @@
 import React from "react";
+import { X } from "lucide-react";
 
 interface Props {
   value?: "M" | "F";
@@ -34,7 +35,9 @@ export default function GenderToggle({ value, onChange, isCompany, label = "Gene
       </div>
       {value && (
         <button type="button" onClick={() => onChange(undefined)} title="Rimuovi selezione"
-          className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors">✕</button>
+          className="text-[10px] font-bold text-slate-400 hover:text-rose-500 transition-colors">
+          <X size={11} />
+        </button>
       )}
     </div>
   );

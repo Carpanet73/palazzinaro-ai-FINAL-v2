@@ -1,15 +1,16 @@
 
 import React, { useState, useEffect, useMemo } from "react";
-import { 
-  Plus, 
-  CalendarClock, 
-  DollarSign, 
-  Calendar, 
-  Landmark, 
-  Check, 
-  X, 
-  AlertCircle, 
-  Trash2, 
+import {
+  Plus,
+  CalendarClock,
+  DollarSign,
+  Calendar,
+  Landmark,
+  Check,
+  X,
+  AlertCircle,
+  AlertTriangle,
+  Trash2,
   ArrowRight,
   Printer,
   ChevronDown,
@@ -21,7 +22,16 @@ import {
   Camera,
   FileText,
   Image as ImageIcon,
-  Sparkles
+  Sparkles,
+  Lock,
+  Unlock,
+  Building2,
+  User,
+  Scale,
+  Search,
+  RefreshCw,
+  BarChart3,
+  CheckCircle2
 } from "lucide-react";
 import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner, Contract, DeliveryReport, Lawyer } from "../types";
 
@@ -963,7 +973,7 @@ export default function FastClosingView({
     window.print();
   };
 
-  // ⚠️⚠️⚠️ CORREZIONE AO — LIMITE GIORNO 20 TEMPORANEAMENTE SBLOCCATO PER TEST ⚠️⚠️⚠️
+  // CORREZIONE AO — LIMITE GIORNO 20 TEMPORANEAMENTE SBLOCCATO PER TEST
   // Sbloccato su richiesta esplicita dell'utente il 25/07/2026 per testare il passaggio
   // immediato tra un mese e l'altro (es. Luglio -> Agosto) senza aspettare il giorno 20.
   // RIMETTERE a `false` non appena il test è concluso — a regime la regola del blocco fino
@@ -1026,7 +1036,7 @@ export default function FastClosingView({
 
       {/* CORREZIONE S — Intestazione ben visibile: su quale Fast Closing si sta lavorando */}
       <div className="no-print bg-slate-950 text-white rounded-2xl px-6 py-4 flex items-center gap-3 shadow-md">
-        <span className="text-2xl">📅</span>
+        <Calendar size={22} className="text-indigo-400 shrink-0" />
         <div>
           <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Stai modificando</p>
           <h1 className="text-lg font-black uppercase tracking-wide text-white">{currentFastClosingLabel}</h1>
@@ -1090,7 +1100,10 @@ export default function FastClosingView({
               <span>Chiusura Anticipata (Dal Giorno 20)</span>
             </span>
             {timeLeftManual.unlocked ? (
-              <p className="text-xs text-emerald-400 font-bold mt-3">✓ Sbloccata! Puoi effettuare la chiusura manuale.</p>
+              <p className="text-xs text-emerald-400 font-bold mt-3 flex items-center gap-1.5">
+                <Check size={13} className="shrink-0" />
+                <span>Sbloccata! Puoi effettuare la chiusura manuale.</span>
+              </p>
             ) : (
               <div className="flex space-x-2.5 mt-2.5 text-center">
                 {[
@@ -1119,7 +1132,13 @@ export default function FastClosingView({
                   : "bg-red-600 hover:bg-red-500 text-white"
               }`}
             >
-              <span>{isClosingButtonDisabled ? "🔒" : "🔓"}</span>
+              <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                {isClosingButtonDisabled ? (
+                  <Lock size={11} className="text-slate-300" />
+                ) : (
+                  <Unlock size={11} className="text-white" />
+                )}
+              </span>
               <span>Chiudi {currentFastClosingLabel}</span>
             </button>
           </div>
@@ -1215,7 +1234,11 @@ export default function FastClosingView({
                 {/* Group header bar */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 mb-4">
                   <div className="flex items-center space-x-3">
-                    <span className="text-xl">{isGeneral ? "🏢" : "👤"}</span>
+                    {isGeneral ? (
+                      <Building2 size={20} className="text-indigo-700 shrink-0" />
+                    ) : (
+                      <User size={20} className="text-indigo-700 shrink-0" />
+                    )}
                     <div>
                       <h4 className="font-black text-sm text-slate-900">{tenantName}</h4>
                       {!isGeneral && group.tenant?.fiscalCode && (
@@ -1360,7 +1383,7 @@ export default function FastClosingView({
                                 <span className={`font-bold text-xs ${
                                   isCriticalTenantItem ? "text-rose-600 font-black flex items-center gap-1" : "text-slate-950"
                                 }`}>
-                                  {isCriticalTenantItem && <span className="text-sm">⚖️</span>}
+                                  {isCriticalTenantItem && <Scale size={13} className="text-rose-600 shrink-0" />}
                                   {item.title}
                                 </span>
                                 {isCriticalTenantItem && (
@@ -1370,10 +1393,11 @@ export default function FastClosingView({
                                 )}
                                 {isCriticalPendingDebtor && (
                                   <span
-                                    className="text-[7px] bg-rose-600 text-white px-1.5 py-0.5 rounded font-black uppercase tracking-wider animate-pulse"
+                                    className="inline-flex items-center gap-1 text-[7px] bg-rose-600 text-white px-1.5 py-0.5 rounded font-black uppercase tracking-wider animate-pulse"
                                     title={`${debtorNameForItem} ha già ricevuto il Primo Sollecito: valuta se inviare anche questa voce in Solleciti`}
                                   >
-                                    ⚠️ Inquilino Critico
+                                    <AlertTriangle size={8} className="shrink-0" />
+                                    Inquilino Critico
                                   </span>
                                 )}
                               </div>
@@ -1454,10 +1478,11 @@ export default function FastClosingView({
                                       {needsDirectLawyerSend && assignedLawyerForItem && activeLegalCaseForItem && (
                                         <button
                                           onClick={() => onSendItemDirectlyToLawyer?.(item, activeLegalCaseForItem, assignedLawyerForItem)}
-                                          className="px-2 py-1 bg-rose-800 hover:bg-rose-700 text-white rounded-sm text-[9px] font-black tracking-wide cursor-pointer animate-pulse"
+                                          className="px-2 py-1 bg-rose-800 hover:bg-rose-700 text-white rounded-sm text-[9px] font-black tracking-wide cursor-pointer animate-pulse inline-flex items-center gap-1"
                                           title={`Invia direttamente a ${assignedLawyerForItem.studioName}, senza rifare i Solleciti`}
                                         >
-                                          ⚖️ Invia all'Avvocato
+                                          <Scale size={10} className="shrink-0" />
+                                          Invia all'Avvocato
                                         </button>
                                       )}
                                     </>
@@ -1588,8 +1613,9 @@ export default function FastClosingView({
                       }`}
                     >
                       <div className="min-w-0">
-                        <div className={`text-[10px] font-bold ${cumulativeMovementId === m.id ? "text-indigo-200" : "text-slate-400"}`}>
-                          📅 {new Date(m.date).toLocaleDateString("it-IT")}
+                        <div className={`text-[10px] font-bold flex items-center gap-1 ${cumulativeMovementId === m.id ? "text-indigo-200" : "text-slate-400"}`}>
+                          <Calendar size={10} className="shrink-0" />
+                          {new Date(m.date).toLocaleDateString("it-IT")}
                         </div>
                         <div className="text-xs font-semibold truncate">{m.description}</div>
                       </div>
@@ -1680,14 +1706,16 @@ export default function FastClosingView({
                     
                     if (movementAmt < selectionTotal) {
                       return (
-                        <div className="mt-2 pt-2 border-t border-dashed border-slate-300 text-[10px] text-amber-700 font-bold leading-relaxed">
-                          ⚠️ Riconciliazione Parziale: L'importo del bonifico è inferiore di €{(selectionTotal - movementAmt).toFixed(2)}. Il sistema registrerà gli elementi come pagati e genererà automaticamente una nuova riga contabile per il residuo nel prossimo Fast Closing.
+                        <div className="mt-2 pt-2 border-t border-dashed border-slate-300 text-[10px] text-amber-700 font-bold leading-relaxed flex items-start gap-1.5">
+                          <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                          <span>Riconciliazione Parziale: L'importo del bonifico è inferiore di €{(selectionTotal - movementAmt).toFixed(2)}. Il sistema registrerà gli elementi come pagati e genererà automaticamente una nuova riga contabile per il residuo nel prossimo Fast Closing.</span>
                         </div>
                       );
                     } else if (movementAmt > selectionTotal) {
                       return (
-                        <div className="mt-2 pt-2 border-t border-dashed border-slate-300 text-[10px] text-emerald-700 font-semibold leading-relaxed">
-                          ✓ L'importo del bonifico copre interamente la selezione con un'eccedenza di €{(movementAmt - selectionTotal).toFixed(2)}.
+                        <div className="mt-2 pt-2 border-t border-dashed border-slate-300 text-[10px] text-emerald-700 font-semibold leading-relaxed flex items-start gap-1.5">
+                          <Check size={12} className="shrink-0 mt-0.5" />
+                          <span>L'importo del bonifico copre interamente la selezione con un'eccedenza di €{(movementAmt - selectionTotal).toFixed(2)}.</span>
                         </div>
                       );
                     }
@@ -1854,7 +1882,10 @@ export default function FastClosingView({
           <div className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
             <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div>
-                <h3 className="font-sans font-black text-base">🔍 Anteprima Chiusura Fast Closing</h3>
+                <h3 className="font-sans font-black text-base flex items-center gap-2">
+                  <Search size={18} className="text-indigo-400 shrink-0" />
+                  <span>Anteprima Chiusura Fast Closing</span>
+                </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">Verifica il consolidamento contabile prima di procedere.</p>
               </div>
               <button onClick={() => setShowPreCloseModal(false)} className="text-slate-400 hover:text-white transition-colors">
@@ -1866,8 +1897,9 @@ export default function FastClosingView({
               {/* Canoni / Voci Rigide */}
               {preCloseData.rigidItems.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-xs font-black text-rose-600 uppercase tracking-wider">
-                    🚨 Voci Rigide (Canoni d'Affitto) — Passano in Solleciti & Prossimo Mese
+                  <h4 className="text-xs font-black text-rose-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertTriangle size={13} className="shrink-0" />
+                    <span>Voci Rigide (Canoni d'Affitto) — Passano in Solleciti & Prossimo Mese</span>
                   </h4>
                   <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
                     <table className="w-full text-left border-collapse">
@@ -1895,8 +1927,9 @@ export default function FastClosingView({
               {/* Spese Accessorie Overdue */}
               {preCloseData.accessoryOverdueItems.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-xs font-black text-amber-600 uppercase tracking-wider">
-                    ⚠️ Spese Accessorie Segnate come INSOLUTE — Passano in Solleciti
+                  <h4 className="text-xs font-black text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertTriangle size={13} className="shrink-0" />
+                    <span>Spese Accessorie Segnate come INSOLUTE — Passano in Solleciti</span>
                   </h4>
                   <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
                     <table className="w-full text-left border-collapse">
@@ -1924,8 +1957,9 @@ export default function FastClosingView({
               {/* Spese Accessorie Pending to be Postponed */}
               {preCloseData.accessoryPendingItems.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-wider">
-                    🔄 Spese Accessorie in ATTESA — Rinviate al Mese Successivo (Nessuna Azione)
+                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <RefreshCw size={13} className="shrink-0" />
+                    <span>Spese Accessorie in ATTESA — Rinviate al Mese Successivo (Nessuna Azione)</span>
                   </h4>
                   <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
                     <table className="w-full text-left border-collapse">
@@ -1953,8 +1987,9 @@ export default function FastClosingView({
               {/* Consolidated Solleciti */}
               {Object.keys(preCloseData.sollecitiGroups).length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-slate-150">
-                  <h4 className="text-xs font-black text-emerald-600 uppercase tracking-wider">
-                    📊 Solleciti Consolidati da Creare (Raggruppati per Inquilino)
+                  <h4 className="text-xs font-black text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <BarChart3 size={13} className="shrink-0" />
+                    <span>Solleciti Consolidati da Creare (Raggruppati per Inquilino)</span>
                   </h4>
                   <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-xs space-y-3">
                     {Object.keys(preCloseData.sollecitiGroups).map(debtorName => {
@@ -1987,9 +2022,12 @@ export default function FastClosingView({
               <button
                 type="button"
                 onClick={handleConfirmCloseFastClosing}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-black text-xs rounded-xl shadow-lg active:transition-all cursor-pointer"
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-black text-xs rounded-xl shadow-lg active:transition-all cursor-pointer inline-flex items-center gap-2"
               >
-                ✓ Conferma ed Esegui Chiusura
+                <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                  <Check size={11} className="text-white" />
+                </span>
+                <span>Conferma ed Esegui Chiusura</span>
               </button>
             </div>
           </div>
@@ -2002,7 +2040,10 @@ export default function FastClosingView({
           <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
             <div className="px-6 py-5 bg-emerald-900 text-white flex items-center justify-between">
               <div>
-                <h3 className="font-sans font-black text-base">✓ Chiusura Fast Closing Completata!</h3>
+                <h3 className="font-sans font-black text-base flex items-center gap-2">
+                  <CheckCircle2 size={18} className="text-emerald-300 shrink-0" />
+                  <span>Chiusura Fast Closing Completata!</span>
+                </h3>
                 <p className="text-[11px] text-emerald-200 mt-0.5">La contabilità del mese corrente è stata chiusa.</p>
               </div>
               <button onClick={() => setShowClosingSummary(false)} className="text-emerald-300 hover:text-white transition-colors">
@@ -2024,7 +2065,10 @@ export default function FastClosingView({
                     {reproposedItemsList.map((title, i) => (
                       <div key={i} className="flex justify-between font-semibold text-slate-700">
                         <span>{title}</span>
-                        <span className="text-rose-600">✓ Riportato</span>
+                        <span className="text-rose-600 inline-flex items-center gap-1">
+                          <Check size={11} className="shrink-0" />
+                          Riportato
+                        </span>
                       </div>
                     ))}
                   </div>
