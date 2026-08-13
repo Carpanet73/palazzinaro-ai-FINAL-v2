@@ -435,6 +435,12 @@ export interface BankMovement {
     id: string;
     title: string;
   };
+  // CORREZIONE (13/08/2026) — dettaglio completo dell'allocazione quando un bonifico viene
+  // ripartito su più voci (riconciliazione multi-voce con eventuale pagamento parziale su
+  // una di esse). Campo additivo: `reconciledWith` sopra resta invariato per compatibilità
+  // (voce singola = comportamento identico a prima), questo si popola solo quando le voci
+  // coinvolte sono più di una.
+  reconciledAllocations?: { itemId: string; itemTitle: string; paidAmount: number; fullyPaid: boolean }[];
   bankAccountId?: string; // collegato a un conto corrente specifico
   createdAt: string;
 }

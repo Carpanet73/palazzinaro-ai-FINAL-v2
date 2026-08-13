@@ -65,6 +65,7 @@ import MasterDataWizard from "./components/MasterDataWizard";
 import UniversalAddButton from "./components/UniversalAddButton";
 import { earlyTerminationReasonLabel } from "./lib/earlyTermination";
 import { formatLedgerLabel } from "./lib/ledgerLabel";
+import { allocatePayment, buildPartialPaymentNote } from "./lib/reconciliation";
 
 // Lucide Icons for Landing Page and Alerts
 import { Sparkles, CheckCircle2, ShieldCheck, Database, FileText, Menu, Building2, AlertCircle } from "lucide-react";
@@ -2324,6 +2325,129 @@ export default function App() {
     }
   };
 
+  // CORREZIONE (13/08/2026) — Riconciliazione cumulativa con pagamento parziale, motore
+  // condiviso `src/lib/reconciliation.ts`, usata sia da Fast Closing sia dall'Area Solleciti
+  // ("un solo flusso per ogni azione" — prima Fast Closing aveva una logica propria che
+  // segnava TUTTE le voci selezionate "Pagato" anche quando il bonifico non le copriva).
+  // Selezione voci: resta manuale (l'utente sceglie cosa includere), qui si decide solo come
+  // il pagamento si ripartisce tra le voci scelte quando non basta per tutte:
+  //   - voce coperta per intero → stato "Paid"
+  //   - voce coperta solo in parte → resta Pending/Overdue, ma l'importo si riduce al residuo
+  //     reale (mai segnata Paid finché non è saldata per intero) + nota testuale in descrizione
+  //   - voce non toccata dal pagamento (esaurito prima di arrivarci) → invariata
+  // Cascata Sollecito: sia il verso già esistente (mirror singolo item→reminder), sia il nuovo
+  // verso inverso (quando TUTTE le associatedItemsIds di un Sollecito sono Paid, il Sollecito
+  // stesso passa a Paid) — prima non esisteva alcuna cascata inversa.
+  const handleCumulativeReconcile = async (
+    itemIds: string[],
+    options: { movementId?: string | null; cashAmount?: number } = {}
+  ) => {
+    try {
+      const items = fastClosing.filter(item => itemIds.includes(item.id));
+      if (items.length === 0) return;
+
+      const movement = options.movementId ? movements.find(m => m.id === options.movementId) : null;
+      const paymentAmount = movement ? movement.amount : (options.cashAmount || 0);
+
+      const allocations = allocatePayment(
+        items.map(i => ({
+          id: i.id,
+          amount: i.amount,
+          dueDate: i.dueDate,
+          source: i.source,
+          title: i.title,
+          description: i.description
+        })),
+        paymentAmount
+      );
+
+      const fullyPaidIds: string[] = [];
+
+      for (const alloc of allocations) {
+        const item = items.find(i => i.id === alloc.itemId);
+        if (!item) continue;
+
+        if (alloc.fullyPaid) {
+          await updateDoc(doc(db, "fastClosing", item.id), { status: "Paid" });
+          fullyPaidIds.push(item.id);
+
+          // Cascata verso il Sollecito "mirror" a voce singola (comportamento già esistente)
+          if (item.source === "reminder" && item.sourceId) {
+            try {
+              await updateDoc(doc(db, "reminders", item.sourceId), {
+                status: "Paid",
+                followUpNotes: "Saldato tramite riconciliazione cumulativa."
+              });
+            } catch (e) {
+              console.error("Non-fatal error updating linked reminder status:", e);
+            }
+          }
+        } else if (alloc.paidAmount > 0) {
+          const note = buildPartialPaymentNote(alloc.paidAmount, movement ? "bonifico bancario" : "pagamento in contanti");
+          await updateDoc(doc(db, "fastClosing", item.id), {
+            amount: alloc.remainingAmount,
+            description: `${item.description || ""}\n${note}`.trim()
+          });
+        }
+        // alloc.paidAmount === 0 && !fullyPaid → voce non raggiunta dal pagamento, invariata
+      }
+
+      // Cascata inversa Voci→Sollecito: un Sollecito le cui associatedItemsIds sono TUTTE
+      // ormai Paid passa anch'esso a Paid (prima non esisteva alcun percorso che lo facesse).
+      if (fullyPaidIds.length > 0) {
+        const candidateReminders = reminders.filter(r =>
+          r.status !== "Paid" &&
+          r.associatedItemsIds &&
+          r.associatedItemsIds.length > 0 &&
+          r.associatedItemsIds.some(id => fullyPaidIds.includes(id))
+        );
+        for (const reminder of candidateReminders) {
+          const allPaid = reminder.associatedItemsIds!.every(itemId => {
+            if (fullyPaidIds.includes(itemId)) return true;
+            const fcItem = fastClosing.find(fc => fc.id === itemId);
+            return fcItem?.status === "Paid";
+          });
+          if (allPaid) {
+            try {
+              await updateDoc(doc(db, "reminders", reminder.id), {
+                status: "Paid",
+                followUpNotes: "Saldato tramite riconciliazione cumulativa (tutte le voci associate risultano pagate)."
+              });
+            } catch (e) {
+              console.error("Non-fatal error updating parent reminder status:", e);
+            }
+          }
+        }
+      }
+
+      if (options.movementId) {
+        const singleItem = allocations.length === 1 ? items.find(i => i.id === allocations[0].itemId) : undefined;
+        await updateDoc(doc(db, "movements", options.movementId), {
+          reconciled: true,
+          reconciledWith: singleItem ? {
+            id: singleItem.id,
+            title: singleItem.title,
+            amount: allocations[0].paidAmount
+          } : null,
+          reconciledAllocations: allocations.map(a => {
+            const item = items.find(i => i.id === a.itemId);
+            return {
+              itemId: a.itemId,
+              itemTitle: item?.title || "",
+              paidAmount: a.paidAmount,
+              fullyPaid: a.fullyPaid
+            };
+          })
+        });
+      }
+
+      showSuccess("Riconciliazione completata!");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, "fastClosing");
+      showError("Errore durante la riconciliazione cumulativa: " + errInfo.error);
+    }
+  };
+
   const handleDeleteMovement = async (id: string) => {
     try {
       await deleteDoc(doc(db, "movements", id));
@@ -3398,6 +3522,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             onSetClosingItemStatusRaw={handleUpdateClosingItemStatusRaw}
             onPostponeClosingItem={handlePostponeClosingItem}
             onReconcileMovement={handleReconcileMovement}
+            onCumulativeReconcile={handleCumulativeReconcile}
             onDeleteClosingItem={handleDeleteClosingItem}
             onAddMovement={handleAddMovement}
             onAddReminder={handleAddReminder}
@@ -3406,7 +3531,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         )}
 
         {currentSection === "reminders" && (
-          <RemindersView 
+          <RemindersView
             reminders={reminders}
             tenants={tenants}
             owners={owners}
@@ -3418,6 +3543,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             onAddReminder={handleAddReminder}
             onUpdateReminderStatus={handleUpdateReminderStatus}
             onReconcileMovement={handleReconcileMovement}
+            onCumulativeReconcile={handleCumulativeReconcile}
             onAddLegalCase={handleAddLegalCase}
             onDeleteReminder={handleDeleteReminder}
             onAddMovement={handleAddMovement}
