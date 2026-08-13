@@ -34,6 +34,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner, Contract, DeliveryReport, Lawyer } from "../types";
+import { formatLedgerLabel, ITALIAN_MONTHS_FULL } from "../lib/ledgerLabel";
 
 interface FastClosingViewProps {
   fastClosing: FastClosingItem[];
@@ -92,10 +93,9 @@ export default function FastClosingView({
 
   // CORREZIONE AP — etichetta calcolata dal periodo attivo VERO e persistito, non più da
   // new Date() (che non "sa" se un mese è già stato chiuso in anticipo).
-  const italianMonthsFull = [
-    "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-    "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
-  ];
+  // CORREZIONE CP (13/08/2026) — elenco mesi centralizzato in src/lib/ledgerLabel.ts (era
+  // duplicato in più file: niente più stringhe potenzialmente disallineate).
+  const italianMonthsFull = ITALIAN_MONTHS_FULL;
   const activePeriod = fastClosingActivePeriod || (() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -685,11 +685,21 @@ export default function FastClosingView({
         nextMonthDate.setDate(5);
         const nextMonthDueDate = nextMonthDate.toISOString().split("T")[0];
 
+        const residueProperty = properties.find(p => p.id === cumulativeTenant.propertyId);
         await onAddClosingItem({
-          title: `Residuo Riconciliazione Parziale - Canone ${cumulativeTenant.name}`,
+          title: formatLedgerLabel({
+            debtorName: cumulativeTenant.name,
+            isCompany: cumulativeTenant.isCompany,
+            propertyAddress: residueProperty?.address,
+            tipologia: "Affitto (Residuo Riconciliazione Parziale)",
+            dateForPeriod: nextMonthDueDate
+          }),
           description: `Residuo insoluto dopo riconciliazione parziale con bonifico di €${movement.amount.toFixed(2)}.`,
           amount: residue,
           dueDate: nextMonthDueDate,
+          propertyId: cumulativeTenant.propertyId,
+          debtorId: cumulativeTenant.id,
+          debtorType: "tenant",
           source: "contract",
           status: "Pending"
         });
@@ -930,10 +940,16 @@ export default function FastClosingView({
         nextMonth.setMonth(nextMonth.getMonth() + 1);
         const nextMonthKey = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}`;
 
-        // Evita doppioni: non generare se esiste già una riga per questo contratto in questo mese
+        // Evita doppioni: non generare se esiste già una riga per questo contratto in questo
+        // mese. CORREZIONE CP (13/08/2026) — rimosso il controllo su fc.title.startsWith(...):
+        // dal momento della disdetta non vengono più generate righe canone per questo
+        // contratto (vedi handleEarlyTerminateContract), quindi source==="contract" +
+        // sourceId===contract.id + stesso mese è già una combinazione univoca, senza dover
+        // fare parsing del testo del titolo (che ora è solo l'etichetta di visualizzazione,
+        // vedi src/lib/ledgerLabel.ts).
         const alreadyExists = fastClosing.some(
-          fc => fc.sourceId === contract.id &&
-                fc.title.startsWith("Indennità di Occupazione") &&
+          fc => fc.source === "contract" &&
+                fc.sourceId === contract.id &&
                 fc.dueDate.startsWith(nextMonthKey)
         );
         if (alreadyExists) continue;
@@ -942,11 +958,18 @@ export default function FastClosingView({
         const description = contract.earlyTerminationDate
           ? `Contratto chiuso anticipatamente il ${referenceEndDate.toLocaleDateString("it-IT")} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`
           : `Contratto scaduto il ${referenceEndDate.toLocaleDateString("it-IT")} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`;
+        const contractProperty = properties.find(p => p.id === contract.propertyId);
         await onAddClosingItem({
-          title: `Indennità di Occupazione - ${contract.tenantName}`,
+          title: formatLedgerLabel({
+            debtorName: contract.tenantName,
+            propertyAddress: contractProperty?.address,
+            tipologia: "Indennità di Occupazione",
+            dateForPeriod: dueDate
+          }),
           description,
           amount: contract.rentAmount,
           dueDate,
+          propertyId: contract.propertyId,
           source: "contract",
           sourceId: contract.id,
           status: "Pending",

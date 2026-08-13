@@ -8,7 +8,8 @@ import {
   ShieldCheck, ShieldAlert, CreditCard, Receipt, FileUp, DollarSign,
   Home, Phone, Mail, Briefcase, FolderOpen, Save, Camera
 } from "lucide-react";
-import { Condominium, CondoRate, Property, Tenant, FastClosingItem, Administrator } from "../types";
+import { Condominium, CondoRate, Property, Tenant, Owner, FastClosingItem, Administrator } from "../types";
+import { formatLedgerLabel } from "../lib/ledgerLabel";
 
 interface CondominiumsViewProps {
   condominiums: Condominium[];
@@ -17,6 +18,9 @@ interface CondominiumsViewProps {
   expensePrefill?: { condoName: string; title: string; amount: number; date: string } | null;
   onClearExpensePrefill?: () => void;
   tenants: Tenant[];
+  // CORREZIONE CP (13/08/2026) — serve per risolvere il cognome del Proprietario nell'etichetta
+  // standard della riga contabile della quota condominiale a suo carico.
+  owners?: Owner[];
   fastClosing: FastClosingItem[];
   administrators?: Administrator[]; // CORREZIONE L
   onAddAdministrator?: (data: Omit<Administrator, "id" | "userId" | "createdAt">) => Promise<string | null>;
@@ -51,6 +55,7 @@ export default function CondominiumsView({
   expensePrefill,
   onClearExpensePrefill,
   tenants,
+  owners = [],
   fastClosing,
   administrators = [],
   onAddAdministrator,
@@ -315,6 +320,13 @@ export default function CondominiumsView({
     if (!activeProperty) return null;
     return tenants.find(t => t.propertyId === activeProperty.id);
   }, [activeProperty, tenants]);
+
+  // CORREZIONE CP (13/08/2026) — serve per il debtorId/debtorType e per il cognome nella
+  // riga contabile standard della quota condominiale a carico del Proprietario.
+  const activeOwner = useMemo(() => {
+    if (!activeProperty?.ownerId) return null;
+    return owners.find(o => o.id === activeProperty.ownerId) || null;
+  }, [activeProperty, owners]);
 
   // Calculate balances for each constituted property in real-time
   const propertyBalances = useMemo(() => {
@@ -639,12 +651,33 @@ export default function CondominiumsView({
     }
 
     try {
+      // CORREZIONE CP (13/08/2026) — etichetta standard "{Cognome}/{Via} {Civico} {Tipologia}
+      // {Mese} {Anno}" (Fase 2 punto 1) + debtorId/debtorType/propertyId popolati (mancavano
+      // del tutto prima), servono a statusHelper.ts e alla Dashboard per riconoscere la voce
+      // in modo strutturato invece di fare parsing del testo del titolo. Da quando il titolo
+      // non contiene più il testo libero della spesa (expenseTitle), servono due campi
+      // strutturati aggiuntivi per la Dashboard: expenseGroupKey (accoppia la riga Inquilino
+      // e la riga Proprietario della STESSA spesa) e groupLabel (testo libero della spesa,
+      // per la visualizzazione nel mastrino di dettaglio).
+      const expenseGroupKey = `condo-${activeCondo.id}-${expenseDueDate}-${expenseTitle}-${Date.now()}`;
+
       // 1. Add tenant share if applicable
       if (amountTenant > 0) {
         await onAddClosingItem({
           source: "condominium",
           sourceId: activeCondo.id,
-          title: `[Spese Condominiali] Rata Inquilino: ${expenseTitle} - ${activeProperty.name}`,
+          propertyId: activeProperty.id,
+          debtorId: activeTenant?.id || null,
+          debtorType: "tenant",
+          expenseGroupKey,
+          groupLabel: expenseTitle,
+          title: formatLedgerLabel({
+            debtorName: activeTenant?.name,
+            isCompany: activeTenant?.isCompany,
+            propertyAddress: activeProperty.address,
+            tipologia: "Spese Condominiali",
+            dateForPeriod: expenseDueDate
+          }),
           description: tenantDesc,
           amount: amountTenant,
           dueDate: expenseDueDate,
@@ -657,7 +690,18 @@ export default function CondominiumsView({
         await onAddClosingItem({
           source: "condominium",
           sourceId: activeCondo.id,
-          title: `[Spese Condominiali] Rata Proprietario: ${expenseTitle} - ${activeProperty.name}`,
+          propertyId: activeProperty.id,
+          debtorId: activeOwner?.id || null,
+          debtorType: "owner",
+          expenseGroupKey,
+          groupLabel: expenseTitle,
+          title: formatLedgerLabel({
+            debtorName: activeOwner?.name,
+            isCompany: activeOwner?.isCompany,
+            propertyAddress: activeProperty.address,
+            tipologia: "Spese Condominiali",
+            dateForPeriod: expenseDueDate
+          }),
           description: ownerDesc,
           amount: amountOwner,
           dueDate: expenseDueDate,

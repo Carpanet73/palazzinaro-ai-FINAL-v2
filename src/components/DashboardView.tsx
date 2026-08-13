@@ -837,12 +837,21 @@ export default function DashboardView({
     // split 90/10 fisso indipendentemente dal metodo di ripartizione realmente configurato
     // (bug: dato discostato dal mastrino reale — vietato da regola 2), con un fallback di 4
     // rate fittizie a importo zero e date 2026 fisse. CORREZIONE CM (08/08/2026).
+    // CORREZIONE CP (13/08/2026) — Fase 2 punto 1: da quando `title` è diventato l'etichetta
+    // standard "{Cognome}/{Via} {Civico} {Tipologia} {Mese} {Anno}" non contiene più il nome
+    // dell'immobile né i prefissi "Rata Inquilino/Proprietario" usati qui per filtrare e
+    // accoppiare le righe — sostituito con `propertyId` (già disponibile su ogni riga) per il
+    // filtro, e `debtorType`/`expenseGroupKey`/`groupLabel` (nuovi campi strutturati) per
+    // l'accoppiamento. Le righe storiche create PRIMA di questa correzione non hanno questi
+    // campi popolati: per loro resta un fallback sul vecchio parsing del titolo, così i dati
+    // già esistenti restano visibili nel mastrino esattamente come prima.
     const condoFastClosingRowsRaw = condoConstituted
-      ? fastClosing.filter(fc =>
-          fc.source === "condominium" &&
-          fc.sourceId === condoConstituted.id &&
-          fc.title.endsWith(` - ${p.name}`)
-        )
+      ? fastClosing.filter(fc => {
+          if (fc.source !== "condominium" || fc.sourceId !== condoConstituted.id) return false;
+          if (fc.propertyId) return fc.propertyId === p.id;
+          // Fallback legacy per righe create prima della CORREZIONE CP (senza propertyId)
+          return fc.title.endsWith(` - ${p.name}`);
+        })
       : [];
 
     const condoRatesGroupedMap = new Map<string, {
@@ -857,19 +866,33 @@ export default function DashboardView({
     }>();
 
     condoFastClosingRowsRaw.forEach(fc => {
-      const isTenantRow = fc.title.startsWith("[Spese Condominiali] Rata Inquilino:");
-      const isOwnerRow = fc.title.startsWith("[Spese Condominiali] Rata Proprietario:");
-      if (!isTenantRow && !isOwnerRow) return;
+      let isTenantRow: boolean;
+      let isOwnerRow: boolean;
+      let groupKey: string;
+      let displayTitle: string;
 
-      const core = fc.title
-        .replace("[Spese Condominiali] Rata Inquilino: ", "")
-        .replace("[Spese Condominiali] Rata Proprietario: ", "")
-        .replace(` - ${p.name}`, "");
-      const groupKey = `${fc.dueDate}::${core}`;
+      if (fc.debtorType === "tenant" || fc.debtorType === "owner") {
+        // Percorso strutturato (righe create dopo la CORREZIONE CP)
+        isTenantRow = fc.debtorType === "tenant";
+        isOwnerRow = fc.debtorType === "owner";
+        groupKey = fc.expenseGroupKey || `${fc.dueDate}::${fc.groupLabel || fc.title}`;
+        displayTitle = fc.groupLabel || fc.title;
+      } else {
+        // Fallback legacy per righe storiche (senza debtorType, create prima della correzione)
+        isTenantRow = fc.title.startsWith("[Spese Condominiali] Rata Inquilino:");
+        isOwnerRow = fc.title.startsWith("[Spese Condominiali] Rata Proprietario:");
+        if (!isTenantRow && !isOwnerRow) return;
+        const core = fc.title
+          .replace("[Spese Condominiali] Rata Inquilino: ", "")
+          .replace("[Spese Condominiali] Rata Proprietario: ", "")
+          .replace(` - ${p.name}`, "");
+        groupKey = `${fc.dueDate}::${core}`;
+        displayTitle = core;
+      }
 
       const existing = condoRatesGroupedMap.get(groupKey) || {
         key: groupKey,
-        title: core,
+        title: displayTitle,
         dueDate: fc.dueDate,
         amount: 0,
         tenantShare: 0,
