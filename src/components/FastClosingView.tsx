@@ -36,6 +36,8 @@ import {
 import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner, Contract, DeliveryReport, Lawyer } from "../types";
 import { formatLedgerLabel, ITALIAN_MONTHS_FULL } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 
 interface FastClosingViewProps {
   fastClosing: FastClosingItem[];
@@ -1004,8 +1006,19 @@ export default function FastClosingView({
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 3: colonne per stampa/esportazione universale
+  // del registro Fast Closing, tramite LedgerExportToolbar (sostituisce la vecchia sezione
+  // "printable-report" e il vecchio handlePrint locale, entrambi rimossi).
+  const fastClosingExportColumns: LedgerColumn[] = [
+    { key: "source", label: "Categoria", format: (i: FastClosingItem) => i.source },
+    { key: "title", label: "Dettagli Scadenza", format: (i: FastClosingItem) => i.title },
+    { key: "dueDate", label: "Scadenza", format: (i: FastClosingItem) => new Date(i.dueDate).toLocaleDateString("it-IT") },
+    { key: "status", label: "Stato", format: (i: FastClosingItem) => i.status },
+    { key: "amount", label: "Importo", align: "right", format: (i: FastClosingItem) => `€${i.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }
+  ];
+  const fastClosingExportTotals = {
+    title: "TOTALE CASSA PERIODO",
+    amount: `€${monthFilteredItems.reduce((s, i) => s + i.amount, 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}`
   };
 
   // CORREZIONE AO — LIMITE GIORNO 20 TEMPORANEAMENTE SBLOCCATO PER TEST
@@ -1021,54 +1034,6 @@ export default function FastClosingView({
   return (
     <div className="space-y-6" id="fast-closing-view-container">
       
-      {/* Printable Section - HIDDEN ON WEB, VISIBLE ON PRINT */}
-      <div className="hidden print:block p-10 bg-white text-slate-900 border border-slate-300" id="printable-report">
-        <div className="flex justify-between items-center pb-6">
-          <div>
-            <h1 className="text-xl font-bold font-sans uppercase">Palazzinaro AI - Registro Cassa Fast Closing</h1>
-            <p className="text-xs text-slate-500 mt-1">Generato il: {new Date().toLocaleDateString("it-IT")}</p>
-          </div>
-          <div className="text-right">
-            <span className="text-xs font-mono">Periodo: {currentFastClosingLabel}</span>
-          </div>
-        </div>
-
-        <table className="w-full text-left mt-8 text-xs border-collapse">
-          <thead>
-            <tr className="-2 border-slate-400 bg-slate-50 text-[10px] uppercase font-mono font-bold text-slate-700">
-              <th className="py-2.5">Categoria</th>
-              <th className="py-2.5">Dettagli Scadenza</th>
-              <th className="py-2.5">Scadenza</th>
-              <th className="py-2.5">Stato</th>
-              <th className="py-2.5 text-right">Importo</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {monthFilteredItems.map(item => (
-              <tr key={item.id} className="py-2">
-                <td className="py-2.5 font-mono capitalize">{item.source}</td>
-                <td className="py-2.5 font-semibold">{item.title}</td>
-                <td className="py-2.5 font-mono">{new Date(item.dueDate).toLocaleDateString("it-IT")}</td>
-                <td className="py-2.5 font-bold uppercase">{item.status}</td>
-                <td className="py-2.5 text-right font-bold">€{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="mt-10 border-t-2 border-slate-300 pt-6 flex justify-between items-start">
-          <div>
-            <p className="text-[10px] italic text-slate-400">Generato digitalmente da Palazzinaro AI Enterprise. Copia contabile di cassa.</p>
-          </div>
-          <div className="text-right space-y-1.5 text-sm">
-            <p className="text-xs text-slate-500 uppercase tracking-wider font-bold">Totale Cassa Periodo</p>
-            <p className="text-lg font-black text-slate-900">
-              €{monthFilteredItems.reduce((s, i) => s + i.amount, 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* CORREZIONE S — Intestazione ben visibile: su quale Fast Closing si sta lavorando */}
       <div className="no-print bg-slate-950 text-white rounded-2xl px-6 py-4 flex items-center gap-3 shadow-md">
         <Calendar size={22} className="text-indigo-400 shrink-0" />
@@ -1085,15 +1050,15 @@ export default function FastClosingView({
           <p className="text-xs text-slate-500 mt-0.5">La cabina di regia mensile per amministrare canoni, spese condominiali, riparti, e stampare il registro.</p>
         </div>
         
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handlePrint}
-            className="inline-flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl -2 border-slate-300 active:-0 transition-all"
-            title="Stampa Registro Cassa"
-          >
-            <Printer size={14} />
-            <span>Stampa Registro</span>
-          </button>
+        <div className="flex flex-wrap gap-3 items-center">
+          <LedgerExportToolbar
+            title={`Registro Cassa Fast Closing — ${currentFastClosingLabel}`}
+            columns={fastClosingExportColumns}
+            rows={monthFilteredItems}
+            totalsRow={fastClosingExportTotals}
+            filenameBase={`fast-closing-${currentFastClosingLabel}`}
+            size="md"
+          />
 
           <button
             onClick={handleOpenImportModal}

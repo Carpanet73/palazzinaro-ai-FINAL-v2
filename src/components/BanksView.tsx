@@ -20,6 +20,8 @@ import {
   Image as ImageIcon
 } from "lucide-react";
 import { BankMovement, FastClosingItem, CreditInstitution, BankAccount } from "../types";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 
 interface BanksViewProps {
   movements: BankMovement[];
@@ -287,6 +289,15 @@ export default function BanksView({
   // Filter accounts and movements
   const activeAccounts = bankAccounts.filter(acc => acc.institutionId === selectedInstId);
   const activeMovements = movements.filter(m => m.bankAccountId === selectedAccId);
+
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 3: colonne per stampa/esportazione universale
+  // del registro movimenti bancari, tramite LedgerExportToolbar.
+  const bankMovementExportColumns: LedgerColumn[] = [
+    { key: "date", label: "Data Operazione", format: (m: any) => new Date(m.date).toLocaleDateString("it-IT") },
+    { key: "description", label: "Causale / Descrizione" },
+    { key: "amount", label: "Importo", align: "right", format: (m: any) => `€${m.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+    { key: "reconciled", label: "Riconciliazione", format: (m: any) => m.reconciled ? (m.reconciledWith?.title || "Riconciliato") : "Da riconciliare" }
+  ];
 
   // Modal resets
   const handleOpenInstModal = () => {
@@ -714,14 +725,25 @@ export default function BanksView({
               <h2 className="text-xl font-bold text-slate-900 tracking-tight">Registro Movimenti Bancari</h2>
               <p className="text-xs text-slate-500 mt-0.5">Gestisci ed esegui la riconciliazione contabile per questo conto corrente specifico.</p>
             </div>
-            <button
-              onClick={handleOpenImportModal}
-              id="import-statements-btn"
-              className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md self-start sm:self-auto"
-            >
-              <FileSpreadsheet size={15} />
-              <span>Importa Estratto Conto</span>
-            </button>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {activeMovements.length > 0 && (
+                <LedgerExportToolbar
+                  title={`Registro Movimenti — ${currentAcc?.iban || ""}`}
+                  subtitle={`${currentInst?.name || ""} — Intestatario: ${currentAcc?.holder || ""}`}
+                  columns={bankMovementExportColumns}
+                  rows={activeMovements}
+                  filenameBase={`movimenti-bancari-${currentAcc?.iban || "conto"}`}
+                />
+              )}
+              <button
+                onClick={handleOpenImportModal}
+                id="import-statements-btn"
+                className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md"
+              >
+                <FileSpreadsheet size={15} />
+                <span>Importa Estratto Conto</span>
+              </button>
+            </div>
           </div>
 
           {/* Account Detail Summary Header */}

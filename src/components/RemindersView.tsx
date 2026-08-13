@@ -24,6 +24,8 @@ import JSZip from "jszip";
 import { Reminder, Tenant, BankMovement, FastClosingItem, Communication, OwnerProfile, Owner } from "../types";
 import { generateMessaInMoraPDF } from "../lib/pdfHelper";
 import emailjs from "@emailjs/browser";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 
 interface RemindersViewProps {
   reminders: Reminder[];
@@ -263,6 +265,15 @@ export default function RemindersView({
         return { debtorName: name, items, subtotal };
       });
   }, [reminders]);
+
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 3: colonne per stampa/esportazione universale
+  // della tabella Solleciti per debitore, tramite LedgerExportToolbar.
+  const reminderExportColumns: LedgerColumn[] = [
+    { key: "reason", label: "Causale" },
+    { key: "amount", label: "Importo", align: "right", format: (r: Reminder) => `€${r.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+    { key: "dueDate", label: "Scaduto il", format: (r: Reminder) => new Date(r.dueDate).toLocaleDateString("it-IT") },
+    { key: "status", label: "Stato", format: (r: Reminder) => r.status === "Paid" ? "Saldato" : r.status === "MessaInMora" ? "Messa in Mora" : r.status === "Sent" ? "Sollecitato" : "Bozza/Pronto" }
+  ];
 
   const getReminderComposition = (reminder: Reminder) => {
     const linkedItems = (fastClosing || []).filter(item => (reminder.associatedItemsIds || []).includes(item.id));
@@ -737,12 +748,21 @@ export default function RemindersView({
                   <User size={16} className="text-indigo-700 shrink-0" />
                   <h4 className="font-black text-sm text-slate-900">{group.debtorName}</h4>
                 </div>
-                {group.subtotal > 0 && (
-                  <div className="text-right">
-                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold">Totale Sollecitato</span>
-                    <span className="text-sm font-black text-rose-600 font-mono">€{group.subtotal.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  {group.subtotal > 0 && (
+                    <div className="text-right">
+                      <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold">Totale Sollecitato</span>
+                      <span className="text-sm font-black text-rose-600 font-mono">€{group.subtotal.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  <LedgerExportToolbar
+                    title={`Solleciti — ${group.debtorName}`}
+                    columns={reminderExportColumns}
+                    rows={group.items}
+                    totalsRow={{ reason: "TOTALE", amount: `€${group.subtotal.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }}
+                    filenameBase={`solleciti-${group.debtorName}`}
+                  />
+                </div>
               </div>
 
               <div className="overflow-x-auto">

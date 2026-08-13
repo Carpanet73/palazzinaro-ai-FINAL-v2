@@ -6,6 +6,8 @@ import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
 import { formatLedgerLabel } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 import {
   Plus,
   Edit3,
@@ -662,11 +664,6 @@ export default function TenantsView({
     });
   }, [filteredMovements]);
 
-  // Print function
-  const handlePrintLedger = () => {
-    window.print();
-  };
-
   // In ledgerOnlyMode questa vista mostra SOLO il mastrino (mai la lista completa Inquilini,
   // che non avrebbe senso dentro un overlay richiamato da un'altra pagina): finché il
   // tenant non è ancora stato risolto dall'effect sopra, non renderizza nulla.
@@ -745,33 +742,27 @@ Cordiali saluti.`;
           .filter(name => name.length > 0)
       : [];
 
+    // CORREZIONE CP (13/08/2026) — Fase 2 punto 3: colonne per stampa/esportazione universale
+    // del mastrino inquilino, tramite LedgerExportToolbar (sostituisce il vecchio
+    // handlePrintLedger e il blocco <style>@media print scoped, entrambi rimossi — ora la
+    // regola di stampa è quella unica globale in src/index.css).
+    const tenantLedgerExportColumns: LedgerColumn[] = [
+      { key: "date", label: "Scadenza", format: (m: any) => new Date(m.date).toLocaleDateString("it-IT") },
+      { key: "status", label: "Stato", format: (m: any) => m.status === "Paid" ? "Saldato" : m.status === "Overdue" ? "Scaduto" : "In Sospeso" },
+      { key: "title", label: "Voce / Descrizione", format: (m: any) => m.title || m.description || "" },
+      { key: "amount", label: "Dovuto", align: "right", format: (m: any) => `€${(m.amount || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+      { key: "paid", label: "Pagato", align: "right", format: (m: any) => `€${(m.status === "Paid" ? (m.amount || 0) : 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+      { key: "balance", label: "Saldo Progressivo", align: "right", format: (m: any) => `€${(m.balance || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }
+    ];
+    const tenantLedgerExportTotals = {
+      title: "TOTALE",
+      amount: `€${totalDovuto.toLocaleString("it-IT", { minimumFractionDigits: 2 })}`,
+      paid: `€${totalPagato.toLocaleString("it-IT", { minimumFractionDigits: 2 })}`,
+      balance: `€${currentBalance.toLocaleString("it-IT", { minimumFractionDigits: 2 })}`
+    };
+
     return (
       <div className="space-y-6 animate-fadeIn" id="tenant-ledger-page">
-        {/* Style scoped specifically for printing the ledger sheet */}
-        <style>{`
-          @media print {
-            body * {
-              visibility: hidden;
-            }
-            #mastrino-print-area, #mastrino-print-area * {
-              visibility: visible;
-            }
-            #mastrino-print-area {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              background: white !important;
-              color: black !important;
-              box-shadow: none !important;
-              border: none !important;
-            }
-            .no-print {
-              display: none !important;
-            }
-          }
-        `}</style>
-
         {/* Navigation header (no-print) */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 no-print">
           <button
@@ -790,13 +781,15 @@ Cordiali saluti.`;
             <span>{ledgerOnlyMode ? "Chiudi" : "Torna all'Anagrafica"}</span>
           </button>
 
-          <button
-            onClick={handlePrintLedger}
-            className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4.5 py-2.5 rounded-xl active:transition-all shadow-sm"
-          >
-            <Printer size={14} />
-            <span>Stampa Mastrino Contabile</span>
-          </button>
+          <LedgerExportToolbar
+            title={`Mastrino Contabile — ${t.name}`}
+            subtitle={property ? `${property.name} — ${property.address}` : undefined}
+            columns={tenantLedgerExportColumns}
+            rows={movementsWithBalances}
+            totalsRow={tenantLedgerExportTotals}
+            filenameBase={`mastrino-inquilino-${t.name}`}
+            size="md"
+          />
         </div>
 
         {/* Pannello di Condivisione Rapida (no-print) */}
@@ -973,8 +966,7 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
           </div>
         </div>
 
-        {/* PRINTABLE AREA */}
-        <div className="space-y-6" id="mastrino-print-area">
+        <div className="space-y-6">
           {/* Header of the printed sheet */}
           <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-sm border border-slate-800 flex flex-col md:flex-row justify-between gap-6">
             <div>

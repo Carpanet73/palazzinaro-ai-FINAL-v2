@@ -36,6 +36,8 @@ import {
 import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, AppSection, BankMovement, Maintenance, Owner } from "../types";
 import { getTenantClassification } from "../lib/statusHelper";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 
 interface OwnersViewProps {
   properties: Property[];
@@ -338,6 +340,51 @@ export default function OwnersView({
       grandTotalPaid
     };
   }, [selectedProperty, contracts, tenants, condominiums, fastClosing, movements, maintenance]);
+
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 3: righe unificate per stampa/esportazione
+  // universale del mastrino proprietario, tramite LedgerExportToolbar. Le 5 sezioni hanno
+  // forme diverse (le 4 "buildUnifiedLedger" condividono la stessa forma, le manutenzioni no):
+  // qui vengono normalizzate in un'unica forma con etichetta di categoria, includendo SOLO le
+  // sezioni attualmente selezionate in `activeLedgerTabs` — l'esportazione rispecchia sempre
+  // esattamente ciò che è visibile a schermo.
+  const ownerLedgerExportRows = useMemo(() => {
+    const rows: any[] = [];
+    if (activeLedgerTabs.includes("rent")) {
+      propertyModalData.rentPayments.forEach((r: any) => rows.push({ ...r, category: "Canoni" }));
+    }
+    if (activeLedgerTabs.includes("condo")) {
+      propertyModalData.condoPayments.forEach((r: any) => rows.push({ ...r, category: "Condominio" }));
+    }
+    if (activeLedgerTabs.includes("taxes")) {
+      propertyModalData.taxPayments.forEach((r: any) => rows.push({ ...r, category: "Registro" }));
+    }
+    if (activeLedgerTabs.includes("other")) {
+      propertyModalData.otherPayments.forEach((r: any) => rows.push({ ...r, category: "Altro" }));
+    }
+    if (activeLedgerTabs.includes("maintenance")) {
+      propertyModalData.ownerMaintenance.forEach((m: any) => rows.push({
+        category: "Manutenzioni",
+        dueDate: m.date || m.createdAt,
+        paymentDate: "-",
+        description: m.title,
+        amount: m.cost || 0,
+        status: m.status === "Completed" ? "Paid" : m.status === "Cancelled" ? "Cancelled" : "Pending",
+        type: m.contractor || "",
+        notes: m.description || ""
+      }));
+    }
+    return rows;
+  }, [propertyModalData, activeLedgerTabs]);
+
+  const ownerLedgerExportColumns: LedgerColumn[] = [
+    { key: "category", label: "Categoria" },
+    { key: "dueDate", label: "Data Competenza", format: (r: any) => r.dueDate && r.dueDate !== "-" ? new Date(r.dueDate).toLocaleDateString("it-IT") : "-" },
+    { key: "paymentDate", label: "Data Cassa", format: (r: any) => r.paymentDate && r.paymentDate !== "-" && r.paymentDate !== "Pendente" ? new Date(r.paymentDate).toLocaleDateString("it-IT") : r.paymentDate },
+    { key: "description", label: "Descrizione" },
+    { key: "type", label: "Tipo / Impresa" },
+    { key: "status", label: "Stato", format: (r: any) => r.status === "Paid" ? "Saldato" : r.status === "Overdue" ? "Scaduto" : r.status === "Cancelled" ? "Annullato" : "In Sospeso" },
+    { key: "amount", label: "Importo", align: "right", format: (r: any) => `€${(r.amount || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }
+  ];
 
   // CORREZIONE AY — Invia il conteggio (totali del mastrino) a un comproprietario, via
   // Resend (allegati/formattazione affidabili, mai EmailJS che resta riservato ai Solleciti).
@@ -1503,14 +1550,17 @@ export default function OwnersView({
                   </h4>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-slate-400">Raggruppato per tipologia contabile</span>
-                    <button
-                      onClick={() => window.print()}
-                      className="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white px-2.5 py-1.5 rounded-lg transition-colors no-print"
-                      title="Stampa il mastrino di questo immobile"
-                    >
-                      <Printer size={12} className="shrink-0" />
-                      Stampa
-                    </button>
+                    <LedgerExportToolbar
+                      title={`Mastrino Proprietario — ${selectedProperty.name}`}
+                      subtitle={`${selectedProperty.address} — Proprietario: ${selectedProperty.owner || "N/D"}`}
+                      columns={ownerLedgerExportColumns}
+                      rows={ownerLedgerExportRows}
+                      totalsRow={{
+                        category: "TOTALE",
+                        amount: `€${(propertyModalData.grandTotalPending + propertyModalData.grandTotalPaid).toLocaleString("it-IT", { minimumFractionDigits: 2 })}`
+                      }}
+                      filenameBase={`mastrino-proprietario-${selectedProperty.name}`}
+                    />
                   </div>
                 </div>
 

@@ -11,6 +11,8 @@ import {
 import { Condominium, CondoRate, Property, Tenant, Owner, FastClosingItem, Administrator } from "../types";
 import { formatLedgerLabel } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 
 interface CondominiumsViewProps {
   condominiums: Condominium[];
@@ -774,6 +776,15 @@ export default function CondominiumsView({
       return activeQueryCategories.includes(audience);
     }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }, [activeProperty, fastClosing, activeQueryCategories]);
+
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 3: colonne per stampa/esportazione universale
+  // del mastrino condominiale, tramite LedgerExportToolbar.
+  const condoLedgerExportColumns: LedgerColumn[] = [
+    { key: "dueDate", label: "Scadenza", format: (m: any) => new Date(m.dueDate).toLocaleDateString("it-IT") },
+    { key: "title", label: "Causale Rata" },
+    { key: "amount", label: "Quota", align: "right", format: (m: any) => `€${m.amount.toFixed(2)}` },
+    { key: "status", label: "Stato", format: (m: any) => m.status === "Paid" ? "Saldato" : "In Sospeso" }
+  ];
 
   const totalLedgerSum = useMemo(() => {
     return ledgerMovementsForTab.reduce((acc, curr) => {
@@ -1627,7 +1638,7 @@ export default function CondominiumsView({
                       <p className="text-[10px] text-slate-400 mt-0.5">Vedi ed esporta le singole posizioni contabili condominiali.</p>
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <MultiSelectFilterDropdown
                         label="Vista"
                         options={[
@@ -1637,6 +1648,19 @@ export default function CondominiumsView({
                         selected={activeQueryCategories}
                         onChange={setActiveQueryCategories}
                       />
+                      {ledgerMovementsForTab.length > 0 && (
+                        <LedgerExportToolbar
+                          title={`Mastrino Condominiale — ${activeProperty?.name || ""}`}
+                          subtitle={activeProperty?.address}
+                          columns={condoLedgerExportColumns}
+                          rows={ledgerMovementsForTab}
+                          totalsRow={{
+                            title: "TOTALE",
+                            amount: `€${(totalLedgerSum.paid + totalLedgerSum.unpaid).toLocaleString("it-IT", { minimumFractionDigits: 2 })}`
+                          }}
+                          filenameBase={`mastrino-condominio-${activeProperty?.name || ""}`}
+                        />
+                      )}
                     </div>
                   </div>
 

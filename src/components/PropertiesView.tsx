@@ -4,6 +4,8 @@ import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
 import { formatLedgerLabel } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 import {
   Plus,
   Edit3,
@@ -585,6 +587,43 @@ export default function PropertiesView({
       return isReg && (matchesPropertyId || matchesProp || matchesTenant);
     });
 
+    // CORREZIONE CP (13/08/2026) — Fase 2 punto 3: colonne per stampa/esportazione universale
+    // dei mastrini di questa scheda immobile, tramite LedgerExportToolbar.
+    const simpleDebtColumns: LedgerColumn[] = [
+      { key: "dueDate", label: "Scadenza", format: (d: any) => new Date(d.dueDate).toLocaleDateString("it-IT") },
+      { key: "title", label: "Descrizione" },
+      { key: "amount", label: "Importo", align: "right", format: (d: any) => `€${d.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+      { key: "status", label: "Stato", format: (d: any) => d.status === "Paid" ? "Pagato" : "Da Pagare" }
+    ];
+    const regCostColumns: LedgerColumn[] = [
+      { key: "title", label: "Imposta" },
+      { key: "dueDate", label: "Scadenza", format: (c: any) => new Date(c.dueDate).toLocaleDateString("it-IT") },
+      { key: "amount", label: "Totale", align: "right", format: (c: any) => `€${c.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+      { key: "tenantShare", label: "Inquilino (50%)", align: "right", format: (c: any) => `€${(c.amount / 2).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+      { key: "ownerShare", label: "Proprietario (50%)", align: "right", format: (c: any) => `€${(c.amount / 2).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+      { key: "status", label: "Stato", format: (c: any) => c.status === "Paid" ? "Reconciled" : "In attesa" }
+    ];
+    const maintenanceTicketColumns: LedgerColumn[] = [
+      { key: "date", label: "Data", format: (t: any) => t.date ? new Date(t.date).toLocaleDateString("it-IT") : new Date(t.createdAt).toLocaleDateString("it-IT") },
+      { key: "title", label: "Intervento" },
+      { key: "contractor", label: "Impresa" },
+      { key: "cost", label: "Costo Totale", align: "right", format: (t: any) => `€${(t.cost || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+      { key: "status", label: "Stato", format: (t: any) => t.status === "Completed" ? "Risolto" : t.status === "Cancelled" ? "Annullato" : "In Corso" }
+    ];
+    const maintDebtColumns: LedgerColumn[] = [
+      { key: "dueDate", label: "Data Scadenza", format: (d: any) => new Date(d.dueDate).toLocaleDateString("it-IT") },
+      { key: "title", label: "Descrizione Contabile / Debitore" },
+      { key: "amount", label: "Importo Quota", align: "right", format: (d: any) => `€${d.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+      { key: "status", label: "Stato", format: (d: any) => d.status === "Paid" ? "Pagato" : "Da Pagare" }
+    ];
+    const insurancePolicyColumns: LedgerColumn[] = [
+      { key: "company", label: "Compagnia" },
+      { key: "policyNumber", label: "N. Polizza" },
+      { key: "coverageType", label: "Tipo Copertura" },
+      { key: "expiryDate", label: "Scadenza", format: (p: any) => new Date(p.expiryDate).toLocaleDateString("it-IT") },
+      { key: "premiumAmount", label: "Premio Annuo", align: "right", format: (p: any) => `€${(p.premiumAmount || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }
+    ];
+
     const docs = propertyDocs[prop.id] || [];
 
     const handleSaveInsurancePolicyLocal = async (e: React.FormEvent) => {
@@ -1053,12 +1092,23 @@ export default function PropertiesView({
           
           {/* Debiti Condominiali */}
           <div className="bg-white rounded-2xl border-2 border-slate-100 p-6 shadow-sm flex flex-col">
-            <div className="pb-3">
-              <h3 className="font-sans font-bold text-slate-900 text-sm flex items-center space-x-1.5">
-                <Building2 size={14} className="text-indigo-700 shrink-0" />
-                <span>Oneri e Spese Condominiali</span>
-              </h3>
-              <p className="text-[10px] text-slate-500 mt-0.5">Spese condominiali registrate a carico della proprietà o dell'inquilino.</p>
+            <div className="pb-3 flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-sans font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+                  <Building2 size={14} className="text-indigo-700 shrink-0" />
+                  <span>Oneri e Spese Condominiali</span>
+                </h3>
+                <p className="text-[10px] text-slate-500 mt-0.5">Spese condominiali registrate a carico della proprietà o dell'inquilino.</p>
+              </div>
+              {condoDebts.length > 0 && (
+                <LedgerExportToolbar
+                  title={`Oneri e Spese Condominiali — ${prop.name}`}
+                  subtitle={prop.address}
+                  columns={simpleDebtColumns}
+                  rows={condoDebts}
+                  filenameBase={`condominio-${prop.name}`}
+                />
+              )}
             </div>
 
             <div className="flex-1 mt-3">
@@ -1115,12 +1165,23 @@ export default function PropertiesView({
 
           {/* Registration Costs (Costi di Registrazione) */}
           <div className="bg-white rounded-2xl border-2 border-slate-100 p-6 shadow-sm flex flex-col">
-            <div className="pb-3">
-              <h3 className="font-sans font-bold text-slate-900 text-sm flex items-center space-x-1.5">
-                <FileText size={14} className="text-indigo-700 shrink-0" />
-                <span>Imposte di Registro & Marche da Bollo</span>
-              </h3>
-              <p className="text-[10px] text-slate-500 mt-0.5">Spese per imposte di registro annuali, divisa proporzionalmente al 50%.</p>
+            <div className="pb-3 flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-sans font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+                  <FileText size={14} className="text-indigo-700 shrink-0" />
+                  <span>Imposte di Registro & Marche da Bollo</span>
+                </h3>
+                <p className="text-[10px] text-slate-500 mt-0.5">Spese per imposte di registro annuali, divisa proporzionalmente al 50%.</p>
+              </div>
+              {regCosts.length > 0 && (
+                <LedgerExportToolbar
+                  title={`Imposte di Registro — ${prop.name}`}
+                  subtitle={prop.address}
+                  columns={regCostColumns}
+                  rows={regCosts}
+                  filenameBase={`imposte-registro-${prop.name}`}
+                />
+              )}
             </div>
 
             <div className="flex-1 mt-3">
@@ -1256,7 +1317,16 @@ export default function PropertiesView({
                 <div className="space-y-6">
                   {/* Tabella degli Interventi */}
                   <div>
-                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 font-mono">Elenco Interventi (Ticket)</h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">Elenco Interventi (Ticket)</h4>
+                      <LedgerExportToolbar
+                        title={`Interventi di Manutenzione — ${prop.name}`}
+                        subtitle={prop.address}
+                        columns={maintenanceTicketColumns}
+                        rows={propertyMaintenanceTickets}
+                        filenameBase={`manutenzioni-ticket-${prop.name}`}
+                      />
+                    </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse">
                         <thead>
@@ -1302,9 +1372,20 @@ export default function PropertiesView({
 
                   {/* Tabella delle Scadenze Contabili (Mastrino) */}
                   <div className="border-t border-slate-100 pt-4">
-                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 font-mono">
-                      Mastrino Quote ed Esigibilità (Righe Contabili in Fast Closing)
-                    </h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                        Mastrino Quote ed Esigibilità (Righe Contabili in Fast Closing)
+                      </h4>
+                      {maintDebts.length > 0 && (
+                        <LedgerExportToolbar
+                          title={`Mastrino Quote Manutenzione — ${prop.name}`}
+                          subtitle={prop.address}
+                          columns={maintDebtColumns}
+                          rows={maintDebts}
+                          filenameBase={`manutenzioni-quote-${prop.name}`}
+                        />
+                      )}
+                    </div>
                     {maintDebts.length === 0 ? (
                       <p className="text-xs text-slate-400 italic">Nessuna riga contabile registrata in Fast Closing per queste manutenzioni.</p>
                     ) : (
@@ -1459,14 +1540,25 @@ export default function PropertiesView({
                 Gestione polizze assicurative e scadenze coperture collegate a questo immobile.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleOpenAddInsuranceModal}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[10px] rounded-lg active:transition-all cursor-pointer shadow-sm"
-            >
-              <Plus size={12} />
-              <span>Aggiungi Polizza</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {insurancePolicies.filter(ip => ip.propertyId === prop.id).length > 0 && (
+                <LedgerExportToolbar
+                  title={`Polizze Assicurative — ${prop.name}`}
+                  subtitle={prop.address}
+                  columns={insurancePolicyColumns}
+                  rows={insurancePolicies.filter(ip => ip.propertyId === prop.id)}
+                  filenameBase={`polizze-assicurative-${prop.name}`}
+                />
+              )}
+              <button
+                type="button"
+                onClick={handleOpenAddInsuranceModal}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[10px] rounded-lg active:transition-all cursor-pointer shadow-sm"
+              >
+                <Plus size={12} />
+                <span>Aggiungi Polizza</span>
+              </button>
+            </div>
           </div>
 
           <div className="mt-4">
