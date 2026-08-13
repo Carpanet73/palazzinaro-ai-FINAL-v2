@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
 import { formatLedgerLabel } from "../lib/ledgerLabel";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import {
   Plus,
   Edit3,
@@ -104,7 +105,9 @@ export default function PropertiesView({
 }: PropertiesViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 2: da singola selezione a multi-selezione
+  // stile Excel. Default = tutti e 4 gli stati selezionati (equivalente al vecchio "all").
+  const [filterStatuses, setFilterStatuses] = useState<string[]>(["Available", "Rented", "Maintenance", "Archived"]);
   const [selectedPropertyDetails, setSelectedPropertyDetails] = useState<Property | null>(null);
 
   // Property documents (simulated storage for planimetry, APE, contracts, etc. - synced with Contracts)
@@ -1838,9 +1841,7 @@ export default function PropertiesView({
     );
   }
 
-  const filteredProperties = filterStatus === "all" 
-    ? properties 
-    : properties.filter(p => p.status === filterStatus);
+  const filteredProperties = properties.filter(p => filterStatuses.includes(p.status));
 
   return (
     <div className="space-y-6" id="properties-view-container">
@@ -1861,25 +1862,19 @@ export default function PropertiesView({
         </button>
       </div>
 
-      {/* Filter Tabs */}
+      {/* Filter — Fase 2 punto 2: menu a tendina multi-selezione stile Excel */}
       <div className="flex flex-wrap gap-2 pb-3">
-        {["all", "Available", "Rented", "Maintenance", "Archived"].map((statusOption) => (
-          <button
-            key={statusOption}
-            onClick={() => setFilterStatus(statusOption)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              filterStatus === statusOption
-                ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100"
-                : "text-slate-500 hover:bg-slate-50 border border-transparent"
-            }`}
-          >
-            {statusOption === "all" && "Tutti"}
-            {statusOption === "Available" && "Disponibili"}
-            {statusOption === "Rented" && "Inquilini Presenti"}
-            {statusOption === "Maintenance" && "In Manutenzione"}
-            {statusOption === "Archived" && "Archiviati"}
-          </button>
-        ))}
+        <MultiSelectFilterDropdown
+          label="Stato"
+          options={[
+            { value: "Available", label: "Disponibili" },
+            { value: "Rented", label: "Inquilini Presenti" },
+            { value: "Maintenance", label: "In Manutenzione" },
+            { value: "Archived", label: "Archiviati" }
+          ]}
+          selected={filterStatuses}
+          onChange={setFilterStatuses}
+        />
       </div>
 
       {/* Empty State */}

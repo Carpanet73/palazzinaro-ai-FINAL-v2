@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Condominium, CondoRate, Property, Tenant, Owner, FastClosingItem, Administrator } from "../types";
 import { formatLedgerLabel } from "../lib/ledgerLabel";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 
 interface CondominiumsViewProps {
   condominiums: Condominium[];
@@ -143,7 +144,10 @@ export default function CondominiumsView({
   const [fixedTenantAmount, setFixedTenantAmount] = useState<number>(0);
 
   // Ledger Query Interface State
-  const [activeQueryTab, setActiveQueryTab] = useState<"tenant" | "owner" | "general">("tenant");
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 2: da tab a scelta singola a multi-selezione
+  // stile Excel. "Generale" corrispondeva già, nella logica originale, a "mostra entrambi"
+  // (return true incondizionato): qui è reso esplicito selezionando entrambi i valori.
+  const [activeQueryCategories, setActiveQueryCategories] = useState<string[]>(["tenant", "owner"]);
 
   // Document Upload Form fields
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -766,14 +770,10 @@ export default function CondominiumsView({
 
     return items.filter(item => {
       const titleLower = (item.title || "").toLowerCase();
-      if (activeQueryTab === "tenant") {
-        return titleLower.includes("inquilino") || !titleLower.includes("proprietario");
-      } else if (activeQueryTab === "owner") {
-        return titleLower.includes("proprietario");
-      }
-      return true; // general shows all
+      const audience = titleLower.includes("proprietario") ? "owner" : "tenant";
+      return activeQueryCategories.includes(audience);
     }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  }, [activeProperty, fastClosing, activeQueryTab]);
+  }, [activeProperty, fastClosing, activeQueryCategories]);
 
   const totalLedgerSum = useMemo(() => {
     return ledgerMovementsForTab.reduce((acc, curr) => {
@@ -1627,25 +1627,16 @@ export default function CondominiumsView({
                       <p className="text-[10px] text-slate-400 mt-0.5">Vedi ed esporta le singole posizioni contabili condominiali.</p>
                     </div>
 
-                    <div className="flex bg-slate-100 p-1 rounded-lg space-x-1 shrink-0">
-                      {[
-                        { id: "tenant", label: "Inquilino", icon: User },
-                        { id: "owner", label: "Proprietario", icon: Briefcase },
-                        { id: "general", label: "Generale", icon: FolderOpen }
-                      ].map(tab => (
-                        <button
-                          key={tab.id}
-                          onClick={() => setActiveQueryTab(tab.id as any)}
-                          className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer inline-flex items-center gap-1 ${
-                            activeQueryTab === tab.id
-                              ? "bg-white text-slate-900 shadow-3xs"
-                              : "text-slate-500 hover:text-slate-800"
-                          }`}
-                        >
-                          <tab.icon size={11} />
-                          {tab.label}
-                        </button>
-                      ))}
+                    <div className="shrink-0">
+                      <MultiSelectFilterDropdown
+                        label="Vista"
+                        options={[
+                          { value: "tenant", label: "Inquilino" },
+                          { value: "owner", label: "Proprietario" }
+                        ]}
+                        selected={activeQueryCategories}
+                        onChange={setActiveQueryCategories}
+                      />
                     </div>
                   </div>
 

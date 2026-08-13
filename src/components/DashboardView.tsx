@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { Property, Contract, Tenant, FastClosingItem, Reminder, Condominium, LegalCase, AppSection, Communication, Lawyer, Maintenance, OwnerProfile, InsurancePolicy } from "../types";
 import { getTenantClassification } from "../lib/statusHelper";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 
 interface DashboardViewProps {
   properties: Property[];
@@ -103,7 +104,12 @@ export default function DashboardView({
   // Custom Second-Level Views States
   const [showConsolidatedReport, setShowConsolidatedReport] = useState(false);
   const [selectedDashboardProperty, setSelectedDashboardProperty] = useState<Property | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<string>("all");
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 2: da tab a scelta singola a multi-selezione
+  // stile Excel. "Vista Completa" corrispondeva già, nella logica originale, a "mostra tutte
+  // le sezioni" (ogni blocco era in OR con "all"): qui è reso esplicito selezionando tutte
+  // e 5 le categorie reali. Default = tutte selezionate (equivalente al vecchio "all").
+  const DETAIL_TAB_VALUES = ["rents", "condo", "maintenance", "registration", "tenant"];
+  const [activeDetailTabs, setActiveDetailTabs] = useState<string[]>(DETAIL_TAB_VALUES);
 
   // Google Calendar synchronization states
   const [syncingContractId, setSyncingContractId] = useState<string | null>(null);
@@ -1042,41 +1048,27 @@ export default function DashboardView({
           </div>
         )}
 
-        {/* Dynamic Navigation Tabs */}
+        {/* Sezioni — Fase 2 punto 2: menu a tendina multi-selezione stile Excel */}
         <div className="flex flex-wrap items-center gap-1.5 pb-px">
-          {[
-            { id: "all", label: "Vista Completa", icon: BarChart3 },
-            { id: "rents", label: `Canoni d'Affitto`, icon: Euro },
-            { id: "condo", label: "Spese Condominiali", icon: Building2 },
-            { id: "maintenance", label: "Manutenzioni", icon: Wrench },
-            { id: "registration", label: "Imposta di Registro", icon: FileText },
-            { id: "tenant", label: "Anagrafica Inquilino", icon: User }
-          ].map(tab => {
-            const TabIcon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveDetailTab(tab.id)}
-                className={`px-4 py-2.5 font-sans font-black text-xs rounded-t-xl transition-all border-t border-x -mb-px cursor-pointer ${
-                  activeDetailTab === tab.id
-                    ? "bg-white border-slate-200 text-indigo-600 font-extrabold shadow-3xs"
-                    : "bg-transparent border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/50"
-                }`}
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <TabIcon size={14} className="shrink-0" />
-                  {tab.label}
-                </span>
-              </button>
-            );
-          })}
+          <MultiSelectFilterDropdown
+            label="Sezioni"
+            options={[
+              { value: "rents", label: `Canoni d'Affitto` },
+              { value: "condo", label: "Spese Condominiali" },
+              { value: "maintenance", label: "Manutenzioni" },
+              { value: "registration", label: "Imposta di Registro" },
+              { value: "tenant", label: "Anagrafica Inquilino" }
+            ]}
+            selected={activeDetailTabs}
+            onChange={setActiveDetailTabs}
+          />
         </div>
 
         {/* Content Tabs Area */}
         <div className="space-y-6">
           
           {/* A. GENERAL PROPERTIES STATS GRID */}
-          {(activeDetailTab === "all" || activeDetailTab === "tenant") && (
+          {activeDetailTabs.includes("tenant") && (
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex items-center space-x-2 pb-3">
                 <ClipboardList size={16} className="text-indigo-700 shrink-0" />
@@ -1129,7 +1121,7 @@ export default function DashboardView({
           )}
 
           {/* B. MASTRINO CANONI D'AFFITTO SPREADSHEET */}
-          {(activeDetailTab === "all" || activeDetailTab === "rents") && (
+          {activeDetailTabs.includes("rents") && (
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3">
                 <div className="flex items-center space-x-2">
@@ -1239,7 +1231,7 @@ export default function DashboardView({
           )}
 
           {/* C. MASTRINO SPESE CONDOMINIALI SPREADSHEET */}
-          {(activeDetailTab === "all" || activeDetailTab === "condo") && (
+          {activeDetailTabs.includes("condo") && (
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3">
                 <div className="flex items-center space-x-2">
@@ -1336,7 +1328,7 @@ export default function DashboardView({
           )}
 
           {/* D. MASTRINO MANUTENZIONI SPREADSHEET */}
-          {(activeDetailTab === "all" || activeDetailTab === "maintenance") && (
+          {activeDetailTabs.includes("maintenance") && (
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3">
                 <div className="flex items-center space-x-2">
@@ -1419,7 +1411,7 @@ export default function DashboardView({
               con un promemoria a soli colori/date, senza cifre e senza azioni di pagamento —
               per pagare si va in Fast Closing, come da regola 6 ("nessuna azione diretta...
               reindirizzati alla pagina dedicata"). */}
-          {(activeDetailTab === "all" || activeDetailTab === "registration") && (
+          {activeDetailTabs.includes("registration") && (
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3">
                 <div className="flex items-center space-x-2">
@@ -1490,7 +1482,7 @@ export default function DashboardView({
           )}
 
           {/* F. FAST CLOSING & REMINDERS ACTIVE STATUS */}
-          {activeDetailTab === "all" && activeRemindersForProperty.length > 0 && (
+          {activeDetailTabs.length === DETAIL_TAB_VALUES.length && activeRemindersForProperty.length > 0 && (
             <div className="bg-white rounded-3xl border-2 border-slate-150 p-5 shadow-sm">
               <div className="flex items-center space-x-2 pb-3">
                 <AlertTriangle size={16} className="text-amber-600 shrink-0" />

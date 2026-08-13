@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, AppSection, BankMovement, Maintenance, Owner } from "../types";
 import { getTenantClassification } from "../lib/statusHelper";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 
 interface OwnersViewProps {
   properties: Property[];
@@ -149,7 +150,13 @@ export default function OwnersView({
     }
     setShowOwnerEditModal(false);
   };
-  const [activeLedgerTab, setActiveLedgerTab] = useState<"rent" | "condo" | "taxes" | "other" | "maintenance">("rent");
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 2: da tab a scelta singola a multi-selezione
+  // stile Excel. Qui le 5 tabelle sono strutturalmente diverse (colonne diverse), quindi
+  // l'adattamento è "unione delle sezioni selezionate" (mostra ciascuna tabella se il suo
+  // valore è incluso), non un filtro riga-per-riga su un'unica tabella. Default = tutte
+  // selezionate (equivalente al vecchio comportamento di visualizzare la prima tab attiva,
+  // ma qui reso esplicito mostrando tutte le sezioni finché l'utente non restringe la vista).
+  const [activeLedgerTabs, setActiveLedgerTabs] = useState<string[]>(["rent", "condo", "taxes", "maintenance", "other"]);
   const [searchTerm, setSearchTerm] = useState("");
 
   // --- SELECTED PROPERTY DETAILS LOGIC ---
@@ -1554,70 +1561,27 @@ export default function OwnersView({
                   </div>
                 </div>
 
-                {/* Ledger Navigation Tabs */}
+                {/* Ledger sections — Fase 2 punto 2: menu a tendina multi-selezione stile Excel */}
                 <div className="flex flex-wrap gap-1.5 p-1.5 bg-slate-50 rounded-xl">
-                  <button
-                    onClick={() => setActiveLedgerTab("rent")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
-                      activeLedgerTab === "rent"
-                        ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <Euro size={12} className="text-indigo-700 shrink-0" />
-                    Canoni ({propertyModalData.rentPayments.length})
-                  </button>
-                  <button
-                    onClick={() => setActiveLedgerTab("condo")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
-                      activeLedgerTab === "condo"
-                        ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <Building2 size={12} className="text-indigo-700 shrink-0" />
-                    Condominio ({propertyModalData.condoPayments.length})
-                  </button>
-                  <button
-                    onClick={() => setActiveLedgerTab("taxes")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
-                      activeLedgerTab === "taxes"
-                        ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <Scale size={12} className="text-indigo-700 shrink-0" />
-                    Registro ({propertyModalData.taxPayments.length})
-                  </button>
-                  <button
-                    onClick={() => setActiveLedgerTab("maintenance")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
-                      activeLedgerTab === "maintenance"
-                        ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <Wrench size={12} className="text-slate-600 shrink-0" />
-                    Manutenzioni ({propertyModalData.ownerMaintenance.length})
-                  </button>
-                  <button
-                    onClick={() => setActiveLedgerTab("other")}
-                    className={`flex-1 min-w-[100px] py-2 text-[10px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${
-                      activeLedgerTab === "other"
-                        ? "bg-white text-slate-950 shadow-xs border border-slate-200/50"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <Settings size={12} className="text-slate-600 shrink-0" />
-                    Altro ({propertyModalData.otherPayments.length})
-                  </button>
+                  <MultiSelectFilterDropdown
+                    label="Sezioni"
+                    options={[
+                      { value: "rent", label: "Canoni", count: propertyModalData.rentPayments.length },
+                      { value: "condo", label: "Condominio", count: propertyModalData.condoPayments.length },
+                      { value: "taxes", label: "Registro", count: propertyModalData.taxPayments.length },
+                      { value: "maintenance", label: "Manutenzioni", count: propertyModalData.ownerMaintenance.length },
+                      { value: "other", label: "Altro", count: propertyModalData.otherPayments.length }
+                    ]}
+                    selected={activeLedgerTabs}
+                    onChange={setActiveLedgerTabs}
+                  />
                 </div>
 
                 {/* Tab Content Tables */}
                 <div className="bg-white rounded-xl border border-slate-150 overflow-hidden shadow-2xs">
                   
                   {/* TAB 1: RENT PAYMENTS */}
-                  {activeLedgerTab === "rent" && (
+                  {activeLedgerTabs.includes("rent") && (
                     <div className="overflow-x-auto">
                       {propertyModalData.rentPayments.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 text-xs">
@@ -1681,7 +1645,7 @@ export default function OwnersView({
                   )}
 
                   {/* TAB 2: CONDO PAYMENTS */}
-                  {activeLedgerTab === "condo" && (
+                  {activeLedgerTabs.includes("condo") && (
                     <div className="overflow-x-auto">
                       {!selectedProperty.isCondoConstituted ? (
                         <div className="p-8 text-center bg-rose-50/10 text-rose-800 text-xs border border-dashed border-rose-100 rounded-xl m-4">
@@ -1766,7 +1730,7 @@ export default function OwnersView({
                   )}
 
                   {/* TAB 3: REGISTRY TAXES */}
-                  {activeLedgerTab === "taxes" && (
+                  {activeLedgerTabs.includes("taxes") && (
                     <div className="overflow-x-auto">
                       {selectedProperty.isBareOwnership ? (
                         <div className="p-8 text-center bg-amber-50/20 text-amber-900 text-xs border border-dashed border-amber-200 rounded-xl m-4">
@@ -1836,7 +1800,7 @@ export default function OwnersView({
                   )}
 
                   {/* TAB 4: OTHER / RESIDUAL */}
-                  {activeLedgerTab === "other" && (
+                  {activeLedgerTabs.includes("other") && (
                     <div className="overflow-x-auto">
                       {propertyModalData.otherPayments.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 text-xs">
@@ -1898,7 +1862,7 @@ export default function OwnersView({
                   )}
 
                   {/* TAB 5: OWNER MAINTENANCE EXPENSES */}
-                  {activeLedgerTab === "maintenance" && (
+                  {activeLedgerTabs.includes("maintenance") && (
                     <div className="overflow-x-auto">
                       {propertyModalData.ownerMaintenance.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 text-xs">

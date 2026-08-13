@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner, Contract, DeliveryReport, Lawyer } from "../types";
 import { formatLedgerLabel, ITALIAN_MONTHS_FULL } from "../lib/ledgerLabel";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 
 interface FastClosingViewProps {
   fastClosing: FastClosingItem[];
@@ -88,7 +89,9 @@ export default function FastClosingView({
   onAddReminder,
   onUpdateReminderStatus
 }: FastClosingViewProps) {
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 2: da singola selezione a multi-selezione
+  // stile Excel. Default = tutti e 4 gli stati selezionati (equivalente al vecchio "all").
+  const [filterStatuses, setFilterStatuses] = useState<string[]>(["Pending", "Overdue", "Paid", "Cancelled"]);
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>("current"); // "current", "2026-06", "2026-05"
 
   // CORREZIONE AP — etichetta calcolata dal periodo attivo VERO e persistito, non più da
@@ -444,17 +447,18 @@ export default function FastClosingView({
     });
   }, [fastClosing, selectedMonthYear, activePeriod]);
 
-  // 2. Apply status filters on top of month filter
+  // 2. Apply status filters on top of month filter (multi-selezione: un item passa se
+  // corrisponde ad ALMENO UNO degli stati selezionati, stessa logica per-stato di prima)
   const filteredItems = useMemo(() => {
-    return filterStatus === "all" 
-      ? monthFilteredItems 
-      : monthFilteredItems.filter(item => {
-          if (filterStatus === "Overdue") {
-            return item.status === "Overdue" || (item.status === "Pending" && new Date(item.dueDate) < new Date());
-          }
-          return item.status === filterStatus;
-        });
-  }, [monthFilteredItems, filterStatus]);
+    return monthFilteredItems.filter(item =>
+      filterStatuses.some(fs => {
+        if (fs === "Overdue") {
+          return item.status === "Overdue" || (item.status === "Pending" && new Date(item.dueDate) < new Date());
+        }
+        return item.status === fs;
+      })
+    );
+  }, [monthFilteredItems, filterStatuses]);
 
   // 3. Group filtered items by Debitore for the spreadsheet view
   const groupedItems = useMemo(() => {
@@ -1202,25 +1206,19 @@ export default function FastClosingView({
           </select>
         </div>
 
-        {/* Categories / Status filters */}
+        {/* Categories / Status filters — Fase 2 punto 2: menu a tendina multi-selezione stile Excel */}
         <div className="flex flex-wrap gap-1.5">
-          {["all", "Pending", "Overdue", "Paid", "Cancelled"].map((statusOption) => (
-            <button
-              key={statusOption}
-              onClick={() => setFilterStatus(statusOption)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                filterStatus === statusOption
-                  ? "bg-indigo-600 text-white font-bold"
-                  : "text-slate-500 hover:bg-slate-100 border border-transparent"
-              }`}
-            >
-              {statusOption === "all" && "Tutte"}
-              {statusOption === "Pending" && "In Sospeso"}
-              {statusOption === "Overdue" && "Scadute"}
-              {statusOption === "Paid" && "Saldato"}
-              {statusOption === "Cancelled" && "Annullate"}
-            </button>
-          ))}
+          <MultiSelectFilterDropdown
+            label="Stato"
+            options={[
+              { value: "Pending", label: "In Sospeso" },
+              { value: "Overdue", label: "Scadute" },
+              { value: "Paid", label: "Saldato" },
+              { value: "Cancelled", label: "Annullate" }
+            ]}
+            selected={filterStatuses}
+            onChange={setFilterStatuses}
+          />
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import GenderToggle from "./GenderToggle";
 import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
 import { formatLedgerLabel } from "../lib/ledgerLabel";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import {
   Plus,
   Edit3,
@@ -90,7 +91,9 @@ export default function TenantsView({
   // State for the separate Mastrino page
   const [selectedTenantLedger, setSelectedTenantLedger] = useState<Tenant | null>(null);
   const [ledgerSearchQuery, setLedgerSearchQuery] = useState("");
-  const [activeLedgerCategory, setActiveLedgerCategory] = useState<"all" | "rent" | "condo" | "registration" | "maintenance">("all");
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 2: da singola selezione a multi-selezione
+  // stile Excel. Default = tutte e 4 le categorie selezionate (equivalente al vecchio "all").
+  const [activeLedgerCategories, setActiveLedgerCategories] = useState<string[]>(["rent", "condo", "registration", "maintenance"]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [ledgerScale, setLedgerScale] = useState<number>(0.80);
 
@@ -622,10 +625,8 @@ export default function TenantsView({
     
     let list = tenantLedgerData.movementsList;
 
-    // Filter by Category Tab
-    if (activeLedgerCategory !== "all") {
-      list = list.filter(m => m.category === activeLedgerCategory);
-    }
+    // Filter by Category (multi-selezione)
+    list = list.filter(m => activeLedgerCategories.includes(m.category));
 
     // Filter by search query
     if (ledgerSearchQuery.trim()) {
@@ -639,7 +640,7 @@ export default function TenantsView({
     }
 
     return list;
-  }, [tenantLedgerData, activeLedgerCategory, ledgerSearchQuery]);
+  }, [tenantLedgerData, activeLedgerCategories, ledgerSearchQuery]);
 
   // Pre-calculate progressive balances for the movements being displayed
   const movementsWithBalances = useMemo(() => {
@@ -781,7 +782,7 @@ Cordiali saluti.`;
               }
               setSelectedTenantLedger(null);
               setLedgerSearchQuery("");
-              setActiveLedgerCategory("all");
+              setActiveLedgerCategories(["rent", "condo", "registration", "maintenance"]);
             }}
             className="inline-flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl active:transition-all self-start"
           >
@@ -1167,31 +1168,19 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
 
           {/* SEARCH AND FILTER BAR (no-print) */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
-            {/* Category tabs */}
+            {/* Category — Fase 2 punto 2: menu a tendina multi-selezione stile Excel */}
             <div className="flex flex-wrap gap-1.5">
-              {[
-                { id: "all", label: "Tutti i Movimenti", icon: ClipboardList },
-                { id: "rent", label: "Affitti", icon: Euro },
-                { id: "condo", label: "Condominio", icon: Building2 },
-                { id: "registration", label: "Registrazione Contratto", icon: FileText },
-                { id: "maintenance", label: "Manutenzioni", icon: Wrench }
-              ].map(tab => {
-                const TabIcon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveLedgerCategory(tab.id as any)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                      activeLedgerCategory === tab.id
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    <TabIcon size={12} />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
+              <MultiSelectFilterDropdown
+                label="Categoria"
+                options={[
+                  { value: "rent", label: "Affitti" },
+                  { value: "condo", label: "Condominio" },
+                  { value: "registration", label: "Registrazione Contratto" },
+                  { value: "maintenance", label: "Manutenzioni" }
+                ]}
+                selected={activeLedgerCategories}
+                onChange={setActiveLedgerCategories}
+              />
             </div>
 
             {/* Query Search */}
