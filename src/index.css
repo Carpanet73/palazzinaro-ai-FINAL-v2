@@ -83,3 +83,25 @@ h2 {
 ::-webkit-scrollbar-thumb { background: #C7C3B8; border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: #ADA894; }
 
+/* CORREZIONE CP (13/08/2026) — Fase 2 punto 3: UNICA regola di stampa per tutta l'app.
+   `printLedgerTable()` in src/lib/ledgerExport.ts inietta temporaneamente un'area con id
+   "universal-print-area" nel DOM e chiama window.print(): questa regola nasconde tutto il
+   resto della pagina e mostra solo quell'area. Sostituisce le 3 implementazioni di stampa
+   precedenti, diverse e incoerenti tra loro (FastClosingView, TenantsView, OwnersView), come
+   richiesto dalla regola "un solo flusso per ogni azione". */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #universal-print-area,
+  #universal-print-area * {
+    visibility: visible !important;
+  }
+  #universal-print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}
+
