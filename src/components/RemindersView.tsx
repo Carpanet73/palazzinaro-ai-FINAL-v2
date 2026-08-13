@@ -320,11 +320,11 @@ export default function RemindersView({
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // Gating dei 15 giorni tra un passaggio e l'altro dei Solleciti: RIATTIVATO il 05/08/2026.
-  // Era stato disattivato il 24/07/2026 solo per testare la sequenza senza aspettare i tempi
-  // reali. Deve restare `false` in ogni utilizzo reale: altrimenti si perdono i termini
-  // procedurali di legge sulla morosità.
-  const DISABLE_15_DAY_GATING_FOR_TESTING = false;
+  // Gating dei 15 giorni tra un passaggio e l'altro dei Solleciti: DISATTIVATO TEMPORANEAMENTE
+  // il 13/08/2026 su richiesta esplicita di Massimo, solo per testare la sequenza dei passaggi
+  // senza dover aspettare i tempi reali. RIPORTARE A `false` prima di qualunque utilizzo reale:
+  // altrimenti si perdono i termini procedurali di legge sulla morosità.
+  const DISABLE_15_DAY_GATING_FOR_TESTING = true;
 
   const handleOpenStepWizard = (reminder: Reminder) => {
     const step = reminder.step || 1;

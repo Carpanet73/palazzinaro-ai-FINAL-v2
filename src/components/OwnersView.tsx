@@ -349,6 +349,7 @@ export default function OwnersView({
   // esattamente ciò che è visibile a schermo.
   const ownerLedgerExportRows = useMemo(() => {
     const rows: any[] = [];
+    if (!propertyModalData) return rows;
     if (activeLedgerTabs.includes("rent")) {
       propertyModalData.rentPayments.forEach((r: any) => rows.push({ ...r, category: "Canoni" }));
     }
