@@ -768,7 +768,8 @@ export default function FastClosingView({
   // Close Fast Closing action:
   // - Disable until day 20 of current month.
   // - All pending current items of selected month become "Overdue".
-  // - Rigid items (Rent) are re-proposed on the next month's fast closing scadenziario.
+  // - CORREZIONE CO (13/08/2026): Rigid items (Rent) go ONLY to Sollecito, never re-proposed
+  //   on the next month's fast closing scadenziario (see REGOLE_E_LINEE_GUIDA.md sezione 4).
   const handleCloseFastClosing = async () => {
     if (selectedMonthYear !== "current") return;
     
@@ -1906,7 +1907,7 @@ export default function FastClosingView({
                 <div className="space-y-2">
                   <h4 className="text-xs font-black text-rose-600 uppercase tracking-wider flex items-center gap-1.5">
                     <AlertTriangle size={13} className="shrink-0" />
-                    <span>Voci Rigide (Canoni d'Affitto) — Passano in Solleciti & Prossimo Mese</span>
+                    <span>Voci Rigide (Canoni d'Affitto) — Passano in Sollecito (mai rinviate al mese successivo)</span>
                   </h4>
                   <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
                     <table className="w-full text-left border-collapse">
