@@ -106,10 +106,25 @@ export function getTenantClassification(
   const isCondoConstituted = property ? !!property.isCondoConstituted : false;
   const tenantNameClean = (tenant.name || "").replace(/[^a-zA-Z0-9 ]/g, "").toLowerCase().trim();
 
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 1: da quando `title` è diventato l'etichetta
+  // standard "{Cognome}/{Via} {Civico} {Tipologia} {Mese} {Anno}" (src/lib/ledgerLabel.ts),
+  // non contiene più il nome completo dell'inquilino né parole come "(inquilino)"/
+  // "proprietario" usate qui per riconoscere a chi appartiene la voce. Dove disponibile
+  // (debtorId+debtorType, già esistenti su FastClosingItem, popolati per ogni voce reale) si
+  // usa il collegamento diretto e sicuro; il riconoscimento dal testo resta SOLO come
+  // fallback per le voci storiche create prima di questa correzione, che non hanno
+  // debtorId/debtorType popolati.
+  const matchesTenantStructured = (item: FastClosingItem): boolean =>
+    !!item.debtorId && item.debtorType === "tenant" && item.debtorId === tenant.id;
+  const hasStructuredDebtor = (item: FastClosingItem): boolean => !!item.debtorId && !!item.debtorType;
+
   // Rents specific to this tenant
   const rentItems = fastClosing.filter(item => {
     if (item.propertyId !== tenant.propertyId) return false;
     const isContractSource = item.source === "contract";
+    if (hasStructuredDebtor(item)) {
+      return isContractSource && matchesTenantStructured(item);
+    }
     const matchesTenant = (item.title || "").toLowerCase().includes(tenantNameClean) ||
                           (item.description && (item.description || "").toLowerCase().includes(tenantNameClean));
     const matchesContract = activeContract && item.sourceId === activeContract.id;
@@ -123,13 +138,17 @@ export function getTenantClassification(
     condoItems = fastClosing.filter(item => {
       if (item.propertyId !== property.id) return false;
       const isCondoSource = item.source === "condominium";
-      const isCondoWord = (item.title || "").toLowerCase().includes("condominio") || 
+      if (!isCondoSource) return false;
+      if (hasStructuredDebtor(item)) {
+        return matchesTenantStructured(item);
+      }
+      const isCondoWord = (item.title || "").toLowerCase().includes("condominio") ||
                           (item.title || "").toLowerCase().includes("spese cond") ||
                           (item.description && (item.description || "").toLowerCase().includes("condominio"));
       const matchesTenant = (item.title || "").toLowerCase().includes(tenantNameClean) ||
                             (item.description && (item.description || "").toLowerCase().includes(tenantNameClean)) ||
                             (item.title || "").toLowerCase().includes("(inquilino)");
-      return (isCondoSource || isCondoWord) && matchesTenant;
+      return isCondoWord && matchesTenant;
     });
   }
 
@@ -137,15 +156,19 @@ export function getTenantClassification(
   const splitMaintenanceClosing = fastClosing.filter(item => {
     if (item.propertyId !== tenant.propertyId) return false;
     if (item.source !== "maintenance") return false;
-    
+
+    if (hasStructuredDebtor(item)) {
+      return matchesTenantStructured(item);
+    }
+
     const titleLower = (item.title || "").toLowerCase();
     const descLower = (item.description || "").toLowerCase();
-    
+
     // Explicitly exclude owner splits
     if (titleLower.includes("proprietari") || titleLower.includes("proprietario") || titleLower.includes("locatore")) {
       return false;
     }
-    
+
     const matchesTenant = titleLower.includes(tenantNameClean) || descLower.includes(tenantNameClean) || titleLower.includes("(inquilino)");
     return matchesTenant;
   });
