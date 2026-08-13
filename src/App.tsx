@@ -2237,18 +2237,28 @@ export default function App() {
         createdAt: serverTimestamp()
       });
 
-      // Also inject into Fast Closing as an active Overdue alert item!
-      await addDoc(collection(db, "fastClosing"), {
-        userId: user.uid,
-        title: `Sollecito Insoluto: ${data.tenantName}`,
-        description: `Insoluto per causale: ${data.reason}`,
-        amount: data.amount,
-        dueDate: data.dueDate,
-        source: "reminder",
-        sourceId: reminderDoc.id,
-        status: "Overdue",
-        createdAt: serverTimestamp()
-      });
+      // CORREZIONE CO (13/08/2026) — Un Sollecito nasce SEMPRE per raggruppare voci Fast
+      // Closing REALI e già esistenti (canoni o spese accessorie marcate Insolute),
+      // referenziate tramite associatedItemsIds: il debito è già visibile nel mastrino
+      // tramite quelle righe reali. Iniettare qui ANCHE una riga fantasma "Sollecito
+      // Insoluto: ..." duplicava lo stesso importo una seconda volta nel totale del
+      // mastrino (bug segnalato da Massimo il 13/08/2026 — es. €16.500 in sospeso invece
+      // del reale ~€3.000 per lo stesso inquilino). La riga di mirroring va creata SOLO
+      // per un Sollecito del tutto manuale, senza alcuna voce Fast Closing reale a cui
+      // agganciarsi (oggi nessun punto dell'app crea ancora un Sollecito così).
+      if (!cleanData.associatedItemsIds || cleanData.associatedItemsIds.length === 0) {
+        await addDoc(collection(db, "fastClosing"), {
+          userId: user.uid,
+          title: `Sollecito Insoluto: ${data.tenantName}`,
+          description: `Insoluto per causale: ${data.reason}`,
+          amount: data.amount,
+          dueDate: data.dueDate,
+          source: "reminder",
+          sourceId: reminderDoc.id,
+          status: "Overdue",
+          createdAt: serverTimestamp()
+        });
+      }
       showSuccess("Sollecito aggiunto e scadenziario sincronizzato!");
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.CREATE, "reminders");
