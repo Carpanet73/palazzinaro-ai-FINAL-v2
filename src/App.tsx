@@ -64,6 +64,7 @@ import SettingsView from "./components/SettingsView";
 import MasterDataWizard from "./components/MasterDataWizard";
 import UniversalAddButton from "./components/UniversalAddButton";
 import { earlyTerminationReasonLabel } from "./lib/earlyTermination";
+import { formatLedgerLabel } from "./lib/ledgerLabel";
 
 // Lucide Icons for Landing Page and Alerts
 import { Sparkles, CheckCircle2, ShieldCheck, Database, FileText, Menu, Building2, AlertCircle } from "lucide-react";
@@ -1560,6 +1561,10 @@ export default function App() {
       let finalTenantId = data.tenantId;
       let finalTenantName = data.tenantName;
       let finalOwnerName = data.ownerName;
+      // CORREZIONE CP (13/08/2026) — indirizzo dell'immobile per l'etichetta standard delle
+      // righe contabili generate da questo contratto (Fase 2 punto 1).
+      let finalPropertyAddress: string | undefined = data.newProperty?.address
+        || properties.find(p => p.id === finalPropertyId)?.address;
 
       // CORREZIONE BT — bug reale: Firestore rifiuta categoricamente qualunque campo con
       // valore "undefined" nella scrittura (non lo ignora, lancia un errore e l'intera
@@ -1641,12 +1646,21 @@ export default function App() {
         // contratto (da inizio a fine), senza eccezioni — un contratto di 4+4 anni genera
         // tutte le sue ~96 rate fin da subito.
         while (currentDueDate <= end) {
+          const dueDateStr = currentDueDate.toISOString().split("T")[0];
           await addDoc(collection(db, "fastClosing"), {
             userId: user.uid,
-            title: `Canone Affitto Mese ${monthIndex} - ${finalTenantName}`,
+            // CORREZIONE CP (13/08/2026) — etichetta standard Fase 2 punto 1:
+            // "{Cognome}/{Via} {Civico} Affitto {Mese} {Anno}".
+            title: formatLedgerLabel({
+              debtorName: finalTenantName,
+              propertyAddress: finalPropertyAddress,
+              tipologia: "Affitto",
+              dateForPeriod: dueDateStr
+            }),
             description: `Riferimento Contratto Locazione su ${finalPropertyName}`,
+            propertyId: finalPropertyId,
             amount: rentAmount,
-            dueDate: currentDueDate.toISOString().split("T")[0],
+            dueDate: dueDateStr,
             source: "contract",
             sourceId: contractDoc.id,
             status: "Pending",
@@ -1679,6 +1693,10 @@ export default function App() {
         const resolvedOwnerId = properties.find(p => p.id === finalPropertyId)?.ownerId
           || data.newProperty?.ownerId
           || null;
+        // CORREZIONE CP (13/08/2026) — nome del Locatore per l'etichetta standard (Fase 2
+        // punto 1): risolto dall'anagrafica Owner reale se disponibile, altrimenti dal nome
+        // libero già presente sul contratto.
+        const resolvedOwnerName = owners.find(o => o.id === resolvedOwnerId)?.name || finalOwnerName;
 
         const start = new Date(data.startDate);
         const end = data.endDate ? new Date(data.endDate) : new Date(start.getTime() + 4 * 365 * 24 * 3600 * 1000);
@@ -1693,7 +1711,13 @@ export default function App() {
             await addDoc(collection(db, "fastClosing"), {
               userId: user.uid,
               propertyId: finalPropertyId,
-              title: `F24 Imposta di Registro - ${yearLabel} - Quota Locatore (${ownerPct}%) - ${finalPropertyName}`,
+              title: formatLedgerLabel({
+                debtorName: resolvedOwnerName,
+                isCompany: owners.find(o => o.id === resolvedOwnerId)?.isCompany,
+                propertyAddress: finalPropertyAddress,
+                tipologia: `F24 Registrazione ${yearLabel} (Quota Locatore ${ownerPct}%)`,
+                dateForPeriod: dueDateStr
+              }),
               description: `Imposta di registro annuale del contratto con ${finalTenantName}, quota a carico del Locatore.`,
               amount: Math.round(yearlyTaxAmount * ownerPct) / 100,
               dueDate: dueDateStr,
@@ -1709,7 +1733,12 @@ export default function App() {
             await addDoc(collection(db, "fastClosing"), {
               userId: user.uid,
               propertyId: finalPropertyId,
-              title: `F24 Imposta di Registro - ${yearLabel} - Quota Conduttore (${tenantPct}%) - ${finalPropertyName}`,
+              title: formatLedgerLabel({
+                debtorName: finalTenantName,
+                propertyAddress: finalPropertyAddress,
+                tipologia: `F24 Registrazione ${yearLabel} (Quota Conduttore ${tenantPct}%)`,
+                dateForPeriod: dueDateStr
+              }),
               description: `Imposta di registro annuale del contratto con ${finalTenantName}, quota a carico del Conduttore.`,
               amount: Math.round(yearlyTaxAmount * tenantPct) / 100,
               dueDate: dueDateStr,
@@ -2073,12 +2102,20 @@ export default function App() {
           let currentDueDate = new Date(start);
           let monthIndex = 1;
           while (currentDueDate <= new Date(ct.endDate || start)) {
+            const wizardDueDateStr = currentDueDate.toISOString().split("T")[0];
             await addDoc(collection(db, "fastClosing"), {
               userId: user.uid,
-              title: `Canone Affitto Mese ${monthIndex} - ${tenantName}`,
+              // CORREZIONE CP (13/08/2026) — etichetta standard Fase 2 punto 1.
+              title: formatLedgerLabel({
+                debtorName: tenantName,
+                propertyAddress: p.address,
+                tipologia: "Affitto",
+                dateForPeriod: wizardDueDateStr
+              }),
               description: `Riferimento Contratto Locazione su ${p.name}`,
+              propertyId: propDoc.id,
               amount: rentAmount,
-              dueDate: currentDueDate.toISOString().split("T")[0],
+              dueDate: wizardDueDateStr,
               source: "contract",
               sourceId: contractDoc.id,
               status: "Pending",
@@ -2582,12 +2619,20 @@ export default function App() {
           dueDate = data.esigibilitaData;
         }
 
+        // CORREZIONE CP (13/08/2026) — indirizzo dell'immobile per l'etichetta standard
+        // (Fase 2 punto 1).
+        const maintProperty = properties.find(p => p.id === data.propertyId);
         for (const split of data.splits) {
           if (Number(split.amount) > 0) {
             await addDoc(collection(db, "fastClosing"), {
               userId: user.uid,
               propertyId: data.propertyId,
-              title: `Quota ${split.debtorName} - Manutenzione: ${data.title} (${data.propertyName})`,
+              title: formatLedgerLabel({
+                debtorName: split.debtorName,
+                propertyAddress: maintProperty?.address,
+                tipologia: `Manutenzione (${data.title})`,
+                dateForPeriod: dueDate
+              }),
               description: data.description || `Quota a carico del debitore. Manutenzione: ${data.title}. Ditta: ${data.contractor || "N/A"}`,
               amount: Number(split.amount),
               dueDate: dueDate,
@@ -2607,16 +2652,29 @@ export default function App() {
           dueDate = data.esigibilitaData;
         }
 
+        const maintProperty = properties.find(p => p.id === data.propertyId);
+        const isTenantCharged = data.chargedTo === "tenant";
+        const legacyDebtor = isTenantCharged
+          ? tenants.find(t => t.propertyId === data.propertyId)
+          : owners.find(o => o.id === maintProperty?.ownerId);
+
         await addDoc(collection(db, "fastClosing"), {
           userId: user.uid,
           propertyId: data.propertyId,
-          title: `Manutenzione: ${data.title} - ${data.propertyName} (${data.chargedTo === "tenant" ? "Inquilino" : "Proprietario"})`,
+          title: formatLedgerLabel({
+            debtorName: legacyDebtor?.name || (isTenantCharged ? "Inquilino" : "Proprietario"),
+            isCompany: (legacyDebtor as any)?.isCompany,
+            propertyAddress: maintProperty?.address,
+            tipologia: `Manutenzione (${data.title})`,
+            dateForPeriod: dueDate
+          }),
           description: data.description || `Lavoro di manutenzione a carico del ${data.chargedTo === "tenant" ? "Conduttore" : "Locatore"}. Ditta: ${data.contractor || "N/A"}`,
           amount: Number(data.cost),
           dueDate: dueDate,
           source: "maintenance",
           sourceId: maintDoc.id,
           status: "Pending",
+          debtorId: legacyDebtor?.id || null,
           debtorType: data.chargedTo === "tenant" ? "tenant" : "owner", // CORREZIONE D (percorso legacy, senza id specifico)
           createdAt: serverTimestamp()
         });
@@ -3198,12 +3256,13 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         )}
 
         {currentSection === "condominiums" && (
-          <CondominiumsView 
+          <CondominiumsView
             condominiums={condominiums}
             properties={properties}
             expensePrefill={condoExpensePrefill}
             onClearExpensePrefill={() => setCondoExpensePrefill(null)}
             tenants={tenants}
+            owners={owners}
             fastClosing={fastClosing}
             administrators={administrators}
             onAddAdministrator={handleAddAdministrator}

@@ -462,6 +462,15 @@ export interface FastClosingItem {
   // anticipata (o in futuro per altri annullamenti motivati), qui resta traccia del
   // perché — prima uno stato "Cancelled" non spiegava mai la causale nel mastrino.
   cancellationReason?: string;
+  // CORREZIONE CP (13/08/2026) — Fase 2 punto 1: da quando `title` è diventato l'etichetta
+  // standard "{Cognome}/{Via} {Civico} {Tipologia} {Mese} {Anno}" (src/lib/ledgerLabel.ts),
+  // non contiene più il testo libero della spesa/voce originale (es. descrizione della spesa
+  // condominiale inserita da Massimo) né un identificativo per accoppiare le due righe
+  // (Inquilino/Proprietario) della STESSA spesa condominiale — prima questo veniva dedotto
+  // facendo parsing del testo del titolo, fragile e ora impossibile col nuovo formato.
+  // Questi due campi sostituiscono quel parsing con dati strutturati:
+  groupLabel?: string;      // testo libero della voce originale (es. "Rata Ordinaria Ottobre"), per la UI
+  expenseGroupKey?: string; // stesso valore su tutte le righe che fanno parte della stessa spesa/evento
 }
 
 export interface Reminder {
