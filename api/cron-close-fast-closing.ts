@@ -17,11 +17,11 @@
  * (App.tsx) — stesso comportamento, sia che l'azione parta dal client sia che parta da qui.
  *
  * REGOLA DI BUSINESS (replicata 1:1 dal client):
- * - Voci rigide (canone, source "contract"): passano a "Overdue" e vengono riproposte
- *   automaticamente il mese successivo con lo stesso importo e lo stesso debtorId/debtorType
- *   (così il collegamento robusto al debitore non si perde mai, a differenza del vecchio
- *   comportamento client che lo perdeva sulla riga riproposta — corretto qui e nel client
- *   nella stessa sessione di lavoro, per restare un solo flusso identico).
+ * - CORREZIONE CO (13/08/2026): Voci rigide (canone, source "contract"): passano SOLO a
+ *   "Overdue" e SOLO in Sollecito — MAI riproposte come nuova voce pending il mese
+ *   successivo (bug reale corretto in questa data: causava doppia contabilizzazione dello
+ *   stesso debito, righe "[Arretrato]" impilate). Questo commento descriveva in precedenza
+ *   il comportamento sbagliato: aggiornato per restare allineato al codice reale.
  * - Voci accessorie già Overdue: restano Overdue (confluiscono nei Solleciti sotto).
  * - Voci accessorie ancora Pending: vengono rinviate di un mese, stato torna a Pending.
  *   Questo cron sostituisce interamente lo scopo di api/cron-postpone-accessories.ts (che
@@ -132,6 +132,59 @@ function addOneMonthToDate(dateStr: string): string {
   return d.toISOString().split('T')[0];
 }
 
+// CORREZIONE CP (13/08/2026) — Fase 2 punto 1: stessa identica logica di formatLedgerLabel
+// in src/lib/ledgerLabel.ts, duplicata qui volutamente (non importata) perché questa funzione
+// serverless resta un file autonomo senza dipendenze dall'albero src/ (stesso pattern già in
+// uso in questo file: solo firebase-admin viene importato). Se il formato cambia in un posto,
+// va aggiornato in entrambi.
+const ITALIAN_MONTHS_FULL_SERVER = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
+];
+
+function getDebtorSurnameServer(fullName: string | undefined | null, isCompany?: boolean): string {
+  const name = (fullName || '').trim();
+  if (!name) return 'Debitore';
+  if (isCompany) return name;
+  const lastSpaceIdx = name.lastIndexOf(' ');
+  if (lastSpaceIdx === -1) return name;
+  return name.substring(lastSpaceIdx + 1).trim() || name;
+}
+
+function parsePropertyStreetServer(address: string | undefined | null): string {
+  const raw = (address || '').trim();
+  if (!raw) return '';
+  return raw.split(',')[0].trim();
+}
+
+function formatLedgerLabelServer(input: {
+  debtorName: string | undefined | null;
+  isCompany?: boolean;
+  propertyAddress?: string | null;
+  tipologia: string;
+  dateForPeriod?: string;
+}): string {
+  const surname = getDebtorSurnameServer(input.debtorName, input.isCompany);
+  const street = parsePropertyStreetServer(input.propertyAddress);
+  let month: string | undefined;
+  let year: number | undefined;
+  const match = (input.dateForPeriod || '').match(/^(\d{4})-(\d{2})/);
+  if (match) {
+    const y = parseInt(match[1], 10);
+    const mIdx = parseInt(match[2], 10) - 1;
+    if (mIdx >= 0 && mIdx <= 11) {
+      month = ITALIAN_MONTHS_FULL_SERVER[mIdx];
+      year = y;
+    }
+  }
+  const parts: string[] = [];
+  parts.push(street ? `${surname}/${street}` : surname);
+  if (input.tipologia) parts.push(input.tipologia);
+  if (month) parts.push(month);
+  if (year) parts.push(String(year));
+  return parts.join(' ');
+}
+
 function isRigidItem(item: any): boolean {
   if (item.source === 'contract') return true;
   const titleLower = (item.title || '').toLowerCase();
@@ -228,7 +281,7 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       try {
         const today = new Date();
 
-        const [fastClosingSnap, tenantsSnap, ownersSnap, remindersSnap, legalCasesSnap, contractsSnap, deliveryReportsSnap] = await Promise.all([
+        const [fastClosingSnap, tenantsSnap, ownersSnap, remindersSnap, legalCasesSnap, contractsSnap, deliveryReportsSnap, propertiesSnap] = await Promise.all([
           firestore.collection('fastClosing').where('userId', '==', userId).get(),
           firestore.collection('tenants').where('userId', '==', userId).get(),
           firestore.collection('owners').where('userId', '==', userId).get(),
@@ -236,6 +289,9 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
           firestore.collection('legalCases').where('userId', '==', userId).get(),
           firestore.collection('contracts').where('userId', '==', userId).get(),
           firestore.collection('deliveryReports').where('userId', '==', userId).get(),
+          // CORREZIONE CP (13/08/2026) — serve l'indirizzo immobile per l'etichetta standard
+          // (Fase 2 punto 1) delle righe di Indennità di Occupazione generate qui.
+          firestore.collection('properties').where('userId', '==', userId).get(),
         ]);
 
         const fastClosingItems: any[] = [];
@@ -252,6 +308,8 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
         contractsSnap.forEach((d: any) => contracts.push({ id: d.id, ...d.data() }));
         const deliveryReports: any[] = [];
         deliveryReportsSnap.forEach((d: any) => deliveryReports.push({ id: d.id, ...d.data() }));
+        const properties: any[] = [];
+        propertiesSnap.forEach((d: any) => properties.push({ id: d.id, ...d.data() }));
 
         // Stessa identica selezione di monthFilteredItems (selectedMonthYear === "current")
         const pendingItems = fastClosingItems.filter((item) => {
@@ -398,9 +456,14 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
             (dr) => dr.contractId === contract.id && dr.type === 'riconsegna'
           );
           if (hasRiconsegna) continue;
+          // CORREZIONE CP (13/08/2026) — rimosso il controllo su fc.title.startsWith(...):
+          // dal momento della disdetta non vengono più generate righe canone per questo
+          // contratto, quindi source==="contract" + sourceId===contract.id + stesso mese è
+          // già una combinazione univoca (stesso fix applicato lato client in
+          // FastClosingView.tsx, per restare un solo flusso identico).
           const alreadyExists = fastClosingItems.some(
-            (fc) => fc.sourceId === contract.id &&
-                    (fc.title || '').startsWith('Indennità di Occupazione') &&
+            (fc) => fc.source === 'contract' &&
+                    fc.sourceId === contract.id &&
                     (fc.dueDate || '').startsWith(nextPeriod)
           );
           if (alreadyExists) continue;
@@ -408,12 +471,21 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
           const description = contract.earlyTerminationDate
             ? `Contratto chiuso anticipatamente il ${referenceEndDateStr} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`
             : `Contratto scaduto il ${referenceEndDateStr} ma immobile non ancora riconsegnato (nessun Verbale di Riconsegna registrato). Stesso importo del canone precedente.`;
+          const indennitaDueDate = `${nextPeriod}-01`;
+          const contractProperty = properties.find((p) => p.id === contract.propertyId);
           batch.set(indennitaRef, {
             userId,
-            title: `Indennità di Occupazione - ${contract.tenantName}`,
+            // CORREZIONE CP (13/08/2026) — etichetta standard Fase 2 punto 1.
+            title: formatLedgerLabelServer({
+              debtorName: contract.tenantName,
+              propertyAddress: contractProperty?.address,
+              tipologia: 'Indennità di Occupazione',
+              dateForPeriod: indennitaDueDate,
+            }),
             description,
             amount: contract.rentAmount,
-            dueDate: `${nextPeriod}-01`,
+            dueDate: indennitaDueDate,
+            propertyId: contract.propertyId,
             source: 'contract',
             sourceId: contract.id,
             status: 'Pending',
