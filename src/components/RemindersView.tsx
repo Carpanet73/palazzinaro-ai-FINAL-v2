@@ -636,31 +636,13 @@ export default function RemindersView({
     }
   };
 
-  const handleUploadReceipt = async (reminder: Reminder, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const fileName = file.name;
-      // Transition reminder to MessaInMora and save receipt name
-      await onUpdateReminderStatus(reminder.id, "MessaInMora", "Ricevuta raccomandata caricata.", {
-        registeredLetterReceiptName: fileName
-      });
-
-      // Automatically generate a new Legal Case dossier
-      if (onAddLegalCase) {
-        await onAddLegalCase({
-          title: `Messa in mora - ${reminder.tenantName}`,
-          description: `Morosità canone pari a €${reminder.amount.toFixed(2)} per la causale "${reminder.reason}". Pratica legale aperta automaticamente a seguito del caricamento della ricevuta della raccomandata.`,
-          tenantName: reminder.tenantName,
-          status: "Active",
-          notes: `Ricevuta raccomandata: ${fileName}. Caricata in data ${new Date().toLocaleDateString("it-IT")}. Termine per adempiere avviato.`
-        });
-      }
-    } catch (err) {
-      console.error("Error uploading receipt and creating legal case:", err);
-    }
-  };
+  // CORREZIONE CO (13/08/2026) — Rimossa handleUploadReceipt: codice morto (mai collegata ad
+  // alcun onChange, verificato via grep), legacy e in conflitto con la regola 5 del progetto
+  // (creava una LegalCase su singolo upload senza ZIP, senza tracciamento step, senza il
+  // gating dei 15gg né il popup di conferma). Il flusso reale e unico per l'upload di prova
+  // di invio + ricevuta di ritorno è handleUploadReceiptSimulated (richiede entrambi i file
+  // prima di avanzare lo step 3->4); il passaggio effettivo ad Area Legale è
+  // handleMoveToLegalAction (step 4->5, crea la LegalCase NON assegnata, con ZIP reale).
 
   const handleOpenReconcileReminder = (reminder: Reminder) => {
     setReconcileReminder(reminder);

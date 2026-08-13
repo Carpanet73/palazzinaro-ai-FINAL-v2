@@ -45,7 +45,6 @@ import {
 } from "lucide-react";
 import { Property, Contract, Tenant, FastClosingItem, Reminder, Condominium, LegalCase, AppSection, Communication, Lawyer, Maintenance, OwnerProfile, InsurancePolicy } from "../types";
 import { getTenantClassification } from "../lib/statusHelper";
-import { generateMessaInMoraPDF } from "../lib/pdfHelper";
 
 interface DashboardViewProps {
   properties: Property[];
@@ -228,11 +227,9 @@ export default function DashboardView({
     }
   };
   
-  // Interactive Stepper Legal Transfer Modal State
-  const [transferringReminder, setTransferringReminder] = useState<any | null>(null);
-  const [selectedLawyerId, setSelectedLawyerId] = useState("");
-  const [actionInProgress, setActionInProgress] = useState(false);
-  const [successToast, setSuccessToast] = useState("");
+  // CORREZIONE CO (13/08/2026) — Rimosso lo stato transferringReminder/selectedLawyerId/
+  // actionInProgress/successToast: era usato solo dai gestori handleAlertStepForward/
+  // handleConfirmLegalTransfer (codice morto, mai raggiungibile) rimossi sopra.
 
   // Find contracts that require disdetta postal registered letter but have not uploaded it
   const disdettaAlerts = useMemo(() => {
@@ -402,8 +399,11 @@ export default function DashboardView({
       } else if (activeStep === 4 && r.thirdRequestDate) {
         const sentDate = new Date(r.thirdRequestDate);
         daysPassed = Math.floor((now.getTime() - sentDate.getTime()) / (1000 * 60 * 60 * 24));
-        // ONLY show if at least 15 days have passed since the previous action (Step 3)
-        if (daysPassed < 15) return;
+        // CORREZIONE CO (13/08/2026) — Step 4 (Messa in Mora generata, in attesa di upload prova+ricevuta
+        // e passaggio ad Area Legale) NON ha un gate temporale di 15gg: il passaggio 4->5 è vincolato
+        // solo dall'upload della ricevuta di ritorno (gate funzionale reale, vedi RemindersView), mai dal
+        // tempo. Il reminder deve comparire in Dashboard SUBITO e restare finché il fascicolo non viene
+        // effettivamente spostato in Area Legale (regola progetto, sezione 5 e 6).
       } else {
         return;
       }
@@ -423,86 +423,15 @@ export default function DashboardView({
     return alerts;
   }, [reminders]);
 
-  const handleAlertStepForward = async (alertItem: any) => {
-    if (!onUpdateReminderStatus) return;
-    setActionInProgress(true);
-    try {
-      if (alertItem.step === 1) {
-        await onUpdateReminderStatus(alertItem.id, "Sent", "Inviato secondo sollecito di pagamento.", {
-          step: 2,
-          secondRequestDate: new Date().toISOString().split("T")[0]
-        });
-        setSuccessToast("Secondo Sollecito Inviato con Successo! L'attività è progredita.");
-      } else if (alertItem.step === 2) {
-        const matchedReminder = reminders.find(rem => rem.id === alertItem.id);
-        const dueDate = matchedReminder?.dueDate || new Date().toISOString().split("T")[0];
-        generateMessaInMoraPDF(
-          alertItem.tenantName,
-          alertItem.amount,
-          dueDate
-        );
-
-        await onUpdateReminderStatus(alertItem.id, "MessaInMora", "Inviata Raccomandata di Messa in Mora con ricevuta di ritorno.", {
-          step: 3,
-          thirdRequestDate: new Date().toISOString().split("T")[0]
-        });
-        setSuccessToast("Diffida / Messa in Mora generata in PDF e contrassegnata come inviata!");
-      } else if (alertItem.step === 3) {
-        await onUpdateReminderStatus(alertItem.id, "MessaInMora", "Ricevuta di ritorno firmata e registrata a sistema.", {
-          step: 4,
-          receiptDownloaded: true
-        });
-        setSuccessToast("Ricevuta di Ritorno Firmata registrata con successo!");
-      } else if (alertItem.step === 4) {
-        // This opens the legal study assignment modal!
-        setTransferringReminder(alertItem);
-        setSelectedLawyerId(lawyers[0]?.id || "");
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setActionInProgress(false);
-      setTimeout(() => setSuccessToast(""), 4000);
-    }
-  };
-
-  const handleConfirmLegalTransfer = async () => {
-    if (!onUpdateReminderStatus || !onAddLegalCase || !transferringReminder) return;
-    setActionInProgress(true);
-    try {
-      const selectedLawyer = lawyers.find(l => l.id === selectedLawyerId);
-      
-      // Create Legal Case with all default attachments inside the "Fascicolo" folder structure
-      await onAddLegalCase({
-        title: `Contenzioso Morosità Grave - Inquilino: ${transferringReminder.tenantName}`,
-        description: `Procedura coattiva avviata da bacheca dopo 3 solleciti infruttuosi per insoluto accumulato di €${transferringReminder.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}.`,
-        tenantName: transferringReminder.tenantName,
-        propertyId: transferringReminder.propertyId || "",
-        propertyName: properties.find(p => p.id === transferringReminder.propertyId)?.name || "Immobile Portafoglio",
-        contractId: transferringReminder.contractId || "",
-        unpaidBalance: transferringReminder.amount,
-        status: "Active",
-        assignedLawyerId: selectedLawyer?.id || "",
-        assignedLawyerName: selectedLawyer?.name || "Avvocato d'Ufficio",
-        zipFileName: `Fascicolo_Legale_${transferringReminder.tenantName.replace(/\s+/g, "_")}.zip`,
-        filesToAssign: true,
-        notes: `Cartella fascicolo creata in Area Legale con nome "${transferringReminder.tenantName}". Allegati inseriti: Contratto di locazione registrato, Ricevuta di ritorno firmata, Registro solleciti 1-2, F24 imposta di registro, Mastrino spese condominiali e canoni insoluti.`
-      });
-
-      // Update reminder step to 5 so it is hidden from active sequences
-      await onUpdateReminderStatus(transferringReminder.id, "MessaInMora", "Fascicolo trasferito legalmente con successo.", {
-        step: 5
-      });
-
-      setSuccessToast(`Pratica Legale creata con successo! Fascicolo associato allo Studio ${selectedLawyer?.studioName || "selezionato"}.`);
-      setTransferringReminder(null);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setActionInProgress(false);
-      setTimeout(() => setSuccessToast(""), 5000);
-    }
-  };
+  // CORREZIONE CO (13/08/2026) — Rimossi handleAlertStepForward/handleConfirmLegalTransfer:
+  // codice morto, mai raggiungibile da alcun onClick (verificato via grep), che tra l'altro
+  // implementava esattamente il comportamento scorretto segnalato da Massimo ("mi chiede se
+  // voglio passare il fascicolo all'avvocato" invece di "in Area Legale"). Il flusso reale e
+  // corretto (chiede di spostare in Area Legale, non assegna un avvocato in automatico) è
+  // handleMoveToLegalAction in RemindersView.tsx, invariato. Rimossa anche la relativa modale
+  // di assegnazione avvocato diretta dalla Dashboard (mai renderizzata/raggiungibile), per
+  // rispettare la regola 4.1 (un solo flusso per ogni azione) ed evitare che questo codice
+  // morto venga in futuro ricollegato per errore, reintroducendo il bug.
 
   // Load property documents from local storage to check for uploaded receipts
   const propertyDocs = useMemo(() => {
@@ -1011,16 +940,6 @@ export default function DashboardView({
 
     return (
       <div className="space-y-6" id="property-detail-page">
-        {/* Dynamic Success Toast */}
-        {successToast && (
-          <div className="fixed top-6 right-6 z-50 bg-slate-900 text-white font-sans text-xs font-bold px-4 py-3.5 rounded-2xl border border-indigo-500/20 shadow-2xl flex items-center space-x-2.5 animate-bounce duration-300">
-            <span className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center shrink-0">
-              <CheckCircle2 size={11} className="text-white" />
-            </span>
-            <span>{successToast}</span>
-          </div>
-        )}
-
         {/* Back and Title Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5">
           <div className="flex items-center space-x-3">
@@ -3086,92 +3005,14 @@ export default function DashboardView({
 
       </div>
 
-      {/* Toast notification */}
-      {successToast && (
-        <div className="fixed bottom-5 right-5 z-50 bg-emerald-600 text-white px-5 py-4 rounded-xl shadow-2xl border border-emerald-500 animate-bounce flex items-center space-x-3 text-xs max-w-sm">
-          <CheckCircle2 size={18} className="shrink-0" />
-          <div>
-            <p className="font-extrabold">Operazione Riuscita</p>
-            <p className="text-[10px] mt-0.5 text-emerald-100">{successToast}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Interactive Modal: Associa Studio Legale & Sposta Fascicolo */}
-      {transferringReminder && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in animate-duration-300" id="legal-transfer-modal">
-          <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Scale size={20} className="text-indigo-300 shrink-0" />
-                <div>
-                  <h3 className="font-sans font-black text-sm tracking-tight">Costituzione Fascicolo Legale</h3>
-                  <p className="text-[9px] text-slate-400">Area Urgente → Area Legale</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setTransferringReminder(null)} 
-                className="text-slate-400 hover:text-white text-xs cursor-pointer font-bold"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div className="bg-amber-50 border border-amber-300 p-3 rounded-xl text-[10px] text-amber-900 leading-relaxed">
-                <strong>Cartella di Pratica:</strong> Verrà creata una cartella denominata <strong>"{transferringReminder.tenantName}"</strong> in Area Legale contenente i seguenti allegati pre-compilati per lo studio:
-                <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-700 font-medium">
-                  <li>Contratto di locazione registrato (.pdf)</li>
-                  <li>Ricevuta di ritorno firmata della Messa in Mora (.pdf)</li>
-                  <li>Registro storico dei solleciti 1 e 2 (.pdf)</li>
-                  <li>Mastrino contabile delle morosità accumulate (€{transferringReminder.amount.toLocaleString("it-IT")})</li>
-                </ul>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">
-                  Seleziona Studio Legale Indicizzato:
-                </label>
-                <select
-                  value={selectedLawyerId}
-                  onChange={(e) => setSelectedLawyerId(e.target.value)}
-                  className="w-full bg-slate-50 border-2 border-slate-200 text-xs rounded-xl p-2.5 font-bold text-slate-900 focus:outline-hidden focus:border-indigo-500"
-                >
-                  {lawyers.length === 0 ? (
-                    <option value="">Nessuno Studio Legale caricato</option>
-                  ) : (
-                    lawyers.map(l => (
-                      <option key={l.id} value={l.id}>
-                        {l.studioName} ({l.name}) — Sp. {l.specialization}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <p className="text-[9px] text-slate-500 mt-1.5 leading-snug">
-                  Lo studio legale selezionato riceverà la delega digitale della pratica di morosità grave con tutti gli allegati.
-                </p>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  onClick={() => setTransferringReminder(null)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] px-3.5 py-2.5 rounded-xl transition-all cursor-pointer"
-                >
-                  Annulla
-                </button>
-                
-                <button
-                  onClick={handleConfirmLegalTransfer}
-                  disabled={actionInProgress}
-                  className="bg-rose-600 hover:bg-rose-500 text-white font-black text-[10px] px-4 py-2.5 rounded-xl -2 border-rose-800 active:-0 transition-all cursor-pointer shadow-xs"
-                >
-                  {actionInProgress ? "Generazione Cartella..." : "Associa Studio & Sposta Pratica"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* CORREZIONE CO (13/08/2026) — Rimossi il toast e la modale "Associa Studio & Sposta
+          Pratica" collegati al codice morto handleAlertStepForward/handleConfirmLegalTransfer.
+          Quella modale chiedeva di assegnare direttamente un avvocato dalla Dashboard — esattamente
+          il comportamento scorretto segnalato da Massimo — ma non era mai raggiungibile da alcun
+          pulsante reale. Il flusso corretto e unico resta: Dashboard reindirizza a "Solleciti"
+          (pulsante "Vedi in Solleciti", passaggio in Area Legale via handleMoveToLegalAction in
+          RemindersView.tsx) e poi a "Area Legale" per l'associazione allo studio legale (drag&drop
+          in LegalView.tsx). */}
 
     </div>
   );

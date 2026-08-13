@@ -807,25 +807,41 @@ export default function FastClosingView({
         );
         if (activeLegalCase) continue;
 
-        const itemsListText = group.items.map(item => `${item.title.split(" - ")[1] || item.title} (€${item.amount.toFixed(2)})`).join(", ");
-        const associatedItemsIds = group.items.map(item => item.id);
-
         const existingActiveReminder = (reminders || []).find(r =>
           r.tenantName === debtorName && r.status !== "Closed" && r.status !== "Cancelled" && r.status !== "Paid"
         );
 
         if (existingActiveReminder && onUpdateReminderStatus) {
-          const updatedIds = Array.from(new Set([...(existingActiveReminder.associatedItemsIds || []), ...associatedItemsIds]));
-          const updatedAmount = (existingActiveReminder.amount || 0) + group.total;
-          const updatedReason = existingActiveReminder.reason
-            ? `${existingActiveReminder.reason} + Chiusura Fast Closing: ${itemsListText}`
-            : `Sollecito automatico Fast Closing: ${itemsListText}`;
-          await onUpdateReminderStatus(existingActiveReminder.id, existingActiveReminder.status as any, existingActiveReminder.followUpNotes, {
-            associatedItemsIds: updatedIds,
-            amount: updatedAmount,
-            reason: updatedReason
-          });
+          // CORREZIONE CO (13/08/2026) — Un canone rimasto Overdue da una chiusura precedente
+          // resta candidato del gruppo Sollecito ad OGNI chiusura successiva (finché non viene
+          // saldato), perché preCloseData lo rilegge sempre da "pendingItems". Prima di questa
+          // correzione l'intero importo del gruppo (group.total) veniva risommato al Sollecito
+          // ad ogni chiusura, anche per voci già presenti in associatedItemsIds — l'importo del
+          // Sollecito cresceva all'infinito ad ogni chiusura mensile pur senza nuovo insoluto
+          // reale (bug segnalato da Massimo il 13/08/2026: €16.500 in sospeso invece del reale
+          // ~€3.000 per lo stesso inquilino). Ora si sommano SOLO le voci non ancora associate.
+          const alreadyAssociatedIds = new Set(existingActiveReminder.associatedItemsIds || []);
+          const newItems = group.items.filter(item => !alreadyAssociatedIds.has(item.id));
+
+          if (newItems.length > 0) {
+            const newItemsListText = newItems.map(item => `${item.title.split(" - ")[1] || item.title} (€${item.amount.toFixed(2)})`).join(", ");
+            const newAmount = newItems.reduce((sum, item) => sum + item.amount, 0);
+            const updatedIds = Array.from(new Set([...alreadyAssociatedIds, ...newItems.map(item => item.id)]));
+            const updatedAmount = (existingActiveReminder.amount || 0) + newAmount;
+            const updatedReason = existingActiveReminder.reason
+              ? `${existingActiveReminder.reason} + Chiusura Fast Closing: ${newItemsListText}`
+              : `Sollecito automatico Fast Closing: ${newItemsListText}`;
+            await onUpdateReminderStatus(existingActiveReminder.id, existingActiveReminder.status as any, existingActiveReminder.followUpNotes, {
+              associatedItemsIds: updatedIds,
+              amount: updatedAmount,
+              reason: updatedReason
+            });
+          }
+          // Se newItems è vuoto, tutte le voci del gruppo sono già nel Sollecito attivo:
+          // nessun aggiornamento da fare, evita di risommare lo stesso importo più volte.
         } else if (onAddReminder) {
+          const itemsListText = group.items.map(item => `${item.title.split(" - ")[1] || item.title} (€${item.amount.toFixed(2)})`).join(", ");
+          const associatedItemsIds = group.items.map(item => item.id);
           await onAddReminder({
             tenantId: group.tenant?.id || "",
             tenantName: debtorName,
@@ -845,26 +861,17 @@ export default function FastClosingView({
       // onUpdateClosingItemStatus duplicherebbe il Sollecito appena creato.
       const setStatus = onSetClosingItemStatusRaw || onUpdateClosingItemStatus;
 
-      // Rigid items -> Set status to Overdue and Re-propose to next month
+      // Rigid items -> Set status to Overdue. MAI rinviate al mese successivo: sono voci
+      // rigide (REGOLE_E_LINEE_GUIDA.md sezione 4), la loro unica destinazione da insolute è
+      // il Sollecito già creato/aggiornato al passo 1 sopra (via associatedItemsIds). Prima
+      // di questa correzione veniva generata QUI anche una nuova riga "[Arretrato] ..." per
+      // il mese successivo, in violazione della regola — e ad ogni chiusura successiva il
+      // prefisso si accumulava ("[Arretrato] [Arretrato] [Arretrato] ..."), perché la riga
+      // restava sempre "Pending" e veniva rielaborata da capo (bug segnalato da Massimo il
+      // 13/08/2026).
       for (const item of preCloseData.rigidItems) {
         await setStatus(item.id, "Overdue");
         closedCount++;
-
-        const d = new Date(item.dueDate);
-        d.setMonth(d.getMonth() + 1);
-        const nextDueDate = d.toISOString().split('T')[0];
-
-        await onAddClosingItem({
-          title: `[Arretrato] ${item.title}`,
-          description: `Canone insoluto riportato dalla chiusura del mese corrente.`,
-          amount: item.amount,
-          dueDate: nextDueDate,
-          source: "contract",
-          sourceId: item.sourceId,
-          status: "Pending",
-          debtorId: item.debtorId,
-          debtorType: item.debtorType
-        } as any);
         reproposedTitles.push(`${item.title} (€${item.amount.toFixed(2)})`);
       }
 
@@ -2055,19 +2062,19 @@ export default function FastClosingView({
               <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-xs text-slate-700 space-y-2">
                 <p className="font-bold text-emerald-900 text-sm">Rapporto di Chiusura Cassa:</p>
                 <p>• Scadenze consolidate/spostate a insoluto: <strong className="font-black text-slate-950">{closedItemsCount}</strong></p>
-                <p>• Canoni d'affitto insoluti (rigidi) re-proposti nel prossimo mese: <strong className="font-black text-indigo-700">{reproposedItemsList.length}</strong></p>
+                <p>• Canoni d'affitto insoluti (rigidi) passati in Sollecito: <strong className="font-black text-indigo-700">{reproposedItemsList.length}</strong></p>
               </div>
 
               {reproposedItemsList.length > 0 && (
                 <div>
-                  <h5 className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">Canoni Riportati nel Prossimo Mese:</h5>
+                  <h5 className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">Canoni Passati in Sollecito (mai rinviati al mese successivo):</h5>
                   <div className="space-y-1.5 max-h-[140px] overflow-y-auto border border-slate-200 rounded-lg p-2.5 bg-slate-50 text-[11px] font-mono">
                     {reproposedItemsList.map((title, i) => (
                       <div key={i} className="flex justify-between font-semibold text-slate-700">
                         <span>{title}</span>
                         <span className="text-rose-600 inline-flex items-center gap-1">
                           <Check size={11} className="shrink-0" />
-                          Riportato
+                          In Sollecito
                         </span>
                       </div>
                     ))}
