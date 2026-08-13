@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
+import { formatLedgerLabel } from "../lib/ledgerLabel";
 import {
   Plus,
   Edit3,
@@ -552,26 +553,33 @@ export default function PropertiesView({
       : null;
 
     // Condominium debts/payments related to this property
+    // CORREZIONE CP (13/08/2026) — Fase 2 punto 1 (completamento): da quando `title` è
+    // diventato l'etichetta standard "{Cognome}/{Via} {Civico} {Tipologia} {Mese} {Anno}",
+    // non contiene più il nome dell'immobile (prop.name), quindi il riconoscimento da testo
+    // (matchesName) non basta più da solo. Priorità al collegamento diretto propertyId
+    // (sempre popolato sulle voci reali), testo SOLO come fallback per le voci storiche.
     const condoDebts = fastClosing.filter(fc => {
       const isCondo = fc.source === "condominium";
-      const matchesName = (fc.title || "").toLowerCase().includes((prop.name || "").toLowerCase()) || 
+      const matchesPropertyId = (fc as any).propertyId === prop.id;
+      const matchesName = (fc.title || "").toLowerCase().includes((prop.name || "").toLowerCase()) ||
                           (fc.description && (fc.description || "").toLowerCase().includes((prop.name || "").toLowerCase()));
-      return isCondo && matchesName;
+      return isCondo && (matchesPropertyId || matchesName);
     });
 
     // Registration costs related to this property/tenant
     const regCosts = fastClosing.filter(fc => {
-      const isReg = (fc.title || "").toLowerCase().includes("registr") || 
-                    (fc.title || "").toLowerCase().includes("imposta di reg") || 
+      const isReg = (fc.title || "").toLowerCase().includes("registr") ||
+                    (fc.title || "").toLowerCase().includes("imposta di reg") ||
                     (fc.title || "").toLowerCase().includes("registro") ||
                     (fc.description && (fc.description || "").toLowerCase().includes("registr"));
-      const matchesProp = (fc.title || "").toLowerCase().includes((prop.name || "").toLowerCase()) || 
+      const matchesPropertyId = (fc as any).propertyId === prop.id;
+      const matchesProp = (fc.title || "").toLowerCase().includes((prop.name || "").toLowerCase()) ||
                           (fc.description && (fc.description || "").toLowerCase().includes((prop.name || "").toLowerCase()));
       const matchesTenant = associatedTenant && (
-        (fc.title || "").toLowerCase().includes((associatedTenant.name || "").toLowerCase()) || 
+        (fc.title || "").toLowerCase().includes((associatedTenant.name || "").toLowerCase()) ||
         (fc.description && (fc.description || "").toLowerCase().includes((associatedTenant.name || "").toLowerCase()))
       );
-      return isReg && (matchesProp || matchesTenant);
+      return isReg && (matchesPropertyId || matchesProp || matchesTenant);
     });
 
     const docs = propertyDocs[prop.id] || [];
@@ -1124,13 +1132,24 @@ export default function PropertiesView({
                     type="button"
                     onClick={async () => {
                       // Add dummy registration costs
+                      // CORREZIONE CP (13/08/2026) — Fase 2 punto 1 (completamento): etichetta
+                      // standard anche per questa voce dimostrativa, mai intercettata dal giro
+                      // di correzione precedente perché generata da un bottone demo isolato.
+                      const dummyDueDate = new Date().toISOString().split("T")[0];
                       const dummyCost: Omit<FastClosingItem, "id" | "userId" | "createdAt"> = {
-                        title: `Imposta di Registro Annuale - ${prop.name}`,
+                        title: formatLedgerLabel({
+                          debtorName: associatedTenant?.name || ownerName,
+                          isCompany: associatedTenant?.isCompany,
+                          propertyAddress: prop.address,
+                          tipologia: "Imposta di Registro Annuale (Quota 50/50)",
+                          dateForPeriod: dummyDueDate
+                        }),
                         description: `Imposta registro obbligatoria. Totale €134,00 (Quota Inquilino: 50% €67,00, Quota Proprietario: 50% €67,00)`,
                         amount: 134,
-                        dueDate: new Date().toISOString().split("T")[0],
+                        dueDate: dummyDueDate,
                         status: "Pending",
-                        source: "reminder"
+                        source: "reminder",
+                        propertyId: prop.id
                       };
                       await onAddProperty(dummyCost as any); // just mock adding through props
                       alert("Iniezione completata! Ricarica o riesplora la pagina.");

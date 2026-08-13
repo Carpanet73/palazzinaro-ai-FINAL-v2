@@ -4,6 +4,7 @@ import AddressFields, { AddressValue } from "./AddressFields";
 import GenderToggle from "./GenderToggle";
 import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
+import { formatLedgerLabel } from "../lib/ledgerLabel";
 import {
   Plus,
   Edit3,
@@ -427,14 +428,22 @@ export default function TenantsView({
 
     // -- CATEGORY A: CANONI AFFITTO (Rents) --
     // Find fast closing contract items related to this tenant or contract
+    // CORREZIONE CP (13/08/2026) — Fase 2 punto 1 (completamento): da quando `title` è
+    // diventato l'etichetta standard "{Cognome}/{Via} {Civico} {Tipologia} {Mese} {Anno}",
+    // non contiene più il nome completo dell'inquilino, quindi il riconoscimento da testo
+    // (matchesTenant) non basta più da solo. Priorità al collegamento diretto debtorId/
+    // debtorType (sempre popolato sulle voci reali), testo SOLO come fallback per le voci
+    // storiche prive di questi campi.
     const rentItems = fastClosing.filter(item => {
       if (item.propertyId !== t.propertyId) return false;
       const isContractSource = item.source === "contract";
+      const matchesDebtorStructured = item.debtorId === t.id && item.debtorType === "tenant";
       const matchesTenant = (item.title || "").toLowerCase().includes(tenantNameClean) ||
                             (item.description && (item.description || "").toLowerCase().includes(tenantNameClean));
       const matchesContract = activeContract && item.sourceId === activeContract.id;
       const isRentWord = (item.title || "").toLowerCase().includes("canone") || (item.title || "").toLowerCase().includes("affitto");
-      return (isContractSource && (matchesTenant || matchesContract)) || (isRentWord && (matchesTenant || matchesContract));
+      return (isContractSource && (matchesDebtorStructured || matchesTenant || matchesContract)) ||
+             (isRentWord && (matchesDebtorStructured || matchesTenant || matchesContract));
     });
 
     rentItems.forEach(item => {
@@ -459,13 +468,17 @@ export default function TenantsView({
       const condoItems = fastClosing.filter(item => {
         if (item.propertyId !== property.id) return false;
         const isCondoSource = item.source === "condominium";
-        const isCondoWord = (item.title || "").toLowerCase().includes("condominio") || 
+        const isCondoWord = (item.title || "").toLowerCase().includes("condominio") ||
                             (item.title || "").toLowerCase().includes("spese cond") ||
                             (item.description && (item.description || "").toLowerCase().includes("condominio"));
+        // CORREZIONE CP (13/08/2026) — priorità al collegamento diretto debtorId/debtorType
+        // (sempre popolato sulle voci reali dopo la correzione di CondominiumsView.tsx), testo
+        // SOLO come fallback per le voci storiche prive di questi campi.
+        const matchesDebtorStructured = item.debtorId === t.id && item.debtorType === "tenant";
         const matchesTenant = (item.title || "").toLowerCase().includes(tenantNameClean) ||
                               (item.description && (item.description || "").toLowerCase().includes(tenantNameClean)) ||
                               (item.title || "").toLowerCase().includes("(inquilino)");
-        return (isCondoSource || isCondoWord) && matchesTenant;
+        return (isCondoSource || isCondoWord) && (matchesDebtorStructured || matchesTenant);
       });
 
       condoItems.forEach(item => {
@@ -508,7 +521,17 @@ export default function TenantsView({
           paymentDate: isPast ? dateStr : "-",
           category: "registration",
           categoryLabel: "Registrazione Contratto",
-          title: `Imposta di Registro Annuale - Anno ${yearNum}`,
+          // CORREZIONE CP (13/08/2026) — Fase 2 punto 1 (completamento): questa riga era
+          // rimasta col vecchio formato libero perché generata dinamicamente per l'anteprima
+          // (non è un vero FastClosingItem su Firestore), quindi non era stata intercettata
+          // dal giro di correzione precedente sui punti di scrittura reali.
+          title: formatLedgerLabel({
+            debtorName: t.name,
+            isCompany: t.isCompany,
+            propertyAddress: property?.address,
+            tipologia: `F24 Registrazione Annualità ${yearNum}`,
+            dateForPeriod: dateStr
+          }),
           description: `Versamento F24 per proroga/registrazione annuale del contratto di locazione di ${t.name}`,
           amount: 67.00, // standard minimum registration tax in Italy
           status: isPast ? "Paid" : "Pending",
@@ -544,18 +567,24 @@ export default function TenantsView({
     });
 
     // 2) New splits from fastClosing for maintenance that belong to this tenant
+    // CORREZIONE CP (13/08/2026) — priorità al collegamento diretto debtorId/debtorType,
+    // testo SOLO come fallback per le voci storiche prive di questi campi.
     const splitMaintenanceClosing = fastClosing.filter(item => {
       if (item.propertyId !== t.propertyId) return false;
       if (item.source !== "maintenance") return false;
-      
+
+      if (item.debtorId && item.debtorType) {
+        return item.debtorId === t.id && item.debtorType === "tenant";
+      }
+
       const titleLower = (item.title || "").toLowerCase();
       const descLower = (item.description || "").toLowerCase();
-      
+
       // Explicitly exclude owner splits
       if (titleLower.includes("proprietari") || titleLower.includes("proprietario") || titleLower.includes("locatore")) {
         return false;
       }
-      
+
       const matchesTenant = titleLower.includes(tenantNameClean) || descLower.includes(tenantNameClean) || titleLower.includes("(inquilino)");
       return matchesTenant;
     });
