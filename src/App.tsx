@@ -645,14 +645,20 @@ export default function App() {
       // Genera le rate del canone per l'intera durata del contratto (Correzione AM)
       {
         let currentDueDate = new Date(startA);
-        let monthIndex = 1;
         while (currentDueDate <= endA) {
+          const dueDateStrA = currentDueDate.toISOString().split("T")[0];
           await addDoc(collection(db, "fastClosing"), {
             userId: user.uid,
-            title: `Canone Affitto Mese ${monthIndex} - Giulia Ferrari`,
+            propertyId: propA.id,
+            title: formatLedgerLabel({
+              debtorName: "Giulia Ferrari",
+              propertyAddress: "Via Roma 10, Scala B, Interno 4, 20100 Milano (MI)",
+              tipologia: "Affitto",
+              dateForPeriod: dueDateStrA
+            }),
             description: `Riferimento Contratto Locazione su 🏢 Casa A — Con Condominio (Test)`,
             amount: 750,
-            dueDate: currentDueDate.toISOString().split("T")[0],
+            dueDate: dueDateStrA,
             source: "contract",
             sourceId: contractA.id,
             status: "Pending",
@@ -661,7 +667,6 @@ export default function App() {
             createdAt: serverTimestamp()
           });
           currentDueDate.setMonth(currentDueDate.getMonth() + 1);
-          monthIndex++;
         }
       }
 
@@ -712,14 +717,20 @@ export default function App() {
 
       {
         let currentDueDate = new Date(startB);
-        let monthIndex = 1;
         while (currentDueDate <= endB) {
+          const dueDateStrB = currentDueDate.toISOString().split("T")[0];
           await addDoc(collection(db, "fastClosing"), {
             userId: user.uid,
-            title: `Canone Affitto Mese ${monthIndex} - Marco Colombo`,
+            propertyId: propB.id,
+            title: formatLedgerLabel({
+              debtorName: "Marco Colombo",
+              propertyAddress: "Via Torino 5, 20100 Milano (MI)",
+              tipologia: "Affitto",
+              dateForPeriod: dueDateStrB
+            }),
             description: `Riferimento Contratto Locazione su 🏠 Casa B — Senza Condominio, Comproprietà (Test)`,
             amount: 650,
-            dueDate: currentDueDate.toISOString().split("T")[0],
+            dueDate: dueDateStrB,
             source: "contract",
             sourceId: contractB.id,
             status: "Pending",
@@ -728,7 +739,6 @@ export default function App() {
             createdAt: serverTimestamp()
           });
           currentDueDate.setMonth(currentDueDate.getMonth() + 1);
-          monthIndex++;
         }
       }
 
@@ -808,13 +818,21 @@ export default function App() {
         const dueDateStr = currentDueDate.toISOString().split("T")[0];
         await addDoc(collection(db, "fastClosing"), {
           userId: user.uid,
-          title: `Canone Affitto Mese ${monthIndex} - Giorgia Meloni`,
+          propertyId: propDoc.id,
+          title: formatLedgerLabel({
+            debtorName: "Giorgia Meloni",
+            propertyAddress: "Via del Corso 123, 00186 Roma (RM)",
+            tipologia: "Affitto",
+            dateForPeriod: dueDateStr
+          }),
           description: `Riferimento Contratto Locazione su 🏢 Attico Bifamiliare Centro (Simulazione)`,
           amount: rentAmount,
           dueDate: dueDateStr,
           source: "contract",
           sourceId: contractDoc.id,
           status: "Pending",
+          debtorId: tenantDoc.id,
+          debtorType: "tenant",
           createdAt: serverTimestamp()
         });
 
@@ -847,7 +865,12 @@ export default function App() {
       await addDoc(collection(db, "fastClosing"), {
         userId: user.uid,
         propertyId: propDoc.id,
-        title: `Quota Proprietari (Bobo Vieri, Massimo Laucci) - Manutenzione: 🛠️ Manutenzione Straordinaria Caldaia`,
+        title: formatLedgerLabel({
+          debtorName: "Bobo Vieri, Massimo Laucci",
+          propertyAddress: "Via del Corso 123, 00186 Roma (RM)",
+          tipologia: "Manutenzione (Caldaia) Quota Proprietari",
+          dateForPeriod: maintDateStr
+        }),
         description: `Quota a carico dei proprietari (50%). Intervento ditta Termoidraulica Roma S.r.l.`,
         amount: 150,
         dueDate: maintDateStr,
@@ -861,13 +884,19 @@ export default function App() {
       await addDoc(collection(db, "fastClosing"), {
         userId: user.uid,
         propertyId: propDoc.id,
-        title: `Quota Inquilina (Giorgia Meloni) - Manutenzione: 🛠️ Manutenzione Straordinaria Caldaia`,
+        title: formatLedgerLabel({
+          debtorName: "Giorgia Meloni",
+          propertyAddress: "Via del Corso 123, 00186 Roma (RM)",
+          tipologia: "Manutenzione (Caldaia) Quota Conduttore",
+          dateForPeriod: maintDateStr
+        }),
         description: `Quota a carico del conduttore (50%). Intervento ditta Termoidraulica Roma S.r.l.`,
         amount: 150,
         dueDate: maintDateStr,
         source: "maintenance",
         sourceId: maintDoc.id,
         status: "Pending",
+        debtorId: tenantDoc.id,
         debtorType: "tenant",
         createdAt: serverTimestamp()
       });
@@ -933,7 +962,21 @@ export default function App() {
     if (!user) return;
     try {
       showSuccess("Iniezione dati demo in corso...");
-      
+
+      // CORREZIONE CP (13/08/2026) — regola 5 "mai date hardcoded": questa funzione demo
+      // aveva scadenze scritte a mano ancorate al 2026 (es. "2026-07-05"), già passate al
+      // momento di questa correzione — un bug reale, non solo teorico (rompe la dimostrazione
+      // ad ogni cambio di mese). Tutte le scadenze qui sotto sono ora calcolate come offset in
+      // giorni da `new Date()` al momento dell'iniezione, mantenendo la stessa narrazione
+      // relativa (bolletta dopo il canone, F24 scaduta, manutenzione già pagata, sollecito
+      // del mese precedente, ecc.).
+      const demoNow = new Date();
+      const inDays = (n: number): string => {
+        const d = new Date(demoNow);
+        d.setDate(d.getDate() + n);
+        return d.toISOString().split("T")[0];
+      };
+
       // 0. Purge existing user-specific data to avoid duplicate records!
       const deleteCollectionDocs = async (collectionName: string) => {
         try {
@@ -1051,7 +1094,7 @@ export default function App() {
         rentAmount: 1850,
         depositAmount: 5550,
         startDate: "2024-06-01",
-        endDate: "2027-01-15", // Exactly in the 7-month disdetta window relative to July 5th, 2026!
+        endDate: inDays(200), // Volutamente dentro la finestra dei 7 mesi di preavviso disdetta, calcolata da oggi (mai una data fissa — regola 5)
         paymentFrequency: "Mensile",
         status: "Active",
         createdAt: serverTimestamp()
@@ -1077,48 +1120,72 @@ export default function App() {
       });
 
       // 5. Fast Closing (Payments / Expiring activities)
+      // Voce a livello di condominio (nessun debitore singolo, come le rate amministratore in
+      // handleAddCondominium) — titolo lasciato invariato, solo la data è stata resa dinamica.
       await addDoc(collection(db, "fastClosing"), {
         userId: user.uid,
         title: "⚡ Bolletta Luce Scale Condominio",
         description: "Addebito automatico per consumi elettricità parti communes",
         amount: 85.50,
-        dueDate: "2026-07-10",
+        dueDate: inDays(5),
         source: "condominium",
         sourceId: condo1.id,
         status: "Pending",
         createdAt: serverTimestamp()
       });
 
+      const canoneLuglioDueDate = inDays(0);
       const fc2 = await addDoc(collection(db, "fastClosing"), {
         userId: user.uid,
-        title: "🏠 Canone Affitto Luglio - Vista Duomo",
+        propertyId: p1.id,
+        title: formatLedgerLabel({
+          debtorName: "👨‍🎓 Mario Rossi",
+          propertyAddress: "Piazza del Duomo 20, 20121 Milano (MI)",
+          tipologia: "Affitto",
+          dateForPeriod: canoneLuglioDueDate
+        }),
         description: "Canone locazione mensile concordato da contratto",
         amount: 1200.00,
-        dueDate: "2026-07-05",
+        dueDate: canoneLuglioDueDate,
         source: "contract",
         sourceId: c1.id,
         status: "Pending",
+        debtorId: t1.id,
+        debtorType: "tenant",
         createdAt: serverTimestamp()
       });
 
+      const f24RinnovoDueDate = inDays(-13);
       const fc3 = await addDoc(collection(db, "fastClosing"), {
         userId: user.uid,
-        title: "💸 F24 Imposta di Registro Rinnovo annuale",
+        propertyId: p1.id,
+        title: formatLedgerLabel({
+          debtorName: "👨‍🎓 Mario Rossi",
+          propertyAddress: "Piazza del Duomo 20, 20121 Milano (MI)",
+          tipologia: "F24 Registrazione Rinnovo Annuale",
+          dateForPeriod: f24RinnovoDueDate
+        }),
         description: "Rinnovo annuale imposta registro Duomo",
         amount: 67.00,
-        dueDate: "2026-06-30",
+        dueDate: f24RinnovoDueDate,
         source: "other",
         sourceId: "f24_duomo",
-        status: "Pending", // This will be overdue on July 4th, 2026
+        status: "Pending", // Scaduta rispetto a "oggi": l'app la mostra come insoluta
+        debtorId: t1.id,
+        debtorType: "tenant",
         createdAt: serverTimestamp()
       });
 
+      // Nessun immobile/debitore associato in questo record dimostrativo (dato mai stato
+      // presente) — titolo lasciato invariato per non inventare un collegamento non reale,
+      // solo la data è stata resa dinamica.
+      const fatturaCaldaiaDueDate = inDays(-28);
       await addDoc(collection(db, "fastClosing"), {
         userId: user.uid,
         title: "🛠️ Fattura Manutenzione Caldaia",
         description: "Intervento tecnico per sostituzione sonda termica",
         amount: 250.00,
-        dueDate: "2026-06-15",
+        dueDate: fatturaCaldaiaDueDate,
         source: "other",
         sourceId: "fact_idraulico",
         status: "Paid",
@@ -1128,7 +1195,7 @@ export default function App() {
       // 6. Bank Movements
       await addDoc(collection(db, "movements"), {
         userId: user.uid,
-        date: "2026-07-02",
+        date: inDays(-2),
         amount: 1200.00,
         description: "BONIFICO DA ROSSI MARIO CAUSALE CANONE LUGLIO DUOMO",
         sender: "Rossi Mario",
@@ -1139,7 +1206,7 @@ export default function App() {
 
       await addDoc(collection(db, "movements"), {
         userId: user.uid,
-        date: "2026-06-28",
+        date: inDays(-25),
         amount: -250.00,
         description: "PAGAMENTO SEDA FATTURA 122 IDRAULICA MILANESE",
         sender: "Banca Intesa S.p.A.",
@@ -1154,7 +1221,7 @@ export default function App() {
 
       await addDoc(collection(db, "movements"), {
         userId: user.uid,
-        date: "2026-07-03",
+        date: inDays(-1),
         amount: 1850.00,
         description: "PAGAMENTO CANONE BIANCHI GIULIA LUGLIO 2026",
         sender: "Bianchi Giulia",
@@ -1164,6 +1231,7 @@ export default function App() {
       });
 
       // 7. Reminders
+      const remDueDate = inDays(-38);
       const rem1 = await addDoc(collection(db, "reminders"), {
         userId: user.uid,
         tenantId: t1.id,
@@ -1171,26 +1239,34 @@ export default function App() {
         propertyId: p1.id,
         propertyName: "🏢 Monolocale Vista Duomo",
         amount: 1200,
-        dueDate: "2026-06-05",
+        dueDate: remDueDate,
         status: "Sent",
-        reason: "Mancato accredito canone mese di Giugno 2026",
-        followUpNotes: "Inviato sollecito formale via email certificata e raccomandata A/R in data 12/06/2026.",
+        reason: "Mancato accredito canone del mese precedente",
+        followUpNotes: `Inviato sollecito formale via email certificata e raccomandata A/R in data ${new Date(new Date(remDueDate).getTime() + 7 * 24 * 3600 * 1000).toLocaleDateString("it-IT")}.`,
         isSequence: true,
         step: 1,
-        firstRequestDate: "2026-06-15",
+        firstRequestDate: inDays(-28),
         createdAt: serverTimestamp()
       });
 
       // Linked Fast Closing Overdue
       await addDoc(collection(db, "fastClosing"), {
         userId: user.uid,
-        title: "⚠️ Sollecito Canone Giugno: Rossi",
-        description: "Mancato accredito canone mese di Giugno 2026 (Insoluto)",
+        propertyId: p1.id,
+        title: formatLedgerLabel({
+          debtorName: "👨‍🎓 Mario Rossi",
+          propertyAddress: "Piazza del Duomo 20, 20121 Milano (MI)",
+          tipologia: "Sollecito Canone Insoluto",
+          dateForPeriod: remDueDate
+        }),
+        description: "Mancato accredito canone del mese precedente (Insoluto)",
         amount: 1200,
-        dueDate: "2026-06-05",
+        dueDate: remDueDate,
         source: "reminder",
         sourceId: rem1.id,
         status: "Overdue",
+        debtorId: t1.id,
+        debtorType: "tenant",
         createdAt: serverTimestamp()
       });
 
@@ -2284,15 +2360,24 @@ export default function App() {
       // per un Sollecito del tutto manuale, senza alcuna voce Fast Closing reale a cui
       // agganciarsi (oggi nessun punto dell'app crea ancora un Sollecito così).
       if (!cleanData.associatedItemsIds || cleanData.associatedItemsIds.length === 0) {
+        const mirrorProperty = data.propertyId ? properties.find(p => p.id === data.propertyId) : undefined;
         await addDoc(collection(db, "fastClosing"), {
           userId: user.uid,
-          title: `Sollecito Insoluto: ${data.tenantName}`,
+          propertyId: data.propertyId || null,
+          title: formatLedgerLabel({
+            debtorName: data.tenantName,
+            propertyAddress: mirrorProperty?.address,
+            tipologia: "Sollecito Insoluto",
+            dateForPeriod: data.dueDate
+          }),
           description: `Insoluto per causale: ${data.reason}`,
           amount: data.amount,
           dueDate: data.dueDate,
           source: "reminder",
           sourceId: reminderDoc.id,
           status: "Overdue",
+          debtorId: data.tenantId || null,
+          debtorType: "tenant",
           createdAt: serverTimestamp()
         });
       }
