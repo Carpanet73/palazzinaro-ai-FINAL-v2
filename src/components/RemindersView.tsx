@@ -18,7 +18,8 @@ import {
   Camera,
   Image as ImageIcon,
   ArrowLeft,
-  FlaskConical
+  FlaskConical,
+  Calendar
 } from "lucide-react";
 import JSZip from "jszip";
 import { Reminder, Tenant, BankMovement, FastClosingItem, Communication, OwnerProfile, Owner } from "../types";
@@ -39,6 +40,11 @@ interface RemindersViewProps {
   onAddReminder: (reminder: Omit<Reminder, "id" | "userId" | "createdAt">) => Promise<void>;
   onUpdateReminderStatus: (id: string, status: string, notes?: string, extraFields?: any) => Promise<void>;
   onReconcileMovement: (movementId: string, closingItemId: string) => Promise<void>;
+  // CORREZIONE (13/08/2026) — motore condiviso di riconciliazione multi-voce con pagamento
+  // parziale (src/lib/reconciliation.ts), stesso identico flusso usato in Fast Closing —
+  // prima l'Area Solleciti non aveva alcuna possibilità di riconciliare/pagare le singole
+  // voci di un sollecito, solo l'intero blocco in una volta.
+  onCumulativeReconcile?: (itemIds: string[], options?: { movementId?: string | null; cashAmount?: number }) => Promise<void>;
   onAddLegalCase: (legalCase: any) => Promise<void>;
   onDeleteReminder: (id: string) => Promise<void>;
   onAddMovement?: (movement: Omit<BankMovement, "id" | "userId" | "createdAt">) => Promise<void>;
@@ -56,6 +62,7 @@ export default function RemindersView({
   onAddReminder,
   onUpdateReminderStatus,
   onReconcileMovement,
+  onCumulativeReconcile,
   onAddLegalCase,
   onDeleteReminder,
   onAddMovement
@@ -217,6 +224,12 @@ export default function RemindersView({
   // Reconciliation state
   const [reconcileReminder, setReconcileReminder] = useState<Reminder | null>(null);
   const [selectedMovementId, setSelectedMovementId] = useState("");
+  // CORREZIONE (13/08/2026) — selezione manuale delle singole voci del sollecito da
+  // riconciliare (con avviso se manca un canone scaduto, stesso identico comportamento del
+  // Fast Closing) + modalità contanti/verifica manuale + messaggio d'errore di validazione.
+  const [selectedReconcileItemIds, setSelectedReconcileItemIds] = useState<string[]>([]);
+  const [reconcileCashMode, setReconcileCashMode] = useState(false);
+  const [reconciliationError, setReconciliationError] = useState("");
 
   // Multi-step additional charge sequence states
   const [activeStepReminder, setActiveStepReminder] = useState<Reminder | null>(null);
@@ -274,6 +287,30 @@ export default function RemindersView({
     { key: "dueDate", label: "Scaduto il", format: (r: Reminder) => new Date(r.dueDate).toLocaleDateString("it-IT") },
     { key: "status", label: "Stato", format: (r: Reminder) => r.status === "Paid" ? "Saldato" : r.status === "MessaInMora" ? "Messa in Mora" : r.status === "Sent" ? "Sollecitato" : "Bozza/Pronto" }
   ];
+
+  // CORREZIONE (13/08/2026) — elenco reale delle voci Fast Closing ancora da saldare
+  // collegate a questo sollecito: sia quelle raggruppate tramite associatedItemsIds (il caso
+  // normale, un sollecito per debitore), sia l'eventuale vecchia riga "mirror" singola
+  // (source === "reminder", per compatibilità con solleciti creati prima di quella logica).
+  // Usata dal nuovo flusso di riconciliazione/pagamento parziale per selezionare le voci.
+  const getReminderLinkedItems = (reminder: Reminder): FastClosingItem[] => {
+    const ids = new Set<string>(reminder.associatedItemsIds || []);
+    const mirror = (fastClosing || []).find(item => item.source === "reminder" && item.sourceId === reminder.id);
+    if (mirror) ids.add(mirror.id);
+    return (fastClosing || []).filter(item => ids.has(item.id) && (item.status === "Pending" || item.status === "Overdue"));
+  };
+
+  const isRentItemForReconcile = (item: FastClosingItem) => {
+    const t = (item.title || "").toLowerCase();
+    const d = (item.description || "").toLowerCase();
+    return item.source === "contract" || t.includes("canone") || t.includes("affitto") || d.includes("canone") || d.includes("affitto");
+  };
+
+  const toggleReconcileItem = (itemId: string) => {
+    setSelectedReconcileItemIds(prev =>
+      prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
+    );
+  };
 
   const getReminderComposition = (reminder: Reminder) => {
     const linkedItems = (fastClosing || []).filter(item => (reminder.associatedItemsIds || []).includes(item.id));
@@ -658,27 +695,80 @@ export default function RemindersView({
   const handleOpenReconcileReminder = (reminder: Reminder) => {
     setReconcileReminder(reminder);
     setSelectedMovementId("");
+    setReconcileCashMode(false);
+    setReconciliationError("");
+    // Default: tutte le voci ancora da saldare del sollecito selezionate, come in Fast
+    // Closing — l'utente resta libero di deselezionarne alcune (selezione manuale).
+    setSelectedReconcileItemIds(getReminderLinkedItems(reminder).map(item => item.id));
   };
 
+  // CORREZIONE (13/08/2026) — riscritta per usare il motore condiviso di riconciliazione
+  // multi-voce con pagamento parziale (src/lib/reconciliation.ts), stesso identico
+  // comportamento del Fast Closing: canoni prioritari, voce coperta solo in parte ridotta al
+  // residuo reale (mai segnata Pagato finché non è saldata per intero), mai più il vecchio
+  // "tutto il sollecito pagato in blocco" come unica opzione.
   const handleConfirmReconciliation = async () => {
-    if (!reconcileReminder || !selectedMovementId) return;
+    if (!reconcileReminder) return;
 
-    try {
-      // Find the associated Fast Closing item
-      const linkedFastClosing = fastClosing.find(
-        item => item.source === "reminder" && item.sourceId === reconcileReminder.id
-      );
+    const allItems = getReminderLinkedItems(reconcileReminder);
 
-      if (linkedFastClosing) {
-        await onReconcileMovement(selectedMovementId, linkedFastClosing.id);
-        setReconcileReminder(null);
-        setSelectedMovementId("");
-      } else {
-        // Fallback if no linked Fast Closing item exists (rare)
+    // Fallback raro: sollecito senza alcuna voce Fast Closing collegata (non dovrebbe
+    // succedere con l'architettura attuale — un Sollecito nasce sempre da voci reali — ma
+    // mantenuto per sicurezza retrocompatibile con dati storici).
+    if (allItems.length === 0) {
+      try {
         await onUpdateReminderStatus(reconcileReminder.id, "Paid", "Saldato tramite abbinamento manuale.");
         setReconcileReminder(null);
         setSelectedMovementId("");
+      } catch (err) {
+        console.error("Error reconciling reminder (fallback):", err);
       }
+      return;
+    }
+
+    if (selectedReconcileItemIds.length === 0) return;
+    if (!reconcileCashMode && !selectedMovementId) return;
+    if (!onCumulativeReconcile) {
+      console.error("onCumulativeReconcile non disponibile: impossibile procedere.");
+      return;
+    }
+
+    const selectedItems = allItems.filter(item => selectedReconcileItemIds.includes(item.id));
+
+    // PRIORITÀ CANONI — stessa identica regola del Fast Closing: non si può saldare una spesa
+    // accessoria lasciando fuori un canone d'affitto ancora scaduto sullo stesso sollecito.
+    const rentItems = allItems.filter(isRentItemForReconcile);
+    const selectedRent = selectedItems.some(isRentItemForReconcile);
+    if (rentItems.length > 0 && !selectedRent) {
+      setReconciliationError("La riconciliazione del canone d'affitto è prioritaria! Seleziona anche la riga del canone d'affitto per poter procedere.");
+      return;
+    }
+
+    const totalNeeded = selectedItems.reduce((sum, item) => sum + item.amount, 0);
+
+    try {
+      if (reconcileCashMode) {
+        const confirmed = confirm(
+          `Confermi di aver saldato €${totalNeeded.toFixed(2)} per ${reconcileReminder.tenantName} in contanti (o comunque verificato personalmente, senza un movimento bancario da abbinare)? Se l'importo non copre tutte le voci selezionate, verranno saldate per intero partendo dai canoni e dalle più vecchie; l'ultima coperta solo in parte resterà con il proprio residuo ancora da saldare.`
+        );
+        if (!confirmed) return;
+        await onCumulativeReconcile(selectedReconcileItemIds, { cashAmount: totalNeeded });
+        alert(`Saldo in contanti registrato con successo per ${reconcileReminder.tenantName}!`);
+      } else {
+        const movement = movements.find(m => m.id === selectedMovementId);
+        if (!movement) return;
+        await onCumulativeReconcile(selectedReconcileItemIds, { movementId: movement.id });
+        if (movement.amount < totalNeeded) {
+          const residue = totalNeeded - movement.amount;
+          alert(`Riconciliazione Parziale eseguita! Bonifico da €${movement.amount.toFixed(2)} applicato su €${totalNeeded.toFixed(2)}. Residuo di €${residue.toFixed(2)} rimasto sulla relativa voce.`);
+        } else {
+          alert(`Riconciliazione completata con successo per ${reconcileReminder.tenantName}!`);
+        }
+      }
+      setReconcileReminder(null);
+      setSelectedMovementId("");
+      setSelectedReconcileItemIds([]);
+      setReconciliationError("");
     } catch (err) {
       console.error("Error reconciling reminder:", err);
     }
@@ -952,14 +1042,16 @@ export default function RemindersView({
         </div>
       )}
 
-      {/* Reconciliation Modal */}
+      {/* Reconciliation Modal — CORREZIONE (13/08/2026): riscritta per selezione manuale
+          per-voce + pagamento parziale, stesso identico motore/flusso del Fast Closing
+          (src/lib/reconciliation.ts, "un solo flusso per ogni azione"). */}
       {reconcileReminder && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
-                <h3 className="font-sans font-bold text-base">Riconciliazione Movimento</h3>
-                <p className="text-[10px] text-slate-300 mt-0.5">Associa un bonifico bancario per sanare il sollecito di {reconcileReminder.tenantName}</p>
+                <h3 className="font-sans font-bold text-base">Riconciliazione Sollecito</h3>
+                <p className="text-[10px] text-slate-300 mt-0.5">Seleziona le voci da saldare per {reconcileReminder.tenantName}</p>
               </div>
               <button onClick={() => setReconcileReminder(null)} className="text-slate-400 hover:text-white transition-colors">
                 <X size={18} />
@@ -972,34 +1064,158 @@ export default function RemindersView({
                   <AlertCircle className="text-amber-600 shrink-0" size={16} />
                   <div>
                     <h5 className="font-bold text-amber-900">Sollecito Selezionato</h5>
-                    <p className="text-amber-800 mt-1">Inquilino: <strong className="font-semibold">{reconcileReminder.tenantName}</strong></p>
+                    <p className="text-amber-800 mt-1">Debitore: <strong className="font-semibold">{reconcileReminder.tenantName}</strong></p>
                     <p className="text-amber-800">Causale: <strong className="font-semibold">{reconcileReminder.reason}</strong></p>
-                    <p className="text-amber-800">Importo da Saldo: <strong className="font-bold text-rose-600">€{reconcileReminder.amount.toFixed(2)}</strong></p>
+                    <p className="text-amber-800">Importo Complessivo Sollecito: <strong className="font-bold text-rose-600">€{reconcileReminder.amount.toFixed(2)}</strong></p>
                   </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Seleziona Movimento Bancario Disponibile *
-                </label>
-                <select
-                  required
-                  value={selectedMovementId}
-                  onChange={(e) => setSelectedMovementId(e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500"
+              {/* Contanti / bonifico */}
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <p className="text-xs font-bold text-slate-800">Pagamento in Contanti / Verifica Manuale</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Attiva se non c'è un bonifico bancario da abbinare.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReconcileCashMode(prev => !prev);
+                    setSelectedMovementId("");
+                    setReconciliationError("");
+                  }}
+                  className={`shrink-0 ml-3 w-11 h-6 rounded-full transition-colors relative ${reconcileCashMode ? "bg-emerald-500" : "bg-slate-300"}`}
                 >
-                  <option value="">-- Seleziona un bonifico non riconciliato --</option>
-                  {movements.filter(m => !m.reconciled).map(m => (
-                    <option key={m.id} value={m.id}>
-                      {new Date(m.date).toLocaleDateString("it-IT")} - {m.description} (+€{m.amount.toFixed(2)})
-                    </option>
-                  ))}
-                </select>
-                {movements.filter(m => !m.reconciled).length === 0 && (
-                  <p className="text-[10px] text-rose-500 mt-1.5">Nessun movimento bancario non riconciliato disponibile. Carica un estratto conto o aggiungi un movimento manuale in "Banche".</p>
-                )}
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${reconcileCashMode ? "translate-x-5" : ""}`} />
+                </button>
               </div>
+
+              {/* Bank Movement Selection — nascosta in modalità contanti */}
+              {!reconcileCashMode && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Seleziona Movimento Bancario Ricevuto *
+                  </label>
+                  <div className="max-h-56 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-2 bg-slate-50/50">
+                    {movements.filter(m => !m.reconciled).length === 0 && (
+                      <p className="text-xs text-slate-400 text-center py-4">Nessun bonifico non riconciliato disponibile. Carica un estratto conto o aggiungi un movimento manuale in "Banche".</p>
+                    )}
+                    {movements.filter(m => !m.reconciled).map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMovementId(m.id);
+                          setReconciliationError("");
+                        }}
+                        className={`w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border transition-colors ${
+                          selectedMovementId === m.id
+                            ? "bg-indigo-600 border-indigo-600 text-white"
+                            : "bg-white border-slate-200 hover:border-indigo-300 text-slate-800"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className={`text-[10px] font-bold flex items-center gap-1 ${selectedMovementId === m.id ? "text-indigo-200" : "text-slate-400"}`}>
+                            <Calendar size={10} className="shrink-0" />
+                            {new Date(m.date).toLocaleDateString("it-IT")}
+                          </div>
+                          <div className="text-xs font-semibold truncate">{m.description}</div>
+                        </div>
+                        <div className={`text-sm font-black font-mono shrink-0 ${selectedMovementId === m.id ? "text-white" : "text-emerald-600"}`}>
+                          +€{m.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Checklist per-voce — selezione manuale, come nel Fast Closing */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2.5">
+                  Seleziona le voci incluse in questo pagamento:
+                </label>
+                <div className="space-y-2 max-h-[180px] overflow-y-auto border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+                  {getReminderLinkedItems(reconcileReminder).map(item => {
+                    const isChecked = selectedReconcileItemIds.includes(item.id);
+                    const isRent = isRentItemForReconcile(item);
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => toggleReconcileItem(item.id)}
+                        className={`p-2.5 rounded-lg border-2 flex items-center justify-between cursor-pointer transition-all ${
+                          isChecked
+                            ? "border-indigo-500 bg-indigo-50/30 font-bold"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <div>
+                            <span className="text-xs text-slate-900 block leading-tight">
+                              {item.title} {isRent && <span className="text-[8px] bg-indigo-100 text-indigo-800 font-extrabold rounded px-1 ml-1 font-mono">CANONE PRIORITARIO</span>}
+                            </span>
+                            <span className="text-[8px] text-slate-400 font-mono">Scad. {new Date(item.dueDate).toLocaleDateString("it-IT")}</span>
+                          </div>
+                        </div>
+                        <span className="text-xs font-black text-slate-900">€{item.amount.toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Riepilogo importi in tempo reale */}
+              {reconcileCashMode && selectedReconcileItemIds.length > 0 && (
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs space-y-1">
+                  <div className="flex justify-between text-emerald-800">
+                    <span>Totale da Saldare in Contanti:</span>
+                    <strong>
+                      €{getReminderLinkedItems(reconcileReminder).filter(item => selectedReconcileItemIds.includes(item.id)).reduce((s, i) => s + i.amount, 0).toFixed(2)}
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {!reconcileCashMode && selectedMovementId && selectedReconcileItemIds.length > 0 && (() => {
+                const movementAmt = movements.find(m => m.id === selectedMovementId)?.amount || 0;
+                const selectionTotal = getReminderLinkedItems(reconcileReminder).filter(item => selectedReconcileItemIds.includes(item.id)).reduce((s, i) => s + i.amount, 0);
+                return (
+                  <div className="p-3 bg-slate-100 rounded-xl border border-slate-200 text-xs space-y-1">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Bonifico Disponibile:</span>
+                      <strong className="text-slate-800">€{movementAmt.toFixed(2)}</strong>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Totale Voci Selezionate:</span>
+                      <strong className="text-slate-800">€{selectionTotal.toFixed(2)}</strong>
+                    </div>
+                    {movementAmt < selectionTotal ? (
+                      <div className="mt-2 pt-2 border-t border-dashed border-slate-300 text-[10px] text-amber-700 font-bold leading-relaxed flex items-start gap-1.5">
+                        <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                        <span>Riconciliazione Parziale: l'importo del bonifico è inferiore di €{(selectionTotal - movementAmt).toFixed(2)}. Il sistema salderà per intero le voci più vecchie (canoni prima delle spese accessorie) e ridurrà al residuo effettivo la voce su cui il pagamento si esaurisce, che resterà da saldare.</span>
+                      </div>
+                    ) : movementAmt > selectionTotal ? (
+                      <div className="mt-2 pt-2 border-t border-dashed border-slate-300 text-[10px] text-emerald-700 font-semibold leading-relaxed flex items-start gap-1.5">
+                        <Check size={12} className="shrink-0 mt-0.5" />
+                        <span>L'importo del bonifico copre interamente la selezione con un'eccedenza di €{(movementAmt - selectionTotal).toFixed(2)}.</span>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+
+              {reconciliationError && (
+                <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-bold leading-relaxed flex items-center space-x-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  <span>{reconciliationError}</span>
+                </div>
+              )}
             </div>
 
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end space-x-3">
@@ -1012,12 +1228,12 @@ export default function RemindersView({
               </button>
               <button
                 type="button"
-                disabled={!selectedMovementId}
+                disabled={(!reconcileCashMode && !selectedMovementId) || selectedReconcileItemIds.length === 0}
                 onClick={handleConfirmReconciliation}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-sm inline-flex items-center space-x-1.5"
               >
                 <Check size={14} />
-                <span>Riconcilia e Salda</span>
+                <span>{reconcileCashMode ? "Segna come Pagato (Contanti)" : "Riconcilia e Salda"}</span>
               </button>
             </div>
           </div>

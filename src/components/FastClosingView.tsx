@@ -61,6 +61,10 @@ interface FastClosingViewProps {
   onSetClosingItemStatusRaw?: (id: string, status: "Pending" | "Paid" | "Overdue" | "Cancelled") => Promise<void>;
   onPostponeClosingItem: (id: string, newDueDate: string) => Promise<void>;
   onReconcileMovement: (movementId: string, closingItemId: string) => Promise<void>;
+  // CORREZIONE (13/08/2026) — motore condiviso di riconciliazione multi-voce con pagamento
+  // parziale (src/lib/reconciliation.ts): sostituisce la vecchia logica locale che segnava
+  // TUTTE le voci selezionate "Pagato" anche quando il bonifico non le copriva.
+  onCumulativeReconcile?: (itemIds: string[], options?: { movementId?: string | null; cashAmount?: number }) => Promise<void>;
   onDeleteClosingItem: (id: string) => Promise<void>;
   onAddMovement?: (movement: Omit<BankMovement, "id" | "userId" | "createdAt">) => Promise<void>;
   onAddReminder?: (reminder: Omit<Reminder, "id" | "userId" | "createdAt">) => Promise<void>;
@@ -86,6 +90,7 @@ export default function FastClosingView({
   onSetClosingItemStatusRaw,
   onPostponeClosingItem,
   onReconcileMovement,
+  onCumulativeReconcile,
   onDeleteClosingItem,
   onAddMovement,
   onAddReminder,
@@ -649,17 +654,26 @@ export default function FastClosingView({
 
     const totalNeeded = selectedItems.reduce((sum, item) => sum + item.amount, 0);
 
+    // CORREZIONE (13/08/2026) — sia il ramo contanti sia il ramo bonifico passano ora dal
+    // motore condiviso `onCumulativeReconcile` (src/lib/reconciliation.ts): se l'importo non
+    // copre tutte le voci selezionate, i canoni/spese più vecchi (canoni sempre prima) vengono
+    // saldati per intero e la voce su cui il pagamento si esaurisce resta Pending/Overdue con
+    // il proprio importo ridotto al residuo reale — non più "tutto Pagato + riga di residuo
+    // generica scollegata", come richiesto esplicitamente da Massimo.
+    if (!onCumulativeReconcile) {
+      console.error("onCumulativeReconcile non disponibile: impossibile procedere.");
+      return;
+    }
+
     // ── CORREZIONE K — Saldo in contanti / verifica manuale, senza bonifico da abbinare ──
     if (cumulativeCashMode) {
       const confirmed = confirm(
-        `Confermi di aver saldato €${totalNeeded.toFixed(2)} per ${cumulativeTenant.name} in contanti (o comunque verificato personalmente, senza un movimento bancario da abbinare)?\n\nQuesta azione segnerà come "Pagato" le voci selezionate.`
+        `Confermi di aver saldato €${totalNeeded.toFixed(2)} per ${cumulativeTenant.name} in contanti (o comunque verificato personalmente, senza un movimento bancario da abbinare)? Se l'importo non copre tutte le voci selezionate, verranno saldate per intero partendo dai canoni e dalle più vecchie; l'ultima coperta solo in parte resterà con il proprio residuo.\n\nQuesta azione aggiorna lo stato delle voci selezionate.`
       );
       if (!confirmed) return;
 
       try {
-        for (const item of selectedItems) {
-          await onUpdateClosingItemStatus(item.id, "Paid");
-        }
+        await onCumulativeReconcile(selectedCumulativeItemIds, { cashAmount: totalNeeded });
         alert(`Saldo in contanti registrato con successo per ${cumulativeTenant.name}!`);
         setCumulativeTenant(null);
       } catch (err) {
@@ -672,51 +686,12 @@ export default function FastClosingView({
     if (!movement) return;
 
     try {
+      await onCumulativeReconcile(selectedCumulativeItemIds, { movementId: movement.id });
+
       if (movement.amount < totalNeeded) {
-        // PARTIAL RECONCILIATION
         const residue = totalNeeded - movement.amount;
-        
-        // 1. Reconcile all selected items
-        for (const item of selectedItems) {
-          await onUpdateClosingItemStatus(item.id, "Paid");
-        }
-        
-        // 2. Mark movement as reconciled
-        await onReconcileMovement(movement.id, selectedItems[0].id);
-
-        // 3. Create residue row for next month's Fast Closing
-        // CORREZIONE H — mai una data scritta fissa: il "mese prossimo" si calcola sempre da oggi
-        const nextMonthDate = new Date();
-        nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
-        nextMonthDate.setDate(5);
-        const nextMonthDueDate = nextMonthDate.toISOString().split("T")[0];
-
-        const residueProperty = properties.find(p => p.id === cumulativeTenant.propertyId);
-        await onAddClosingItem({
-          title: formatLedgerLabel({
-            debtorName: cumulativeTenant.name,
-            isCompany: cumulativeTenant.isCompany,
-            propertyAddress: residueProperty?.address,
-            tipologia: "Affitto (Residuo Riconciliazione Parziale)",
-            dateForPeriod: nextMonthDueDate
-          }),
-          description: `Residuo insoluto dopo riconciliazione parziale con bonifico di €${movement.amount.toFixed(2)}.`,
-          amount: residue,
-          dueDate: nextMonthDueDate,
-          propertyId: cumulativeTenant.propertyId,
-          debtorId: cumulativeTenant.id,
-          debtorType: "tenant",
-          source: "contract",
-          status: "Pending"
-        });
-
-        alert(`Riconciliazione Parziale eseguita! Bonifico da €${movement.amount.toFixed(2)} applicato su €${totalNeeded.toFixed(2)}. Creato residuo di €${residue.toFixed(2)} nel prossimo Fast Closing.`);
+        alert(`Riconciliazione Parziale eseguita! Bonifico da €${movement.amount.toFixed(2)} applicato su €${totalNeeded.toFixed(2)}. Residuo di €${residue.toFixed(2)} rimasto sulla relativa voce nel Fast Closing.`);
       } else {
-        // FULL RECONCILIATION
-        for (const item of selectedItems) {
-          await onUpdateClosingItemStatus(item.id, "Paid");
-        }
-        await onReconcileMovement(movement.id, selectedItems[0].id);
         alert(`Riconciliazione completata con successo per ${cumulativeTenant.name}!`);
       }
 
@@ -1702,7 +1677,7 @@ export default function FastClosingView({
                       return (
                         <div className="mt-2 pt-2 border-t border-dashed border-slate-300 text-[10px] text-amber-700 font-bold leading-relaxed flex items-start gap-1.5">
                           <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                          <span>Riconciliazione Parziale: L'importo del bonifico è inferiore di €{(selectionTotal - movementAmt).toFixed(2)}. Il sistema registrerà gli elementi come pagati e genererà automaticamente una nuova riga contabile per il residuo nel prossimo Fast Closing.</span>
+                          <span>Riconciliazione Parziale: l'importo del bonifico è inferiore di €{(selectionTotal - movementAmt).toFixed(2)}. Il sistema salderà per intero le voci più vecchie (canoni prima delle spese accessorie) e ridurrà al residuo effettivo la voce su cui il pagamento si esaurisce, che resterà da saldare in questo stesso Fast Closing.</span>
                         </div>
                       );
                     } else if (movementAmt > selectionTotal) {
