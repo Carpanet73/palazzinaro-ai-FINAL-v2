@@ -327,6 +327,18 @@ export default function CondominiumsView({
     return tenants.find(t => t.propertyId === activeProperty.id);
   }, [activeProperty, tenants]);
 
+  // CORREZIONE (13/08/2026) — Se l'immobile è sfitto (nessun inquilino collegato), l'intera
+  // spesa condominiale deve gravare sul proprietario: forziamo la quota Inquilino a 0 non
+  // appena il modulo si apre su un immobile senza inquilino, così non si rischia più di
+  // addebitare per errore (slider lasciato al valore di default) una spesa a un inquilino
+  // che non esiste. Stesso principio già applicato correttamente in MaintenanceView.tsx.
+  useEffect(() => {
+    if (!activeTenant) {
+      setExpenseSplitTenant(0);
+      setFixedTenantAmount(0);
+    }
+  }, [activeTenant]);
+
   // CORREZIONE CP (13/08/2026) — serve per il debtorId/debtorType e per il cognome nella
   // riga contabile standard della quota condominiale a carico del Proprietario.
   const activeOwner = useMemo(() => {
@@ -1547,6 +1559,11 @@ export default function CondominiumsView({
                           </div>
                         )}
 
+                        {!activeTenant && (
+                          <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-[11px] font-semibold">
+                            <strong>Immobile sfitto:</strong> non essendoci un inquilino collegato, l'intera spesa è forzata a carico del Proprietario (100%).
+                          </div>
+                        )}
                         {splitMethod !== "nominal" ? (
                           <div>
                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5 flex justify-between">
@@ -1559,8 +1576,10 @@ export default function CondominiumsView({
                               max="100"
                               step="5"
                               value={expenseSplitTenant}
+                              disabled={!activeTenant}
                               onChange={(e) => setExpenseSplitTenant(Number(e.target.value))}
-                              className="w-full accent-indigo-600 h-2 bg-slate-200 rounded-lg cursor-pointer"
+                              className={`w-full accent-indigo-600 h-2 bg-slate-200 rounded-lg ${!activeTenant ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                              title={!activeTenant ? "Immobile sfitto: nessun inquilino a cui addebitare una quota" : undefined}
                             />
                           </div>
                         ) : (
@@ -1573,6 +1592,7 @@ export default function CondominiumsView({
                               type="number"
                               step="0.01"
                               max={expenseAmount}
+                              disabled={!activeTenant}
                               min="0"
                               value={fixedTenantAmount || ""}
                               onChange={(e) => setFixedTenantAmount(Math.min(expenseAmount, Number(e.target.value)))}

@@ -592,6 +592,7 @@ export default function PropertiesView({
     const simpleDebtColumns: LedgerColumn[] = [
       { key: "dueDate", label: "Scadenza", format: (d: any) => new Date(d.dueDate).toLocaleDateString("it-IT") },
       { key: "title", label: "Descrizione" },
+      { key: "debtorType", label: "A carico di", format: (d: any) => d.debtorType === "tenant" ? "Inquilino" : "Proprietario" },
       { key: "amount", label: "Importo", align: "right", format: (d: any) => `€${d.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
       { key: "status", label: "Stato", format: (d: any) => d.status === "Paid" ? "Pagato" : "Da Pagare" }
     ];
@@ -613,6 +614,7 @@ export default function PropertiesView({
     const maintDebtColumns: LedgerColumn[] = [
       { key: "dueDate", label: "Data Scadenza", format: (d: any) => new Date(d.dueDate).toLocaleDateString("it-IT") },
       { key: "title", label: "Descrizione Contabile / Debitore" },
+      { key: "debtorType", label: "A carico di", format: (d: any) => d.debtorType === "tenant" ? "Inquilino" : "Proprietario" },
       { key: "amount", label: "Importo Quota", align: "right", format: (d: any) => `€${d.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
       { key: "status", label: "Stato", format: (d: any) => d.status === "Paid" ? "Pagato" : "Da Pagare" }
     ];
@@ -1129,12 +1131,19 @@ export default function PropertiesView({
                       <tr className="text-[10px] uppercase font-mono font-bold text-slate-400">
                         <th className="py-2.5">Scadenza</th>
                         <th className="py-2.5">Descrizione</th>
+                        <th className="py-2.5">A carico di</th>
                         <th className="py-2.5 text-right">Importo</th>
                         <th className="py-2.5 text-right">Stato</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 text-xs">
-                      {condoDebts.map(debt => (
+                      {condoDebts.map(debt => {
+                        // CORREZIONE (13/08/2026) — "A carico di" letto dal campo strutturato
+                        // debtorType (sempre popolato alla creazione della riga), mai da testo
+                        // libero: il mastrino della singola casa deve mostrare TUTTE le righe
+                        // (proprietario + inquilino) ma sempre etichettate correttamente.
+                        const isTenant = (debt as any).debtorType === "tenant";
+                        return (
                         <tr key={debt.id} className="hover:bg-slate-50/50">
                           <td className="py-2.5 font-mono text-slate-500">
                             {new Date(debt.dueDate).toLocaleDateString("it-IT")}
@@ -1142,20 +1151,31 @@ export default function PropertiesView({
                           <td className="py-2.5 font-medium text-slate-800 leading-snug">
                             {debt.title}
                           </td>
+                          <td className="py-2.5">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider ${
+                              isTenant
+                                ? "bg-indigo-50 text-indigo-700 border border-indigo-150"
+                                : "bg-amber-50 text-amber-700 border border-amber-150"
+                            }`}>
+                              {isTenant ? <User size={9} /> : <Briefcase size={9} />}
+                              {isTenant ? "Inquilino" : "Proprietario"}
+                            </span>
+                          </td>
                           <td className="py-2.5 text-right font-bold text-slate-900">
                             €{debt.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-2.5 text-right font-black">
                             <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider ${
-                              debt.status === "Paid" 
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100/50" 
+                              debt.status === "Paid"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100/50"
                                 : "bg-rose-50 text-rose-700 border border-rose-100/50"
                             }`}>
                               {debt.status === "Paid" ? "Pagato" : "Da Pagare"}
                             </span>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1401,9 +1421,14 @@ export default function PropertiesView({
                           </thead>
                           <tbody className="divide-y divide-slate-50 text-xs">
                             {maintDebts.map(debt => {
-                              const isTenant = (debt.title || "").toLowerCase().includes("inquilino") || 
-                                               (debt.title || "").toLowerCase().includes("conduttore") ||
-                                               (associatedTenant && (debt.title || "").toLowerCase().includes((associatedTenant.name || "").toLowerCase()));
+                              // CORREZIONE (13/08/2026) — "A carico di" letto dal campo strutturato
+                              // debtorType (sempre popolato alla creazione della riga), non più dal
+                              // testo del titolo: da quando il titolo usa l'etichetta standard
+                              // "{Cognome}/{Via} {Civico} {Tipologia} {Mese} {Anno}" (Fase 2 punto 1),
+                              // non contiene più le parole "inquilino"/"conduttore" né il nome
+                              // completo del debitore (solo il cognome), quindi il riconoscimento da
+                              // testo non funzionava più.
+                              const isTenant = (debt as any).debtorType === "tenant";
                               return (
                                 <tr key={debt.id} className="hover:bg-slate-50/50">
                                   <td className="py-2.5 font-mono text-slate-500">

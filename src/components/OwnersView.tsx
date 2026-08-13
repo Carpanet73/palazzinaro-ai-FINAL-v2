@@ -180,10 +180,18 @@ export default function OwnersView({
     );
 
     // Get all fastClosing items
+    // CORREZIONE (13/08/2026) — priorità al collegamento diretto propertyId (sempre popolato
+    // sulle voci reali di condominio/manutenzione/canone), mai solo sourceId (che per le
+    // manutenzioni/condominio punta all'id del ticket/condominio, non dell'immobile) o sul
+    // testo del titolo (che dalla Fase 2 punto 1 non contiene più il nome dell'immobile).
+    // Senza questo fix, le quote di manutenzione/condominio a carico del proprietario
+    // risultavano invisibili in quest'area. sourceId/titolo restano come fallback per le
+    // voci storiche prive di propertyId.
     const relatedClosingItems = fastClosing.filter(fc => {
+      const matchesPropertyId = (fc as any).propertyId === p.id;
       const matchesId = fc.sourceId === p.id || (activeContract && fc.sourceId === activeContract.id);
       const matchesTitle = (fc.title || "").toLowerCase().includes((p.name || "").toLowerCase());
-      return matchesId || matchesTitle;
+      return matchesPropertyId || matchesId || matchesTitle;
     });
 
     // Get all reconciled bank movements
@@ -271,8 +279,12 @@ export default function OwnersView({
     );
 
     // 2. Spese Condominiali (Condominium Fees)
+    // CORREZIONE (13/08/2026) — le spese condominiali possono generare due righe distinte
+    // (una a carico dell'Inquilino, una a carico del Proprietario, campo debtorType). L'Area
+    // Proprietari deve mostrare SOLO la quota del proprietario, mai quella dell'inquilino
+    // (altrimenti il debito del proprietario risulterebbe gonfiato dalla quota altrui).
     const condoPayments = buildUnifiedLedger(
-      item => item.source === "condominium" || (item.title || "").toLowerCase().includes("condominio") || (item.title || "").toLowerCase().includes("spese cond"),
+      item => (item.source === "condominium" || (item.title || "").toLowerCase().includes("condominio") || (item.title || "").toLowerCase().includes("spese cond")) && item.debtorType !== "tenant",
       m => m.reconciledWith?.type === "condominium" || (m.description || "").toLowerCase().includes("condominio") || (m.description || "").toLowerCase().includes("spese cond"),
       "Rata condominiale"
     );
@@ -284,13 +296,17 @@ export default function OwnersView({
       "Tassa registro"
     );
 
-    // 4. Altri Movimenti / Residui (Other/Maintenance/Manual)
+    // 4. Altri Movimenti / Residui (Other/Manual) — esclude esplicitamente le manutenzioni
+    // (che ora, dopo il fix del matching su propertyId, sarebbero altrimenti richiamate qui
+    // in duplicato: hanno già una tabella dedicata, vedi ownerMaintenance più sotto) e le
+    // quote a carico dell'inquilino (stesso principio del punto 2 qui sopra).
     const otherPayments = buildUnifiedLedger(
       item => {
         const isRent = item.source === "contract" || (item.title || "").toLowerCase().includes("affitto") || (item.title || "").toLowerCase().includes("canone");
         const isCondo = item.source === "condominium" || (item.title || "").toLowerCase().includes("condominio") || (item.title || "").toLowerCase().includes("spese cond");
         const isTax = (item.title || "").toLowerCase().match(/(registro|imposta|tassa|f24|erario)/) !== null;
-        return !isRent && !isCondo && !isTax;
+        const isMaint = item.source === "maintenance";
+        return !isRent && !isCondo && !isTax && !isMaint && item.debtorType !== "tenant";
       },
       m => {
         const isRent = m.reconciledWith?.type === "contract" || (m.description || "").toLowerCase().includes("affitto") || (m.description || "").toLowerCase().includes("canone");
@@ -301,13 +317,34 @@ export default function OwnersView({
       "Altra voce contabile"
     );
 
-    const ownerMaintenance = maintenance.filter(m => m.propertyId === p.id).filter(ticket => {
-      // If property status is not "Rented", everything charges the owner!
-      if (p.status !== "Rented") {
-        return true;
-      }
-      // If rented, only show maintenance where chargedTo is not tenant
-      return ticket.chargedTo !== "tenant";
+    // CORREZIONE (13/08/2026) — ricostruita da zero: prima leggeva il ticket di manutenzione
+    // grezzo (`maintenance` collection) e ne mostrava il costo TOTALE lordo, indipendentemente
+    // da come l'utente aveva ripartito la spesa tra proprietario e inquilino (mai il 50/50
+    // configurato). Ora legge invece — esattamente come fa già correttamente il mastrino
+    // dell'inquilino in TenantsView.tsx per la sua quota — le righe contabili reali generate
+    // alla creazione della manutenzione (una per debitore), filtrate per questo immobile e per
+    // quota NON a carico dell'inquilino: l'importo mostrato è quindi sempre la vera quota del
+    // proprietario (es. 500€ su un totale di 1000€), mai il costo lordo dell'intervento.
+    const ownerMaintenanceClosingItems = relatedClosingItems.filter(
+      fc => fc.source === "maintenance" && fc.debtorType !== "tenant"
+    );
+    const ownerMaintenance = ownerMaintenanceClosingItems.map(fc => {
+      const ticket = maintenance.find(m => m.id === fc.sourceId);
+      const totalCost = ticket?.cost ?? fc.amount;
+      const ownerPct = totalCost > 0 ? Math.round((fc.amount / totalCost) * 100) : 100;
+      return {
+        id: fc.id,
+        date: ticket?.date || ticket?.createdAt,
+        createdAt: ticket?.createdAt,
+        title: ticket?.title || fc.groupLabel || "Manutenzione",
+        description: ticket?.description || "",
+        contractor: ticket?.contractor,
+        status: ticket?.status || "Pending", // stato del TICKET (In Corso/Risolto/Annullato)
+        paymentStatus: fc.status, // stato del PAGAMENTO della quota (Pending/Paid/Overdue)
+        cost: fc.amount, // quota REALE del proprietario, mai il costo lordo del ticket
+        totalCost,
+        ownerPct
+      };
     });
 
     // CORREZIONE AX — Totali: quanto c'è ancora da incassare (Pendente + Insoluto) e quanto
@@ -608,11 +645,13 @@ export default function OwnersView({
       const activeContract = contracts.find(c => c.propertyId === p.id && c.status === "Active");
       const propertyClosingItems = fastClosing.filter(fc => {
         if (fc.status === "Paid" || fc.status === "Cancelled") return false;
+        if (fc.debtorType === "tenant") return false; // solo scadenze a carico del proprietario
+        const matchesPropertyId = (fc as any).propertyId === p.id;
         const matchesId = fc.sourceId === p.id || (activeContract && fc.sourceId === activeContract.id);
         const matchesTitle = (fc.title || "").toLowerCase().includes((p.name || "").toLowerCase());
-        return matchesId || matchesTitle;
+        return matchesPropertyId || matchesId || matchesTitle;
       });
-      const hasOverdue = propertyClosingItems.some(item => 
+      const hasOverdue = propertyClosingItems.some(item =>
         item.status === "Overdue" || new Date(item.dueDate) < new Date()
       );
       if (hasOverdue) warningCount++;
@@ -636,11 +675,12 @@ export default function OwnersView({
       const activeContract = contracts.find(c => c.propertyId === p.id && c.status === "Active");
       
       const propertyClosingItems = fastClosing.filter(fc => {
+        const matchesPropertyId = (fc as any).propertyId === p.id;
         const matchesId = fc.sourceId === p.id || (activeContract && fc.sourceId === activeContract.id);
         const matchesTitle = (fc.title || "").toLowerCase().includes((p.name || "").toLowerCase());
-        return matchesId || matchesTitle;
+        return matchesPropertyId || matchesId || matchesTitle;
       });
-      
+
       propertyClosingItems.forEach(item => {
         if (item.status === "Paid" || item.status === "Cancelled") return;
 
@@ -1128,9 +1168,10 @@ export default function OwnersView({
                 // 4. Overdue/Pending fast closing items for this property/contract
                 const propertyClosingItems = fastClosing.filter(fc => {
                   if (fc.status === "Paid" || fc.status === "Cancelled") return false;
+                  const matchesPropertyId = (fc as any).propertyId === p.id;
                   const matchesId = fc.sourceId === p.id || (activeContract && fc.sourceId === activeContract.id);
                   const matchesTitle = (fc.title || "").toLowerCase().includes((p.name || "").toLowerCase());
-                  return matchesId || matchesTitle;
+                  return matchesPropertyId || matchesId || matchesTitle;
                 });
 
                 const hasOverdueRent = propertyClosingItems.some(item => 
@@ -1934,12 +1975,12 @@ export default function OwnersView({
                                 <th className="p-3 border border-slate-300">Stato Ticket</th>
                                 <th className="p-3 border border-slate-300">Dettagli Guasto</th>
                                 <th className="p-3 border border-slate-300">Impresa / Tecnico</th>
-                                <th className="p-3 border border-slate-300">Importo Spesa</th>
-                                <th className="p-3 border border-slate-300">Fatturato a carico di</th>
+                                <th className="p-3 border border-slate-300">Quota Proprietario</th>
+                                <th className="p-3 border border-slate-300">Ripartizione</th>
                               </tr>
                             </thead>
                             <tbody className="bg-white">
-                              {propertyModalData.ownerMaintenance.map((item, idx) => (
+                              {propertyModalData.ownerMaintenance.map((item: any, idx) => (
                                 <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                   <td className="p-3 border border-slate-300 font-mono font-bold text-slate-700">
                                     {item.date ? new Date(item.date).toLocaleDateString("it-IT") : new Date(item.createdAt).toLocaleDateString("it-IT")}
@@ -1964,6 +2005,11 @@ export default function OwnersView({
                                   </td>
                                   <td className="p-3 border border-slate-300 font-black text-rose-600">
                                     €{(item.cost || 0).toLocaleString("it-IT")}
+                                    {item.ownerPct < 100 && (
+                                      <span className="block text-[9px] text-slate-400 font-normal normal-case mt-0.5">
+                                        di €{item.totalCost.toLocaleString("it-IT")} totali
+                                      </span>
+                                    )}
                                   </td>
                                   <td className="p-3 border border-slate-300">
                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase ${
@@ -1972,7 +2018,7 @@ export default function OwnersView({
                                         : "bg-indigo-100 text-indigo-800 border border-indigo-250"
                                     }`}>
                                       <Briefcase size={9} className="shrink-0" />
-                                      {selectedProperty.status !== "Rented" ? "Sfitto: Proprietario" : "Proprietario"}
+                                      {selectedProperty.status !== "Rented" ? `Sfitto: ${item.ownerPct}% Proprietario` : `${item.ownerPct}% Proprietario`}
                                     </span>
                                   </td>
                                 </tr>
