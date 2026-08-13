@@ -299,30 +299,46 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
           );
           if (activeLegalCase) continue;
 
-          const itemsListText = group.items
-            .map((item) => `${(item.title || '').split(' - ')[1] || item.title} (€${(Number(item.amount) || 0).toFixed(2)})`)
-            .join(', ');
-          const associatedItemsIds = group.items.map((item) => item.id);
-
           const existingActiveReminder = reminders.find(
             (r) => r.tenantName === debtorName && r.status !== 'Closed' && r.status !== 'Cancelled' && r.status !== 'Paid'
           );
 
           if (existingActiveReminder) {
+            // CORREZIONE CO (13/08/2026) — stessa correzione applicata lato client in
+            // FastClosingView.tsx: un canone rimasto Overdue da una chiusura precedente
+            // resta candidato del gruppo Sollecito ad OGNI chiusura successiva (finché non
+            // saldato). Prima di questa correzione l'intero importo del gruppo veniva
+            // risommato al Sollecito ad ogni chiusura anche per voci già associate,
+            // gonfiando l'importo del Sollecito senza nuovo insoluto reale. Ora si sommano
+            // SOLO le voci non ancora presenti in associatedItemsIds.
             const currentAssociated: string[] = existingActiveReminder.associatedItemsIds || [];
-            const newAssociated = Array.from(new Set([...currentAssociated, ...associatedItemsIds]));
-            const addedAmount = group.items.reduce((s, item) => s + (Number(item.amount) || 0), 0);
-            const newAmount = (Number(existingActiveReminder.amount) || 0) + addedAmount;
-            const newReason = existingActiveReminder.reason
-              ? `${existingActiveReminder.reason} + Chiusura Fast Closing: ${itemsListText}`
-              : `Sollecito automatico Fast Closing: ${itemsListText}`;
-            batch.update(firestore.collection('reminders').doc(existingActiveReminder.id), {
-              associatedItemsIds: newAssociated,
-              amount: newAmount,
-              reason: newReason,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
+            const alreadyAssociatedIds = new Set(currentAssociated);
+            const newItems = group.items.filter((item) => !alreadyAssociatedIds.has(item.id));
+
+            if (newItems.length > 0) {
+              const newItemsListText = newItems
+                .map((item) => `${(item.title || '').split(' - ')[1] || item.title} (€${(Number(item.amount) || 0).toFixed(2)})`)
+                .join(', ');
+              const addedAmount = newItems.reduce((s, item) => s + (Number(item.amount) || 0), 0);
+              const newAmount = (Number(existingActiveReminder.amount) || 0) + addedAmount;
+              const newAssociated = Array.from(new Set([...currentAssociated, ...newItems.map((item) => item.id)]));
+              const newReason = existingActiveReminder.reason
+                ? `${existingActiveReminder.reason} + Chiusura Fast Closing: ${newItemsListText}`
+                : `Sollecito automatico Fast Closing: ${newItemsListText}`;
+              batch.update(firestore.collection('reminders').doc(existingActiveReminder.id), {
+                associatedItemsIds: newAssociated,
+                amount: newAmount,
+                reason: newReason,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            }
+            // Se newItems è vuoto, tutte le voci del gruppo sono già nel Sollecito attivo:
+            // nessun aggiornamento, evita di risommare lo stesso importo più volte.
           } else {
+            const itemsListText = group.items
+              .map((item) => `${(item.title || '').split(' - ')[1] || item.title} (€${(Number(item.amount) || 0).toFixed(2)})`)
+              .join(', ');
+            const associatedItemsIds = group.items.map((item) => item.id);
             const reminderRef = firestore.collection('reminders').doc();
             batch.set(reminderRef, {
               userId,
@@ -342,25 +358,14 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
           solleciti++;
         }
 
-        // 2. Voci rigide (canoni) -> Overdue + riproposte il mese successivo (con debtorId/debtorType)
+        // 2. Voci rigide (canoni) -> Overdue. MAI riproposte il mese successivo: sono voci
+        // rigide, la loro unica destinazione da insolute è il Sollecito creato/aggiornato al
+        // passo 1 sopra (CORREZIONE CO 13/08/2026 — stessa correzione lato client in
+        // FastClosingView.tsx; prima si generava qui anche una nuova riga "[Arretrato] ..."
+        // per il mese successivo, che si accumulava ad ogni chiusura mensile).
         for (const item of rigidItems) {
           batch.update(firestore.collection('fastClosing').doc(item.id), { status: 'Overdue' });
           closedCount++;
-          const nextDueDate = addOneMonthToDate(item.dueDate);
-          const newItemRef = firestore.collection('fastClosing').doc();
-          batch.set(newItemRef, {
-            userId,
-            title: `[Arretrato] ${item.title}`,
-            description: `Canone insoluto riportato dalla chiusura del mese corrente.`,
-            amount: item.amount,
-            dueDate: nextDueDate,
-            source: 'contract',
-            sourceId: item.sourceId,
-            status: 'Pending',
-            debtorId: item.debtorId,
-            debtorType: item.debtorType,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
           reproposed++;
         }
 
