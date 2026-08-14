@@ -5,6 +5,8 @@ import { Scale, FolderOpen, X, Trash2, Briefcase, Download, FileText, User, Penc
 import { LegalCase, Property, Lawyer, Tenant, OwnerProfile, Contract, Reminder, DeliveryReport, FastClosingItem, BankMovement } from "../types";
 import JSZip from "jszip";
 import emailjs from "@emailjs/browser";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 
 interface LegalViewProps {
   legalCases: LegalCase[];
@@ -545,6 +547,30 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
     return fastClosing.filter(item => ids.has(item.id) && (item.status === "Pending" || item.status === "Overdue"));
   };
 
+  // CORREZIONE (14/08/2026, su richiesta di Massimo) — un ritaglio del mastrino con TUTTE le
+  // righe contabili oggetto della pratica, incluse quelle già Pagate, non solo le insolute:
+  // serve come descrizione/contesto della pratica (da dove nasce il debito), non solo come
+  // lista di voci ancora da riconciliare (quello resta lo scopo di getCaseLinkedItems sopra,
+  // usata dalla modale di riconciliazione — nessuna modifica al suo comportamento).
+  const getCaseAllLinkedItems = (legalCase: LegalCase): FastClosingItem[] => {
+    const reminder = resolveCaseReminder(legalCase);
+    const ids = new Set<string>(
+      (legalCase.associatedItemsIds && legalCase.associatedItemsIds.length > 0)
+        ? legalCase.associatedItemsIds
+        : (reminder?.associatedItemsIds || [])
+    );
+    return fastClosing
+      .filter(item => ids.has(item.id))
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  };
+
+  const caseLedgerExportColumns: LedgerColumn[] = [
+    { key: "title", label: "Voce", align: "left" },
+    { key: "dueDateFormatted", label: "Scadenza", align: "center" },
+    { key: "statusLabel", label: "Stato", align: "center" },
+    { key: "amountFormatted", label: "Importo", align: "right" }
+  ];
+
   const handleCaseMarkPaid = async (legalCase: LegalCase) => {
     const reminder = resolveCaseReminder(legalCase);
     const linkedItems = getCaseLinkedItems(legalCase);
@@ -895,6 +921,98 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
                       </div>
                     )}
                   </div>
+
+                  {/* CORREZIONE (14/08/2026, su richiesta di Massimo) — "Righe Contabili della
+                      Pratica": prima la pratica legale mostrava solo un totale insoluto senza
+                      spiegare da quali voci derivasse. Qui un vero ritaglio del mastrino
+                      (stessa fonte reale — Fast Closing — mai un riepilogo testuale scollegato),
+                      con tutte le righe collegate (anche quelle già Pagate, per il contesto
+                      storico completo), stessa identica veste grafica delle altre tabelle
+                      mastrino (intestazione scura, bordi sottili, importi in monospazio
+                      allineati a destra) e barra di stampa/export universale. */}
+                  {(() => {
+                    const caseAllItems = getCaseAllLinkedItems(lawsuit);
+                    const caseLedgerExportRows = caseAllItems.map(item => ({
+                      title: item.title,
+                      dueDateFormatted: new Date(item.dueDate).toLocaleDateString("it-IT"),
+                      statusLabel: item.status === "Paid" ? "Saldato" : item.status === "Overdue" ? "Scaduto" : "In Sospeso",
+                      amountFormatted: `€${item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}`
+                    }));
+                    const caseItemsTotal = caseAllItems.reduce((s, i) => s + i.amount, 0);
+                    return (
+                      <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-1.5 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                            <FileText size={14} className="text-indigo-600" />
+                            <span>Righe Contabili della Pratica</span>
+                          </div>
+                          {caseAllItems.length > 0 && (
+                            <LedgerExportToolbar
+                              title={`Pratica Legale — ${lawsuit.tenantName}`}
+                              columns={caseLedgerExportColumns}
+                              rows={caseLedgerExportRows}
+                              totalsRow={{ title: "TOTALE", amountFormatted: `€${caseItemsTotal.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }}
+                              filenameBase={`pratica-legale-${lawsuit.tenantName}`}
+                            />
+                          )}
+                        </div>
+                        {caseAllItems.length === 0 ? (
+                          <p className="text-[10px] text-slate-400 italic px-1 py-1">
+                            Nessuna voce contabile reale collegata a questa pratica (probabile
+                            fascicolo storico creato prima del collegamento per ID — vedi il
+                            Sollecito d'origine per il dettaglio).
+                          </p>
+                        ) : (
+                          <div className="overflow-x-auto rounded-lg border border-slate-200">
+                            <table className="w-full text-[10.5px] border-collapse">
+                              <thead>
+                                <tr className="bg-slate-800 text-slate-100">
+                                  <th className="p-2 text-left font-bold uppercase tracking-wider text-[9px] border border-slate-700">Voce</th>
+                                  <th className="p-2 text-center font-bold uppercase tracking-wider text-[9px] border border-slate-700">Scadenza</th>
+                                  <th className="p-2 text-center font-bold uppercase tracking-wider text-[9px] border border-slate-700">Stato</th>
+                                  <th className="p-2 text-right font-bold uppercase tracking-wider text-[9px] border border-slate-700">Importo</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {caseAllItems.map((item, idx) => (
+                                  <tr key={item.id} className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} ${item.status === "Paid" ? "opacity-50" : ""}`}>
+                                    <td className="p-2 border border-slate-200 text-slate-700 align-top max-w-[220px] truncate" title={item.title}>
+                                      {item.title}
+                                    </td>
+                                    <td className="p-2 border border-slate-200 text-center font-mono text-slate-600 align-top">
+                                      {new Date(item.dueDate).toLocaleDateString("it-IT")}
+                                    </td>
+                                    <td className="p-2 border border-slate-200 text-center align-top">
+                                      <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                        item.status === "Paid"
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : item.status === "Overdue"
+                                          ? "bg-rose-200 text-rose-900"
+                                          : "bg-amber-100 text-amber-800"
+                                      }`}>
+                                        {item.status === "Paid" ? "Saldato" : item.status === "Overdue" ? "Scaduto" : "In Sospeso"}
+                                      </span>
+                                    </td>
+                                    <td className="p-2 border border-slate-200 text-right font-mono font-black text-slate-800 align-top">
+                                      €{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-slate-100 font-black">
+                                  <td colSpan={3} className="p-2 border border-slate-200 text-right text-[9px] uppercase tracking-wider text-slate-500">Totale</td>
+                                  <td className="p-2 border border-slate-200 text-right font-mono text-slate-900">
+                                    €{caseItemsTotal.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Dynamic Studio Legale Association */}
                   <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
