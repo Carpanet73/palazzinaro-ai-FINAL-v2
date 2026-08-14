@@ -555,6 +555,18 @@ export interface LegalCase {
   lawyerAccepted?: boolean;
   zipFileName?: string;
   unpaidBalance?: number;
+  // CORREZIONE (14/08/2026) — collegamento reale (per ID, non solo per nome testuale) al
+  // Sollecito e alle voci Fast Closing d'origine, necessario per le azioni "Rientra in
+  // Solleciti" / "Riconcilia" / "Segna come Pagato" direttamente da Area Legale. Assente
+  // sulle pratiche create prima di questa data (fascicoli storici): in quel caso le azioni
+  // usano un abbinamento per nome debitore come ripiego, meno affidabile.
+  sourceReminderId?: string;
+  associatedItemsIds?: string[];
+  // Traccia quando il saldo insoluto è stato azzerato mentre la pratica era in Area Legale
+  // (pagamento/riconciliazione avvenuti qui o rientrati dai Solleciti), così il dato non
+  // resta mai discostato dal resto del flusso economico (regola 2 del progetto).
+  balanceSettledAt?: string;
+  balanceSettledNotes?: string;
   filesToAssign?: boolean;
   contractDetails?: any;
   pastRequests?: any[];

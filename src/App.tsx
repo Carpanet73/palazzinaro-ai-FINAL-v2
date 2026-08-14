@@ -1003,6 +1003,8 @@ export default function App() {
       await deleteCollectionDocs("legalCases");
       await deleteCollectionDocs("communications");
       await deleteCollectionDocs("lawyers");
+      await deleteCollectionDocs("creditInstitutions");
+      await deleteCollectionDocs("bankAccounts");
 
       // 1. Properties
       const p1 = await addDoc(collection(db, "properties"), {
@@ -1120,6 +1122,17 @@ export default function App() {
         createdAt: serverTimestamp()
       });
 
+      // CORREZIONE (14/08/2026, su richiesta di Massimo) — prima il Condominio demo veniva
+      // creato ma MAI collegato a un immobile reale (mancava properties.condominiumId): la
+      // pagina Area Condomini restava vuota (nessun "immobile costituito" da selezionare),
+      // pur avendo un documento condominio valido su Firestore. Colleghiamo qui il Trilocale
+      // Navigli (stesso indirizzo del condominio) e ne impostiamo la quota millesimale.
+      await updateDoc(doc(db, "properties", p2.id), {
+        isCondoConstituted: true,
+        condominiumId: condo1.id,
+        millesimi: 250
+      });
+
       // 5. Fast Closing (Payments / Expiring activities)
       // Voce a livello di condominio (nessun debitore singolo, come le rate amministratore in
       // handleAddCondominium) — titolo lasciato invariato, solo la data è stata resa dinamica.
@@ -1194,8 +1207,33 @@ export default function App() {
       });
 
       // 6. Bank Movements
+      // CORREZIONE (14/08/2026, su richiesta di Massimo) — prima i movimenti demo venivano
+      // creati SENZA bankAccountId: l'Area Banche mostra i movimenti solo dentro la gerarchia
+      // Istituto → Conto Corrente → Movimenti (regola 8 del progetto), quindi senza istituto
+      // e conto reali la pagina restava completamente vuota nonostante i movimenti esistessero
+      // già su Firestore. Qui creiamo un istituto e un conto reali e li colleghiamo a tutti i
+      // movimenti demo, così la gerarchia a 3 livelli è finalmente popolata e navigabile.
+      const bankInst1 = await addDoc(collection(db, "creditInstitutions"), {
+        userId: user.uid,
+        name: "🏦 Intesa Sanpaolo",
+        branch: "Filiale Milano Duomo",
+        notes: "Conto corrente principale per la gestione degli affitti del portafoglio immobiliare.",
+        createdAt: serverTimestamp()
+      });
+
+      const bankAcc1 = await addDoc(collection(db, "bankAccounts"), {
+        userId: user.uid,
+        institutionId: bankInst1.id,
+        iban: "IT60X0542811101000000123456",
+        holder: "Palazzinaro AI Demo",
+        currency: "EUR",
+        isActive: true,
+        createdAt: serverTimestamp()
+      });
+
       await addDoc(collection(db, "movements"), {
         userId: user.uid,
+        bankAccountId: bankAcc1.id,
         date: inDays(-2),
         amount: 1200.00,
         description: "BONIFICO DA ROSSI MARIO CAUSALE CANONE LUGLIO DUOMO",
@@ -1207,6 +1245,7 @@ export default function App() {
 
       await addDoc(collection(db, "movements"), {
         userId: user.uid,
+        bankAccountId: bankAcc1.id,
         date: inDays(-25),
         amount: -250.00,
         description: "PAGAMENTO SEDA FATTURA 122 IDRAULICA MILANESE",
@@ -1222,9 +1261,47 @@ export default function App() {
 
       await addDoc(collection(db, "movements"), {
         userId: user.uid,
+        bankAccountId: bankAcc1.id,
         date: inDays(-1),
         amount: 1850.00,
         description: "PAGAMENTO CANONE BIANCHI GIULIA LUGLIO 2026",
+        sender: "Bianchi Giulia",
+        reconciled: false,
+        reconciledWith: null,
+        createdAt: serverTimestamp()
+      });
+
+      // Voce condominiale + bonifico PARZIALE volutamente insufficiente a coprirla: dimostra
+      // dal vivo la riconciliazione parziale con residuo (motore condiviso
+      // src/lib/reconciliation.ts), scenario prima non testabile in demo per mancanza di un
+      // conto corrente reale collegato ai movimenti.
+      const rataCondoDueDate = inDays(3);
+      await addDoc(collection(db, "fastClosing"), {
+        userId: user.uid,
+        propertyId: p2.id,
+        title: formatLedgerLabel({
+          debtorName: "👩‍⚕️ Giulia Bianchi",
+          propertyAddress: "Alzaia Naviglio Grande 48, 20144 Milano (MI)",
+          tipologia: "Rata Condominiale II 2026",
+          dateForPeriod: rataCondoDueDate
+        }),
+        description: "Rata condominiale ordinaria — Condominio Navigli Grande",
+        amount: 120.00,
+        dueDate: rataCondoDueDate,
+        source: "condominium",
+        sourceId: condo1.id,
+        status: "Pending",
+        debtorId: t2.id,
+        debtorType: "tenant",
+        createdAt: serverTimestamp()
+      });
+
+      await addDoc(collection(db, "movements"), {
+        userId: user.uid,
+        bankAccountId: bankAcc1.id,
+        date: inDays(-1),
+        amount: 70.00,
+        description: "BONIFICO PARZIALE RATA CONDOMINIALE BIANCHI GIULIA",
         sender: "Bianchi Giulia",
         reconciled: false,
         reconciledWith: null,
@@ -3574,6 +3651,10 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             reminders={reminders}
             deliveryReports={deliveryReports}
             lawyers={lawyers}
+            fastClosing={fastClosing}
+            movements={movements}
+            onCumulativeReconcile={handleCumulativeReconcile}
+            onUpdateReminderStatus={handleUpdateReminderStatus}
             onAddLegalCase={handleAddLegalCase}
             onUpdateLegalCaseStatus={handleUpdateLegalCaseStatus}
             onUpdateLegalCase={handleUpdateLegalCase}
