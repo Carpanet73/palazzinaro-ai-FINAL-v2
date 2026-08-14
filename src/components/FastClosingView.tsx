@@ -439,11 +439,36 @@ export default function FastClosingView({
     return "Spese Generali / Condomini";
   };
 
+  // CORREZIONE (14/08/2026, su richiesta esplicita di Massimo) — "una riga non può figurare
+  // al contempo in due pagine attive di smistamento/gestione": una volta che una voce Overdue
+  // è stata presa in carico da un Sollecito ATTIVO (non Pagato/Annullato/Chiuso), Fast Closing
+  // deve smettere di trattarla come propria (niente più checkbox di riconciliazione, niente
+  // più pulsante Insoluto, niente più conteggio nei subtotali) — stessa identica logica già
+  // applicata oggi in RemindersView.tsx per i Solleciti passati ad Area Legale. La voce resta
+  // comunque interamente consultabile in Solleciti (e, se il caso, in Area Legale) — nessun
+  // dato viene perso, sparisce solo dalla vista OPERATIVA di Fast Closing.
+  const itemIdsOwnedByActiveReminder = useMemo(() => {
+    const ids = new Set<string>();
+    (reminders || []).forEach(r => {
+      if (r.status !== "Paid" && r.status !== "Cancelled" && r.status !== "Closed") {
+        (r.associatedItemsIds || []).forEach(id => ids.add(id));
+      }
+    });
+    return ids;
+  }, [reminders]);
+
   // 1. Filter items by selected month archive
   const monthFilteredItems = useMemo(() => {
     return fastClosing.filter(item => {
       const dateStr = item.dueDate; // format YYYY-MM-DD
       if (selectedMonthYear === "current") {
+        // Esclude le voci già in carico a un Sollecito attivo SOLO nella vista corrente
+        // operativa — negli archivi mensili passati (sola lettura, nessuna azione disponibile,
+        // vedi selectedMonthYear !== "current" più sotto) restano visibili per accuratezza
+        // storica: non è una duplicazione di gestione attiva, solo consultazione.
+        if (itemIdsOwnedByActiveReminder.has(item.id) && (item.status === "Pending" || item.status === "Overdue")) {
+          return false;
+        }
         // CORREZIONE AP — bug critico corretto: prima c'era scritto fisso "2026-07" invece
         // di usare il periodo attivo vero. Il mese corrente e generale in ritardo/insoluto.
         return dateStr.startsWith(activePeriod) || item.status === "Overdue" || (item.status === "Pending" && new Date(item.dueDate) < new Date());
@@ -452,7 +477,7 @@ export default function FastClosingView({
         return dateStr.startsWith(selectedMonthYear);
       }
     });
-  }, [fastClosing, selectedMonthYear, activePeriod]);
+  }, [fastClosing, selectedMonthYear, activePeriod, itemIdsOwnedByActiveReminder]);
 
   // 2. Apply status filters on top of month filter (multi-selezione: un item passa se
   // corrisponde ad ALMENO UNO degli stati selezionati, stessa logica per-stato di prima)

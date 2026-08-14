@@ -235,24 +235,15 @@ export default function ContractsView({
   const [uploadLoading, setUploadLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
-  // Delivery/Return Report (Verbale di consegna) states
-  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
-  const [delReportType, setDelReportType] = useState<"consegna" | "riconsegna">("consegna");
-  const [delDate, setDelDate] = useState(new Date().toISOString().split("T")[0]);
-  const [checklistItems, setChecklistItems] = useState<Array<{
-    id: string;
-    item: string;
-    status: string;
-    notes: string;
-    photos: string[];
-  }>>([
-    { id: "cl-1", item: "Stato Pareti ed Intonaci", status: "Ottimo", notes: "Nessuna crepa o macchia di umidità rilevata.", photos: [] },
-    { id: "cl-2", item: "Elettrodomestici (Forno, Frigo, Lavatrice)", status: "Buono", notes: "Funzionanti, puliti.", photos: [] },
-    { id: "cl-3", item: "Chiavi Consegnate (Portone, Cancello, Cantina)", status: "Ottimo", notes: "Forniti 3 mazzi completi.", photos: [] },
-    { id: "cl-4", item: "Lettura Contatori Luce e Gas", status: "Buono", notes: "Lettura Luce: 4123 kWh. Gas: 1205 mc.", photos: [] },
-    { id: "cl-5", item: "Infissi, Finestre e Tapparelle", status: "Ottimo", notes: "Perfettamente sigillanti e scorrevoli.", photos: [] }
-  ]);
-  const [newChecklistItemName, setNewChecklistItemName] = useState("");
+  // CORREZIONE (14/08/2026, su richiesta di Massimo) — rimossa l'intera modale locale di
+  // creazione verbale ("Nuovo Verbale di Consegna"/"Nuovo Verbale di Riconsegna" in sezione 5,
+  // "Verbali di Consegna & Riconsegna Immobile"): era una TERZA implementazione parallela e
+  // duplicata dello stesso identico flusso già coperto da `DeliveryReportWizard` (usato sia dal
+  // prompt automatico dopo la creazione di un contratto, sia dal pulsante "Registra Verbale di
+  // Riconsegna" in testa alla pagina di dettaglio) — violazione della regola "un solo flusso
+  // per ogni azione". Rimossi con essa tutti gli stati e le funzioni usati SOLO da quella
+  // modale (verificato con grep: nessun altro punto del file li referenziava). La lista dei
+  // verbali già registrati e le relative azioni (firma, eliminazione) restano invariate.
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [signatureTargetReport, setSignatureTargetReport] = useState<any | null>(null);
   const [signatureRole, setSignatureRole] = useState<"owner" | "tenant">("owner");
@@ -419,85 +410,12 @@ export default function ContractsView({
     }
   };
 
-  // Delivery / Return Report (Correction 17) Helper Functions
-  const handleOpenCreateDeliveryReport = (type: "consegna" | "riconsegna") => {
-    setDelReportType(type);
-    setDelDate(new Date().toISOString().split("T")[0]);
-    setChecklistItems([
-      { id: "cl-1", item: "Stato Pareti ed Intonaci", status: "Ottimo", notes: "Nessuna crepa o macchia di umidità rilevata.", photos: [] },
-      { id: "cl-2", item: "Elettrodomestici (Forno, Frigo, Lavatrice)", status: "Buono", notes: "Funzionanti, puliti.", photos: [] },
-      { id: "cl-3", item: "Chiavi Consegnate (Portone, Cancello, Cantina)", status: "Ottimo", notes: "Forniti 3 mazzi completi.", photos: [] },
-      { id: "cl-4", item: "Lettura Contatori Luce e Gas", status: "Buono", notes: "Lettura Luce: 4123 kWh. Gas: 1205 mc.", photos: [] },
-      { id: "cl-5", item: "Infissi, Finestre e Tapparelle", status: "Ottimo", notes: "Perfettamente sigillanti e scorrevoli.", photos: [] }
-    ]);
-    setNewChecklistItemName("");
-    setShowDeliveryModal(true);
-  };
-
-  const handleAddChecklistItem = () => {
-    if (!newChecklistItemName.trim()) return;
-    const newItem = {
-      id: "cl-manual-" + Date.now(),
-      item: newChecklistItemName,
-      status: "Buono",
-      notes: "Controllato.",
-      photos: []
-    };
-    setChecklistItems(prev => [...prev, newItem]);
-    setNewChecklistItemName("");
-  };
-
-  const handleRemoveChecklistItem = (id: string) => {
-    setChecklistItems(prev => prev.filter(item => item.id !== id));
-  };
-
-  const handleUpdateChecklistItem = (id: string, field: string, value: any) => {
-    setChecklistItems(prev => prev.map(item => {
-      if (item.id === id) {
-        return { ...item, [field]: value };
-      }
-      return item;
-    }));
-  };
-
-  const handleAddPhotoToItem = (itemId: string) => {
-    const photoName = prompt("Inserisci il nome del file della foto da allegare:", `foto_dettaglio_${Date.now().toString().slice(-4)}.jpg`);
-    if (!photoName) return;
-    setChecklistItems(prev => prev.map(item => {
-      if (item.id === itemId) {
-        return { ...item, photos: [...(item.photos || []), photoName] };
-      }
-      return item;
-    }));
-    alert(`Foto "${photoName}" allegata con successo all'elemento del verbale!`);
-  };
-
-  const handleSaveDeliveryReport = async (selectedContract: Contract) => {
-    const payload = {
-      propertyId: selectedContract.propertyId,
-      contractId: selectedContract.id,
-      tenantId: selectedContract.tenantId,
-      type: delReportType,
-      date: delDate,
-      checklist: checklistItems,
-      signatures: {
-        ownerSigned: false,
-        tenantSigned: false
-      },
-      documentName: `Verbale_${delReportType}_${selectedContract.propertyName?.replace(/\s+/g, "_")}.pdf`
-    };
-
-    try {
-      if (onAddDeliveryReport) {
-        await onAddDeliveryReport(payload);
-      }
-      setShowDeliveryModal(false);
-      alert(`Verbale di ${delReportType === "consegna" ? "Consegna" : "Riconsegna"} registrato in bozza con successo!`);
-    } catch (err) {
-      console.error("Error creating delivery report", err);
-    }
-  };
-
+  // NOTA: le funzioni helper del vecchio modale locale di creazione verbale
+  // (handleOpenCreateDeliveryReport, handleAddChecklistItem, handleRemoveChecklistItem,
+  // handleUpdateChecklistItem, handleAddPhotoToItem, handleSaveDeliveryReport) sono state
+  // rimosse insieme al modale stesso: erano un terzo flusso duplicato, sostituito dal
+  // componente condiviso DeliveryReportWizard (vedi commento più sopra). La funzione sotto
+  // resta invariata: gestisce l'eliminazione di un verbale già registrato, non la creazione.
   const handleDeleteDeliveryReportLocal = async (id: string) => {
     if (confirm("Sei sicuro di voler eliminare questo verbale? L'operazione è irreversibile.")) {
       try {
@@ -1465,22 +1383,11 @@ export default function ContractsView({
                 <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide flex items-center space-x-1.5">
                   <ClipboardList size={16} className="text-indigo-700 shrink-0" /> <span>5. Verbali di Consegna & Riconsegna Immobile</span>
                 </h4>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenCreateDeliveryReport("consegna")}
-                    className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] rounded-lg transition-all cursor-pointer shadow-xs"
-                  >
-                    <span className="inline-flex items-center gap-1"><Plus size={11} className="text-white shrink-0" /> Nuovo Verbale di Consegna</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenCreateDeliveryReport("riconsegna")}
-                    className="inline-flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[10px] rounded-lg transition-all cursor-pointer shadow-xs"
-                  >
-                    <span className="inline-flex items-center gap-1"><Plus size={11} className="text-white shrink-0" /> Nuovo Verbale di Riconsegna</span>
-                  </button>
-                </div>
+                {/* I tasti "Nuovo Verbale di Consegna"/"Nuovo Verbale di Riconsegna" sono stati rimossi:
+                    aprivano un terzo flusso di creazione duplicato (modale locale), ridondante rispetto
+                    al componente condiviso DeliveryReportWizard già usato dal prompt automatico dopo la
+                    creazione contratto e dal tasto "Registra Verbale di Riconsegna" nell'intestazione del
+                    dettaglio contratto. Coerente con la regola "un solo flusso per ogni azione". */}
               </div>
 
               <p className="text-xs text-slate-500">
@@ -3198,161 +3105,11 @@ export default function ContractsView({
         />
       )}
 
-      {/* 4. MODALE CREAZIONE/MODIFICA VERBALE CONSEGNA O RICONSEGNA */}
-      {showDeliveryModal && (() => {
-        const targetId = selectedContractId || (contracts[0] ? contracts[0].id : "");
-        const selectedContract = contracts.find(c => c.id === targetId);
-        if (!selectedContract) return null;
-        
-        return (
-          <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-            <div className="bg-white rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
-              
-              <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-                <h3 className="font-sans font-black text-sm flex items-center space-x-2">
-                  <FileText size={16} className="shrink-0" />
-                  <span>Compila Verbale di {delReportType === "consegna" ? "Consegna Immobile" : "Riconsegna Immobile"}</span>
-                </h3>
-                <button type="button" onClick={() => setShowDeliveryModal(false)} className="text-slate-400 hover:text-white transition-colors cursor-pointer">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-6 overflow-y-auto flex-1">
-                {/* Meta details */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-150">
-                  <div>
-                    <span className="text-[9px] uppercase font-bold text-slate-400">Immobile & Locazione</span>
-                    <strong className="block text-slate-800 text-xs mt-0.5">{selectedContract.propertyName}</strong>
-                  </div>
-                  <div>
-                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Data del Rilevamento</label>
-                    <input
-                      type="date"
-                      value={delDate}
-                      onChange={(e) => setDelDate(e.target.value)}
-                      className="text-xs border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 w-full font-semibold focus:border-indigo-500 outline-hidden"
-                    />
-                  </div>
-                </div>
-
-                {/* Checklist editor */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide flex items-center gap-1.5">
-                      <ClipboardList size={14} className="text-indigo-700 shrink-0" />
-                      Checklist Elementi da Verificare
-                    </h4>
-                    <span className="text-[10px] text-slate-400">Personalizza gli elementi della rilevazione</span>
-                  </div>
-
-                  {/* Add manual checklist item */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Aggiungi elemento (es: Stato caldaia, box auto...)"
-                      value={newChecklistItemName}
-                      onChange={(e) => setNewChecklistItemName(e.target.value)}
-                      className="flex-1 text-xs border border-slate-200 rounded-lg px-3 py-2 outline-hidden focus:border-indigo-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddChecklistItem}
-                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg transition-all cursor-pointer"
-                    >
-                      Aggiungi
-                    </button>
-                  </div>
-
-                  {/* Checklist listing table */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-3xs">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-100/60 text-[10px] uppercase font-mono font-black text-slate-500">
-                          <th className="p-2.5 border-r border-slate-200">Elemento</th>
-                          <th className="p-2.5 border-r border-slate-200 w-36">Stato Locale</th>
-                          <th className="p-2.5 border-r border-slate-200">Osservazioni / Note</th>
-                          <th className="p-2.5 w-36 text-center">Foto / Azioni</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-150 text-xs">
-                        {checklistItems.map((item) => (
-                          <tr key={item.id} className="hover:bg-slate-50/50">
-                            <td className="p-2.5 font-bold text-slate-800 border-r border-slate-150 max-w-[160px] truncate" title={item.item}>
-                              {item.item}
-                            </td>
-                            <td className="p-2.5 border-r border-slate-150">
-                              <select
-                                value={item.status}
-                                onChange={(e) => handleUpdateChecklistItem(item.id, "status", e.target.value)}
-                                className="w-full text-xs bg-slate-50 border border-slate-200 rounded-md px-1.5 py-1 outline-hidden"
-                              >
-                                <option value="Ottimo">Ottimo Stato</option>
-                                <option value="Buono">Buono Stato</option>
-                                <option value="Da riparare">Da Riparare</option>
-                                <option value="Sostituire">Da Sostituire</option>
-                              </select>
-                            </td>
-                            <td className="p-2.5 border-r border-slate-150">
-                              <input
-                                type="text"
-                                placeholder="Inserisci annotazioni o anomalie..."
-                                value={item.notes}
-                                onChange={(e) => handleUpdateChecklistItem(item.id, "notes", e.target.value)}
-                                className="w-full text-xs border border-transparent hover:border-slate-200 focus:border-indigo-500 bg-transparent rounded-md px-1.5 py-1 outline-hidden"
-                              />
-                            </td>
-                            <td className="p-2.5 text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddPhotoToItem(item.id)}
-                                  className="inline-flex items-center gap-1 text-[10px] bg-slate-100 hover:bg-slate-200 border border-slate-250 font-bold px-1.5 py-1 rounded transition-all cursor-pointer"
-                                  title="Allega foto"
-                                >
-                                  <Camera size={11} className="shrink-0" />
-                                  {item.photos?.length > 0 ? `(${item.photos.length})` : "+"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveChecklistItem(item.id)}
-                                  className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
-                                  title="Elimina riga"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-              </div>
-
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowDeliveryModal(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-                >
-                  Annulla
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSaveDeliveryReport(selectedContract)}
-                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer"
-                >
-                  Genera Verbale in Bozza
-                </button>
-              </div>
-
-            </div>
-          </div>
-        );
-      })()}
+      {/* Il modale locale di creazione verbale (consegna/riconsegna) è stato rimosso: era un
+          terzo flusso duplicato, ridondante rispetto al componente condiviso DeliveryReportWizard
+          (vedi il blocco contractAppenaCreato qui sopra, e il tasto "Registra Verbale di
+          Riconsegna" nell'intestazione del dettaglio contratto). Coerente con la regola
+          "un solo flusso per ogni azione" del progetto. */}
 
       {/* 5. MODALE FIRMA DIGITALE VERBALE */}
       {showSignatureModal && (
