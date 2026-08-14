@@ -250,8 +250,21 @@ export default function DashboardView({
     });
   }, [contracts]);
 
+  // CORREZIONE (14/08/2026, sera) — segnalato da Massimo: dopo aver chiuso regolarmente il
+  // Fast Closing del mese, la spia in Dashboard restava comunque accesa/lampeggiante con
+  // scritto "Fast Closing Aperto". Causa: alla creazione di un contratto/condominio TUTTE le
+  // rate future vengono scritte subito in Fast Closing con status "Pending" fino alla
+  // rispettiva scadenza (stesso pattern già corretto in TenantsView.tsx e OwnersView.tsx per
+  // i saldi). Questo controllo sommava/contava QUALSIASI voce "Pending"/"Overdue" nell'intera
+  // collezione, comprese le rate di mesi futuri non ancora scadute (es. dicembre, gennaio…),
+  // quindi restava vero per sempre anche a chiusura avvenuta. La spia deve accendersi solo se
+  // esiste una voce realmente scaduta/da evadere OGGI, non ancora saldata. `oggiStr` calcolato
+  // da `new Date()` al momento dell'esecuzione (mai una data fissa, regola 5).
   const hasOpenFastClosing = useMemo(() => {
-    return fastClosing.some(item => item.status === "Pending" || item.status === "Overdue");
+    const oggiStr = new Date().toISOString().split("T")[0];
+    return fastClosing.some(item =>
+      (item.status === "Pending" || item.status === "Overdue") && item.dueDate <= oggiStr
+    );
   }, [fastClosing]);
 
   // Calculate stats
