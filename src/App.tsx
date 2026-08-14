@@ -1308,6 +1308,120 @@ export default function App() {
         createdAt: serverTimestamp()
       });
 
+      // CORREZIONE (14/08/2026, su richiesta di Massimo) — un solo istituto/conto in demo non
+      // permetteva di testare la riconciliazione con importi diversi dal dovuto su più banche
+      // reali. Aggiunti altri 2 istituti/conti distinti, ciascuno con uno scenario diverso: un
+      // bonifico MAGGIORE del dovuto (Istituto 2) e uno MINORE del dovuto, ma questa volta
+      // direttamente su un canone d'affitto anziché su una spesa accessoria (Istituto 3) — così
+      // la priorità "canoni prima delle spese accessorie" del motore di riconciliazione
+      // condiviso (src/lib/reconciliation.ts) è testabile dal vivo su un caso reale.
+      const bankInst2 = await addDoc(collection(db, "creditInstitutions"), {
+        userId: user.uid,
+        name: "🏦 UniCredit",
+        branch: "Filiale Milano Duomo",
+        notes: "Conto secondario per oneri accessori e assicurazioni.",
+        createdAt: serverTimestamp()
+      });
+
+      const bankAcc2 = await addDoc(collection(db, "bankAccounts"), {
+        userId: user.uid,
+        institutionId: bankInst2.id,
+        iban: "IT28W0200801600000105918602",
+        holder: "Palazzinaro AI Demo",
+        currency: "EUR",
+        isActive: true,
+        createdAt: serverTimestamp()
+      });
+
+      const polizzaDueDate = inDays(-7);
+      await addDoc(collection(db, "fastClosing"), {
+        userId: user.uid,
+        propertyId: p1.id,
+        title: formatLedgerLabel({
+          debtorName: "👨‍🎓 Mario Rossi",
+          propertyAddress: "Piazza del Duomo 20, 20121 Milano (MI)",
+          tipologia: "Polizza Assicurativa Locazione",
+          dateForPeriod: polizzaDueDate
+        }),
+        description: "Premio annuale polizza assicurativa a carico del conduttore",
+        amount: 180.00,
+        dueDate: polizzaDueDate,
+        source: "other",
+        sourceId: "polizza_duomo",
+        status: "Pending",
+        debtorId: t1.id,
+        debtorType: "tenant",
+        createdAt: serverTimestamp()
+      });
+
+      // Bonifico volutamente MAGGIORE del dovuto (250€ contro un dovuto di 180€): dimostra
+      // dal vivo un caso di importo eccedente su una singola voce accessoria selezionata.
+      await addDoc(collection(db, "movements"), {
+        userId: user.uid,
+        bankAccountId: bankAcc2.id,
+        date: inDays(-2),
+        amount: 250.00,
+        description: "BONIFICO ROSSI MARIO ASSICURAZIONE + ACCONTO",
+        sender: "Rossi Mario",
+        reconciled: false,
+        reconciledWith: null,
+        createdAt: serverTimestamp()
+      });
+
+      const bankInst3 = await addDoc(collection(db, "creditInstitutions"), {
+        userId: user.uid,
+        name: "🏦 BPER Banca",
+        branch: "Filiale Milano Navigli",
+        notes: "Conto corrente dedicato agli affitti del Trilocale Navigli.",
+        createdAt: serverTimestamp()
+      });
+
+      const bankAcc3 = await addDoc(collection(db, "bankAccounts"), {
+        userId: user.uid,
+        institutionId: bankInst3.id,
+        iban: "IT77K0538601634000042345621",
+        holder: "Palazzinaro AI Demo",
+        currency: "EUR",
+        isActive: true,
+        createdAt: serverTimestamp()
+      });
+
+      const canoneAgostoBianchiDueDate = inDays(-1);
+      await addDoc(collection(db, "fastClosing"), {
+        userId: user.uid,
+        propertyId: p2.id,
+        title: formatLedgerLabel({
+          debtorName: "👩‍⚕️ Giulia Bianchi",
+          propertyAddress: "Alzaia Naviglio Grande 48, 20144 Milano (MI)",
+          tipologia: "Affitto",
+          dateForPeriod: canoneAgostoBianchiDueDate
+        }),
+        description: "Canone locazione mensile concordato da contratto",
+        amount: 1850.00,
+        dueDate: canoneAgostoBianchiDueDate,
+        source: "contract",
+        sourceId: c2.id,
+        status: "Pending",
+        debtorId: t2.id,
+        debtorType: "tenant",
+        createdAt: serverTimestamp()
+      });
+
+      // Bonifico volutamente MINORE del dovuto (1.500€ contro un canone di 1.850€): pagamento
+      // parziale direttamente su un canone d'affitto (voce prioritaria), su un terzo istituto
+      // distinto dai primi due.
+      await addDoc(collection(db, "movements"), {
+        userId: user.uid,
+        bankAccountId: bankAcc3.id,
+        date: inDays(-1),
+        amount: 1500.00,
+        description: "BONIFICO PARZIALE CANONE BIANCHI GIULIA AGOSTO",
+        sender: "Bianchi Giulia",
+        reconciled: false,
+        reconciledWith: null,
+        createdAt: serverTimestamp()
+      });
+
       // 7. Reminders
       const remDueDate = inDays(-38);
       const rem1 = await addDoc(collection(db, "reminders"), {
