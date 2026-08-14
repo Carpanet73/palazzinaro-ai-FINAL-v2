@@ -166,7 +166,15 @@ export default function OwnersView({
   const propertyModalData = useMemo(() => {
     if (!selectedProperty) return null;
     const p = selectedProperty;
-    
+    // CORREZIONE (14/08/2026 notte) — stessa distorsione già corretta nel mastrino inquilino
+    // (TenantsView.tsx): alla creazione di un contratto/condominio, TUTTE le rate future
+    // vengono scritte subito in Fast Closing con status "Pending" fino alla rispettiva
+    // scadenza. Qui il saldo/"Totale da Incassare" sommava anche quelle non ancora scadute,
+    // gonfiando il dovuto reale (segnalato da Massimo: "il bilancio tiene ancora conto di
+    // tutti i canoni di affitto, ci deve essere il saldo dovuto al momento, live"). `oggiStr`
+    // calcolato da `new Date()` al momento dell'esecuzione (mai una data fissa, regola 5).
+    const oggiStr = new Date().toISOString().split("T")[0];
+
     // Find contract
     const activeContract = contracts.find(c => c.propertyId === p.id && c.status === "Active");
     
@@ -269,39 +277,51 @@ export default function OwnersView({
 
       // Sort by Data Competenza descending
       ledger.sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
-      return ledger;
+      // CORREZIONE (14/08/2026 notte) — separa le voci con scadenza futura (Pending non ancora
+      // scaduto) da quelle di competenza corrente/passata o già saldate: solo le seconde
+      // (`main`) alimentano tabella principale e saldo; le prime (`future`) restano
+      // consultabili in una sezione informativa a parte, mai sommate al dovuto attuale.
+      const main = ledger.filter(l => l.dueDate <= oggiStr || l.status === "Paid");
+      const future = ledger.filter(l => l.dueDate > oggiStr && l.status !== "Paid");
+      return { main, future };
     };
 
     // 1. Canoni di Affitto (Rent)
-    const rentPayments = buildUnifiedLedger(
+    const rentLedger = buildUnifiedLedger(
       item => item.source === "contract" || (item.title || "").toLowerCase().includes("affitto") || (item.title || "").toLowerCase().includes("canone"),
       m => m.reconciledWith?.type === "contract" || (m.description || "").toLowerCase().includes("affitto") || (m.description || "").toLowerCase().includes("canone"),
       "Canone locazione"
     );
+    const rentPayments = rentLedger.main;
+    const rentFuture = rentLedger.future;
 
     // 2. Spese Condominiali (Condominium Fees)
     // CORREZIONE (13/08/2026) — le spese condominiali possono generare due righe distinte
     // (una a carico dell'Inquilino, una a carico del Proprietario, campo debtorType). L'Area
     // Proprietari deve mostrare SOLO la quota del proprietario, mai quella dell'inquilino
     // (altrimenti il debito del proprietario risulterebbe gonfiato dalla quota altrui).
-    const condoPayments = buildUnifiedLedger(
+    const condoLedger = buildUnifiedLedger(
       item => (item.source === "condominium" || (item.title || "").toLowerCase().includes("condominio") || (item.title || "").toLowerCase().includes("spese cond")) && item.debtorType !== "tenant",
       m => m.reconciledWith?.type === "condominium" || (m.description || "").toLowerCase().includes("condominio") || (m.description || "").toLowerCase().includes("spese cond"),
       "Rata condominiale"
     );
+    const condoPayments = condoLedger.main;
+    const condoFuture = condoLedger.future;
 
     // 3. Tasse di Registro (Registration Taxes)
-    const taxPayments = buildUnifiedLedger(
+    const taxLedger = buildUnifiedLedger(
       item => (item.title || "").toLowerCase().match(/(registro|imposta|tassa|f24|erario)/) !== null,
       m => (m.description || "").toLowerCase().match(/(registro|imposta|tassa|f24|erario)/) !== null,
       "Tassa registro"
     );
+    const taxPayments = taxLedger.main;
+    const taxFuture = taxLedger.future;
 
     // 4. Altri Movimenti / Residui (Other/Manual) — esclude esplicitamente le manutenzioni
     // (che ora, dopo il fix del matching su propertyId, sarebbero altrimenti richiamate qui
     // in duplicato: hanno già una tabella dedicata, vedi ownerMaintenance più sotto) e le
     // quote a carico dell'inquilino (stesso principio del punto 2 qui sopra).
-    const otherPayments = buildUnifiedLedger(
+    const otherLedger = buildUnifiedLedger(
       item => {
         const isRent = item.source === "contract" || (item.title || "").toLowerCase().includes("affitto") || (item.title || "").toLowerCase().includes("canone");
         const isCondo = item.source === "condominium" || (item.title || "").toLowerCase().includes("condominio") || (item.title || "").toLowerCase().includes("spese cond");
@@ -317,6 +337,10 @@ export default function OwnersView({
       },
       "Altra voce contabile"
     );
+    const otherPayments = otherLedger.main;
+    const otherFuture = otherLedger.future;
+    const totalFutureCount = rentFuture.length + condoFuture.length + taxFuture.length + otherFuture.length;
+    const totalFutureAmount = [...rentFuture, ...condoFuture, ...taxFuture, ...otherFuture].reduce((s, l) => s + l.amount, 0);
 
     // CORREZIONE (13/08/2026) — ricostruita da zero: prima leggeva il ticket di manutenzione
     // grezzo (`maintenance` collection) e ne mostrava il costo TOTALE lordo, indipendentemente
@@ -372,6 +396,12 @@ export default function OwnersView({
       condoPayments,
       taxPayments,
       otherPayments,
+      rentFuture,
+      condoFuture,
+      taxFuture,
+      otherFuture,
+      totalFutureCount,
+      totalFutureAmount,
       ownerMaintenance,
       totals,
       grandTotalPending,
@@ -2036,6 +2066,56 @@ export default function OwnersView({
                   )}
 
                 </div>
+
+                {/* CORREZIONE (14/08/2026 notte) — sezione informativa per le rate con
+                    scadenza futura (canoni, condominio, registro, altro) escluse dal saldo
+                    "Totale da Incassare" sopra ma comunque consultabili, stesso pattern già
+                    applicato al mastrino inquilino in TenantsView.tsx. */}
+                {propertyModalData.totalFutureCount > 0 && (
+                  <div className="mt-3 border border-dashed border-slate-300 rounded-xl bg-slate-50/60 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                        Rate Future non ancora Scadute (informativo — escluse dal saldo)
+                      </span>
+                      <span className="text-xs font-mono font-black text-slate-500">
+                        €{propertyModalData.totalFutureAmount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse border border-slate-200 text-[11px] font-mono">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-600 uppercase tracking-wider font-extrabold text-[9px] border border-slate-200">
+                            <th className="p-2 border border-slate-200">Scadenza</th>
+                            <th className="p-2 border border-slate-200">Categoria</th>
+                            <th className="p-2 border border-slate-200">Voce</th>
+                            <th className="p-2 border border-slate-200">Importo</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white">
+                          {[
+                            ...propertyModalData.rentFuture.map((r: any) => ({ ...r, category: "Canoni" })),
+                            ...propertyModalData.condoFuture.map((r: any) => ({ ...r, category: "Condominio" })),
+                            ...propertyModalData.taxFuture.map((r: any) => ({ ...r, category: "Registro" })),
+                            ...propertyModalData.otherFuture.map((r: any) => ({ ...r, category: "Altro" }))
+                          ]
+                            .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                            .map((item: any, idx: number) => (
+                              <tr key={idx} className="text-slate-500">
+                                <td className="p-2 border border-slate-200 font-bold">
+                                  {item.category === "Canoni" ? formatMonthYear(item.dueDate) : new Date(item.dueDate).toLocaleDateString("it-IT")}
+                                </td>
+                                <td className="p-2 border border-slate-200">{item.category}</td>
+                                <td className="p-2 border border-slate-200">{item.description}</td>
+                                <td className="p-2 border border-slate-200 font-bold">
+                                  €{item.amount.toLocaleString("it-IT")}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
             </div>
