@@ -34,7 +34,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner, Contract, DeliveryReport, Lawyer } from "../types";
-import { formatLedgerLabel, ITALIAN_MONTHS_FULL } from "../lib/ledgerLabel";
+import { formatLedgerLabel, ITALIAN_MONTHS_FULL, formatLedgerDate } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import LedgerExportToolbar from "./LedgerExportToolbar";
 import { LedgerColumn } from "../lib/ledgerExport";
@@ -1012,7 +1012,7 @@ export default function FastClosingView({
   const fastClosingExportColumns: LedgerColumn[] = [
     { key: "source", label: "Categoria", format: (i: FastClosingItem) => i.source },
     { key: "title", label: "Dettagli Scadenza", format: (i: FastClosingItem) => i.title },
-    { key: "dueDate", label: "Scadenza", format: (i: FastClosingItem) => new Date(i.dueDate).toLocaleDateString("it-IT") },
+    { key: "dueDate", label: "Scadenza", format: (i: FastClosingItem) => formatLedgerDate(i.dueDate, i) },
     { key: "status", label: "Stato", format: (i: FastClosingItem) => i.status },
     { key: "amount", label: "Importo", align: "right", format: (i: FastClosingItem) => `€${i.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }
   ];
@@ -1360,7 +1360,7 @@ export default function FastClosingView({
 
                             {/* Scadenza Cell */}
                             <td className={`p-2.5 border border-slate-300 text-center font-bold text-slate-700 transition-opacity ${isHandled ? "opacity-40 group-hover:opacity-90 group-active:opacity-90" : ""}`}>
-                              {new Date(item.dueDate).toLocaleDateString("it-IT")}
+                              {formatLedgerDate(item.dueDate, item)}
                             </td>
 
                             {/* Origine Cell */}
@@ -1659,7 +1659,7 @@ export default function FastClosingView({
                               <span className="text-xs text-slate-900 block leading-tight">
                                 {item.title} {isRent && <span className="text-[8px] bg-indigo-100 text-indigo-800 font-extrabold rounded px-1 ml-1 font-mono">CANONE PRIORITARIO</span>}
                               </span>
-                              <span className="text-[8px] text-slate-400 font-mono">Scad. {new Date(item.dueDate).toLocaleDateString("it-IT")}</span>
+                              <span className="text-[8px] text-slate-400 font-mono">Scad. {formatLedgerDate(item.dueDate, item)}</span>
                             </div>
                           </div>
                           <span className="text-xs font-black text-slate-900">€{item.amount.toFixed(2)}</span>

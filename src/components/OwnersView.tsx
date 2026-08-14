@@ -38,6 +38,7 @@ import { getTenantClassification } from "../lib/statusHelper";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import LedgerExportToolbar from "./LedgerExportToolbar";
 import { LedgerColumn } from "../lib/ledgerExport";
+import { formatMonthYear } from "../lib/ledgerLabel";
 
 interface OwnersViewProps {
   properties: Property[];
@@ -414,10 +415,14 @@ export default function OwnersView({
     return rows;
   }, [propertyModalData, activeLedgerTabs]);
 
+  // CORREZIONE (14/08/2026, punto 2 di "DA FARE PROSSIMO GIRO") — le date dei canoni (voce
+  // interna al rapporto locatore/conduttore) mostrano solo mese e anno; le altre categorie
+  // (condominio, registro/F24, manutenzioni, altro) mantengono la data completa — eccezioni
+  // esplicite della regola generale di Massimo.
   const ownerLedgerExportColumns: LedgerColumn[] = [
     { key: "category", label: "Categoria" },
-    { key: "dueDate", label: "Data Competenza", format: (r: any) => r.dueDate && r.dueDate !== "-" ? new Date(r.dueDate).toLocaleDateString("it-IT") : "-" },
-    { key: "paymentDate", label: "Data Cassa", format: (r: any) => r.paymentDate && r.paymentDate !== "-" && r.paymentDate !== "Pendente" ? new Date(r.paymentDate).toLocaleDateString("it-IT") : r.paymentDate },
+    { key: "dueDate", label: "Data Competenza", format: (r: any) => r.dueDate && r.dueDate !== "-" ? (r.category === "Canoni" ? formatMonthYear(r.dueDate) : new Date(r.dueDate).toLocaleDateString("it-IT")) : "-" },
+    { key: "paymentDate", label: "Data Cassa", format: (r: any) => r.paymentDate && r.paymentDate !== "-" && r.paymentDate !== "Pendente" ? (r.category === "Canoni" ? formatMonthYear(r.paymentDate) : new Date(r.paymentDate).toLocaleDateString("it-IT")) : r.paymentDate },
     { key: "description", label: "Descrizione" },
     { key: "type", label: "Tipo / Impresa" },
     { key: "status", label: "Stato", format: (r: any) => r.status === "Paid" ? "Saldato" : r.status === "Overdue" ? "Scaduto" : r.status === "Cancelled" ? "Annullato" : "In Sospeso" },
@@ -1696,12 +1701,12 @@ export default function OwnersView({
                             {propertyModalData.rentPayments.map((item, idx) => (
                               <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                 <td className="p-3 border border-slate-300 font-mono font-bold text-slate-700">
-                                  {new Date(item.dueDate).toLocaleDateString("it-IT")}
+                                  {formatMonthYear(item.dueDate)}
                                 </td>
                                 <td className="p-3 border border-slate-300 font-mono text-slate-600">
                                   {item.paymentDate !== "-" && item.paymentDate !== "Pendente" ? (
                                     <span className="font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-150 text-[10px]">
-                                      {new Date(item.paymentDate).toLocaleDateString("it-IT")}
+                                      {formatMonthYear(item.paymentDate)}
                                     </span>
                                   ) : (
                                     <span className="text-slate-400 italic text-[10px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">Non Incassato</span>

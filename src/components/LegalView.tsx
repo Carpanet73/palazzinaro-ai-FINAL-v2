@@ -537,12 +537,25 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
 
   // Voci Fast Closing ancora da saldare collegate alla pratica (canoni + spese accessorie),
   // stessa fonte reale usata in Solleciti — mai un fallback per nome+stato generico (regola 5).
+  //
+  // CORREZIONE (14/08/2026, bug reale trovato durante il collaudo della riconciliazione
+  // riga-per-riga) — `legalCase.associatedItemsIds` è una FOTOGRAFIA congelata al momento
+  // della creazione della pratica (vedi handleMoveToLegalAction in RemindersView.tsx): se nel
+  // frattempo una nuova voce si aggiunge allo stesso Sollecito già "in carico" ad Area Legale
+  // (es. un nuovo canone scaduto per lo stesso debitore, aggiunto secondo la regola 5.3), il
+  // Sollecito la riceve subito (live), ma la pratica legale — leggendo prima il proprio elenco
+  // congelato — non la vedeva MAI: né qui, né in "Posizione Debitoria", né nella riconciliazione,
+  // pur non comparendo nemmeno in Fast Closing (già esclusa perché "in carico" al Sollecito) né
+  // in Solleciti (nascosto perché step 5, in Legale) — una voce orfana, invisibile e non
+  // gestibile in NESSUNA pagina, la violazione più grave del principio "registro unico". Corretto
+  // dando priorità al Sollecito d'origine LIVE quando risolvibile; l'elenco congelato sulla
+  // pratica resta come fallback SOLO per i fascicoli storici senza un Sollecito collegato reale.
   const getCaseLinkedItems = (legalCase: LegalCase): FastClosingItem[] => {
     const reminder = resolveCaseReminder(legalCase);
     const ids = new Set<string>(
-      (legalCase.associatedItemsIds && legalCase.associatedItemsIds.length > 0)
-        ? legalCase.associatedItemsIds
-        : (reminder?.associatedItemsIds || [])
+      (reminder?.associatedItemsIds && reminder.associatedItemsIds.length > 0)
+        ? reminder.associatedItemsIds
+        : (legalCase.associatedItemsIds || [])
     );
     return fastClosing.filter(item => ids.has(item.id) && (item.status === "Pending" || item.status === "Overdue"));
   };
@@ -551,17 +564,30 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
   // righe contabili oggetto della pratica, incluse quelle già Pagate, non solo le insolute:
   // serve come descrizione/contesto della pratica (da dove nasce il debito), non solo come
   // lista di voci ancora da riconciliare (quello resta lo scopo di getCaseLinkedItems sopra,
-  // usata dalla modale di riconciliazione — nessuna modifica al suo comportamento).
+  // usata dalla modale di riconciliazione — nessuna modifica al suo comportamento). Stessa
+  // correzione di priorità (Sollecito live prima dell'elenco congelato) vista sopra.
   const getCaseAllLinkedItems = (legalCase: LegalCase): FastClosingItem[] => {
     const reminder = resolveCaseReminder(legalCase);
     const ids = new Set<string>(
-      (legalCase.associatedItemsIds && legalCase.associatedItemsIds.length > 0)
-        ? legalCase.associatedItemsIds
-        : (reminder?.associatedItemsIds || [])
+      (reminder?.associatedItemsIds && reminder.associatedItemsIds.length > 0)
+        ? reminder.associatedItemsIds
+        : (legalCase.associatedItemsIds || [])
     );
     return fastClosing
       .filter(item => ids.has(item.id))
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  };
+
+  // "Posizione Debitoria" LIVE: somma reale delle voci ancora da saldare collegate alla pratica
+  // (stessa fonte di getCaseLinkedItems), non più il campo `unpaidBalance` congelato — coerente
+  // con la stessa correzione sopra. Il campo `unpaidBalance` resta solo come fallback per i rari
+  // fascicoli storici senza voci risolvibili (nessun Sollecito/nessun item reale collegato).
+  const getCaseLiveUnpaidBalance = (legalCase: LegalCase): number => {
+    const linked = getCaseLinkedItems(legalCase);
+    if (linked.length > 0) {
+      return linked.reduce((s, i) => s + i.amount, 0);
+    }
+    return legalCase.unpaidBalance || 0;
   };
 
   const caseLedgerExportColumns: LedgerColumn[] = [
@@ -644,7 +670,11 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
     if (!caseReconcileCashMode && !caseSelectedMovementId) return;
 
     const totalNeeded = selectedItems.reduce((s, i) => s + i.amount, 0);
-    const currentUnpaid = legalCase.unpaidBalance || 0;
+    // CORREZIONE (14/08/2026) — base di calcolo del residuo presa dal saldo LIVE (somma reale
+    // delle voci ancora da saldare), non più dal campo `unpaidBalance` congelato: altrimenti,
+    // se nel frattempo una nuova voce si era aggiunta al Sollecito d'origine, il nuovo residuo
+    // scritto qui restava comunque calcolato sul vecchio importo, perpetuando la discrepanza.
+    const currentUnpaid = getCaseLiveUnpaidBalance(legalCase);
 
     try {
       if (caseReconcileCashMode) {
@@ -876,23 +906,30 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
 
                   {/* CORREZIONE (14/08/2026) — Posizione Debitoria: prima una pratica in Area
                       Legale non aveva alcuna azione economica, il saldo insoluto restava
-                      "congelato" anche a pagamento avvenuto. */}
+                      "congelato" anche a pagamento avvenuto.
+                      CORREZIONE (14/08/2026, seconda passata) — l'importo mostrato qui ora è
+                      quello LIVE (somma reale delle voci ancora da saldare collegate al
+                      Sollecito d'origine), non più il campo `unpaidBalance` congelato al
+                      momento della creazione della pratica: altrimenti, se una nuova voce si
+                      aggiungeva allo stesso Sollecito mentre la pratica era già in Area Legale,
+                      questo riquadro restava indietro rispetto a "Righe Contabili della
+                      Pratica" più sotto (stessa fonte, ora finalmente allineate — regola 2). */}
                   <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-1.5 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                         <Wallet size={14} className="text-indigo-600" />
                         <span>Posizione Debitoria</span>
                       </div>
-                      <span className={`text-xs font-mono font-black ${(lawsuit.unpaidBalance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                        €{(lawsuit.unpaidBalance || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                      <span className={`text-xs font-mono font-black ${getCaseLiveUnpaidBalance(lawsuit) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                        €{getCaseLiveUnpaidBalance(lawsuit).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
                       </span>
                     </div>
-                    {lawsuit.balanceSettledAt && (lawsuit.unpaidBalance || 0) === 0 && (
+                    {lawsuit.balanceSettledAt && getCaseLiveUnpaidBalance(lawsuit) === 0 && (
                       <p className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-2 py-1.5">
                         Saldo azzerato il {new Date(lawsuit.balanceSettledAt).toLocaleDateString("it-IT")}.
                       </p>
                     )}
-                    {(lawsuit.unpaidBalance || 0) > 0 && lawsuit.status !== "Closed" && (
+                    {getCaseLiveUnpaidBalance(lawsuit) > 0 && lawsuit.status !== "Closed" && (
                       <div className="flex flex-wrap gap-1.5">
                         <button
                           onClick={() => handleOpenCaseReconcile(lawsuit)}

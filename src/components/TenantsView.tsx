@@ -4,7 +4,7 @@ import AddressFields, { AddressValue } from "./AddressFields";
 import GenderToggle from "./GenderToggle";
 import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
-import { formatLedgerLabel } from "../lib/ledgerLabel";
+import { formatLedgerLabel, formatLedgerDate } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import LedgerExportToolbar from "./LedgerExportToolbar";
 import { LedgerColumn } from "../lib/ledgerExport";
@@ -613,19 +613,37 @@ export default function TenantsView({
     // Sort all movements by Date ascending (chronological order)
     movementsList.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+    // CORREZIONE (14/08/2026, punto 1 di "DA FARE PROSSIMO GIRO") — il mastrino considerava
+    // anche i canoni (e le rate condominiali, registrazioni F24, manutenzioni) con scadenza
+    // futura non ancora maturata nel calcolo del "Totale Dovuto"/Saldo, distorcendo la
+    // fotografia dello stato economico ATTUALE del rapporto (una rata di dicembre pesava già
+    // oggi sul saldo, anche se non ancora scaduta) — disallineato rispetto a Fast Closing, che
+    // invece mostra sempre e solo il dovuto del periodo corrente (regola 2, "mai discostati").
+    // Qui separiamo le voci già scadute/di oggi (che compongono il saldo reale) da quelle con
+    // scadenza futura (mostrate a parte, in una sezione puramente informativa — piano dei
+    // pagamenti futuri — mai sommate al saldo corrente). Data sempre calcolata da `new Date()`,
+    // mai hardcoded (regola 5).
+    const oggiStr = new Date().toISOString().split("T")[0];
+    const pastOrDueMovements = movementsList.filter(m => (m.dueDate || m.date) <= oggiStr);
+    const futureMovements = movementsList.filter(m => (m.dueDate || m.date) > oggiStr);
+
     return {
       property,
       isCondoConstituted,
       activeContract,
-      movementsList
+      movementsList,
+      pastOrDueMovements,
+      futureMovements
     };
   }, [selectedTenantLedger, properties, fastClosing, contracts, maintenance]);
 
-  // Filter movements based on Category and Search Query
+  // Filter movements based on Category and Search Query — CORREZIONE (14/08/2026, punto 1):
+  // parte da `pastOrDueMovements` (già scadute/di oggi), non più dall'elenco completo, così la
+  // tabella principale del mastrino e il saldo che ne deriva non contano più le rate future.
   const filteredMovements = useMemo(() => {
     if (!tenantLedgerData) return [];
-    
-    let list = tenantLedgerData.movementsList;
+
+    let list = tenantLedgerData.pastOrDueMovements;
 
     // Filter by Category (multi-selezione)
     list = list.filter(m => activeLedgerCategories.includes(m.category));
@@ -674,12 +692,18 @@ export default function TenantsView({
   // --- RENDERING SEPARATE LEDGER PAGE ---
   if (selectedTenantLedger && tenantLedgerData) {
     const t = selectedTenantLedger;
-    const { property, isCondoConstituted, activeContract, movementsList } = tenantLedgerData;
+    const { property, isCondoConstituted, activeContract, movementsList, pastOrDueMovements, futureMovements } = tenantLedgerData;
 
-    const totalOutstanding = movementsList
-      ? movementsList
+    // CORREZIONE (14/08/2026, punto 1) — "pendenze attuali" calcolate solo su voci già
+    // scadute/di oggi, coerente con lo stesso principio applicato a filteredMovements sopra.
+    const totalOutstanding = pastOrDueMovements
+      ? pastOrDueMovements
           .filter(m => m.status === "Pending" || m.status === "Overdue")
           .reduce((sum, m) => sum + (m.amount || 0), 0)
+      : 0;
+
+    const totalFuture = futureMovements
+      ? futureMovements.reduce((sum, m) => sum + (m.amount || 0), 0)
       : 0;
 
     const totalDovuto = movementsWithBalances.reduce((sum, m) => sum + (m.amount || 0), 0);
@@ -747,7 +771,7 @@ Cordiali saluti.`;
     // handlePrintLedger e il blocco <style>@media print scoped, entrambi rimossi — ora la
     // regola di stampa è quella unica globale in src/index.css).
     const tenantLedgerExportColumns: LedgerColumn[] = [
-      { key: "date", label: "Scadenza", format: (m: any) => new Date(m.date).toLocaleDateString("it-IT") },
+      { key: "date", label: "Scadenza", format: (m: any) => formatLedgerDate(m.date, m) },
       { key: "status", label: "Stato", format: (m: any) => m.status === "Paid" ? "Saldato" : m.status === "Overdue" ? "Scaduto" : "In Sospeso" },
       { key: "title", label: "Voce / Descrizione", format: (m: any) => m.title || m.description || "" },
       { key: "amount", label: "Dovuto", align: "right", format: (m: any) => `€${(m.amount || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
@@ -1279,7 +1303,7 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                       return (
                         <tr key={`${m.id}-${idx}`} className="hover:bg-slate-50 transition-colors">
                           <td className="border border-slate-300 font-mono font-bold text-slate-700 whitespace-nowrap" style={{ padding: `${ledgerScale * 11}px` }}>
-                            {new Date(m.date).toLocaleDateString("it-IT")}
+                            {formatLedgerDate(m.date, m)}
                           </td>
                           <td className="border border-slate-300 whitespace-nowrap" style={{ padding: `${ledgerScale * 11}px` }}>
                             <span style={{ padding: `${ledgerScale * 3}px ${ledgerScale * 7}px`, fontSize: `${ledgerScale * 8.5}px`, border: "1px solid currentColor" }} className={`inline-flex items-center gap-1 rounded font-bold uppercase tracking-wider ${statusBadge}`}>
@@ -1347,6 +1371,44 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
               </div>
             )}
           </div>
+
+          {/* RATE FUTURE NON ANCORA SCADUTE — CORREZIONE (14/08/2026, punto 1) — sezione
+              puramente informativa: mostra il piano dei pagamenti futuri (canoni, condominio,
+              registrazioni, manutenzioni con scadenza oltre oggi) SENZA sommarli al saldo
+              corrente qui sopra, che resta sempre e solo la fotografia dello stato attuale. */}
+          {futureMovements.length > 0 && (
+            <div className="bg-slate-50/60 border border-slate-200 border-dashed rounded-3xl p-5 no-print">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <Clock size={14} className="text-slate-400 shrink-0" />
+                  <span>Rate Future non ancora Scadute (informativo — escluse dal saldo)</span>
+                </div>
+                <span className="text-xs font-mono font-black text-slate-500">
+                  €{totalFuture.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-[11px] font-mono">
+                  <thead>
+                    <tr className="text-slate-400 uppercase tracking-wider font-bold text-[9px]">
+                      <th className="py-1.5 pr-3">Scadenza</th>
+                      <th className="py-1.5 pr-3">Voce</th>
+                      <th className="py-1.5 pr-3 text-right">Importo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-150">
+                    {futureMovements.map((m, idx) => (
+                      <tr key={`future-${m.id}-${idx}`} className="text-slate-500">
+                        <td className="py-1.5 pr-3 whitespace-nowrap">{formatLedgerDate(m.date, m)}</td>
+                        <td className="py-1.5 pr-3">{m.title}</td>
+                        <td className="py-1.5 pr-3 text-right font-bold">€{m.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
