@@ -77,6 +77,56 @@ export interface LedgerLabelInput {
 }
 
 /**
+ * CORREZIONE (14/08/2026, punto 2 di "DA FARE PROSSIMO GIRO") — regola generale di Massimo
+ * sulla granularità delle date nelle righe contabili: le voci INTERNE al rapporto
+ * locatore/conduttore (in primis i canoni d'affitto) non devono mostrare il giorno — solo
+ * mese e anno, coerente con l'etichetta standard (`formatLedgerLabel`, che incorpora già
+ * "{Mese} {Anno}"). Eccezioni esplicite dove la data completa resta (o è preferibile): le
+ * rate condominiali (scadenze specifiche reali) e ogni scadenza verso un rapporto ESTERNO —
+ * registrazione contratto/F24, Solleciti di pagamento, Messa in Mora — cioè ogni volta che si
+ * esce dalla sola gestione interna inquilino/proprietario.
+ *
+ * Classificazione "voce di canone" basata sui campi strutturati dell'oggetto (`source`,
+ * `title`/`description` come fallback per voci storiche), MAI dedotta a occhio — stesso
+ * principio di isRentItem/isRentItemForReconcile già in uso altrove nel codice.
+ */
+export function isInternalRentItem(item?: { source?: string; title?: string | null; description?: string | null } | null): boolean {
+  if (!item) return false;
+  const t = (item.title || "").toLowerCase();
+  const d = (item.description || "").toLowerCase();
+  return item.source === "contract" || t.includes("canone") || t.includes("affitto") || d.includes("canone") || d.includes("affitto");
+}
+
+/**
+ * Formatta una data di scadenza per una riga contabile secondo la regola di granularità
+ * sopra: "Agosto 2026" per i canoni d'affitto (voce interna), data completa "13/08/2026" per
+ * tutto il resto (rate condominiali, F24/registrazione, manutenzioni, e ogni voce priva di
+ * un `item` di contesto — comportamento invariato, mai un default "silenzioso" verso il
+ * formato ridotto quando la classificazione non è certa).
+ */
+export function formatLedgerDate(dateStr: string | undefined | null, item?: { source?: string; title?: string | null; description?: string | null } | null): string {
+  if (!dateStr) return "";
+  if (isInternalRentItem(item)) {
+    const parsed = getItalianMonthYearFromDate(dateStr);
+    if (parsed) return `${parsed.month} ${parsed.year}`;
+  }
+  return new Date(dateStr).toLocaleDateString("it-IT");
+}
+
+/**
+ * Formatta direttamente in "Mese Anno" (es. "Agosto 2026"), senza bisogno di un `item` da
+ * classificare — per i punti dell'interfaccia dove il contesto è GIÀ certamente un canone
+ * d'affitto (es. una tabella/scheda dedicata esclusivamente ai canoni, come la scheda
+ * Proprietario). Fallback sulla data completa se la stringa non è nel formato atteso.
+ */
+export function formatMonthYear(dateStr: string | undefined | null): string {
+  if (!dateStr) return "";
+  const parsed = getItalianMonthYearFromDate(dateStr);
+  if (parsed) return `${parsed.month} ${parsed.year}`;
+  return new Date(dateStr).toLocaleDateString("it-IT");
+}
+
+/**
  * Genera l'etichetta standard di una riga contabile: "{Cognome}/{Via} {Civico} {Tipologia} {Mese} {Anno}".
  * Tollerante ai dati mancanti (immobile non ancora associato, data non disponibile): omette
  * solo il pezzo mancante, non inventa mai un dato non presente.
