@@ -786,16 +786,22 @@ export default function FastClosingView({
   // - All pending current items of selected month become "Overdue".
   // - CORREZIONE CO (13/08/2026): Rigid items (Rent) go ONLY to Sollecito, never re-proposed
   //   on the next month's fast closing scadenziario (see REGOLE_E_LINEE_GUIDA.md sezione 4).
+  // - CORREZIONE (14/08/2026, tarda sera) — segnalato da Massimo: con tutte le voci del mese
+  //   già saldate/gestite ("tutto esitato"), il vecchio comportamento mostrava solo un alert
+  //   "Nessun elemento pendente nel Fast Closing di questo mese" e usciva subito, SENZA MAI
+  //   chiamare `onAdvanceFastClosingPeriod` — quindi il periodo attivo restava bloccato sul
+  //   mese vecchio anche quando non c'era più nulla da elaborare, e il mese successivo non
+  //   compariva mai. Il cron server-side equivalente (api/cron-close-fast-closing.ts) fa
+  //   correttamente l'opposto: "il periodo attivo avanza SEMPRE al mese successivo... anche
+  //   se non c'era nulla da chiudere quel mese — altrimenti l'etichetta [...] resterebbe ferma
+  //   al mese vecchio". Questa regola non era replicata lato client. Ora l'anteprima si apre
+  //   comunque (mostra lo stato "nessuna voce da elaborare questo mese" se vuota) e
+  //   confermando si avanza regolarmente al mese successivo, esattamente come fa il cron.
   const handleCloseFastClosing = async () => {
     if (selectedMonthYear !== "current") return;
-    
-    const pendingItems = monthFilteredItems.filter(item => item.status === "Pending" || item.status === "Overdue");
-    if (pendingItems.length === 0) {
-      alert("Nessun elemento pendente nel Fast Closing di questo mese.");
-      return;
-    }
 
-    // Open custom pre-close confirmation modal!
+    // Open custom pre-close confirmation modal! (anche a vuoto: la chiusura deve poter
+    // avanzare il periodo pure quando non c'è nulla da consolidare, vedi nota sopra)
     setShowPreCloseModal(true);
   };
 
@@ -1888,6 +1894,27 @@ export default function FastClosingView({
             </div>
 
             <div className="p-6 overflow-y-auto space-y-6">
+              {/* CORREZIONE (14/08/2026, tarda sera) — stato vuoto esplicito: prima non
+                  esisteva alcun messaggio quando non c'era nulla da consolidare (il vecchio
+                  codice non arrivava nemmeno ad aprire questa modale in quel caso, vedi nota
+                  su handleCloseFastClosing sopra). Confermando da qui il periodo attivo avanza
+                  comunque al mese successivo. */}
+              {preCloseData.rigidItems.length === 0 &&
+                preCloseData.accessoryOverdueItems.length === 0 &&
+                preCloseData.accessoryPendingItems.length === 0 &&
+                Object.keys(preCloseData.sollecitiGroups).length === 0 && (
+                <div className="text-center py-6 space-y-2">
+                  <CheckCircle2 size={28} className="text-emerald-500 mx-auto" />
+                  <p className="text-sm font-bold text-slate-800">
+                    Nessuna voce da elaborare questo mese.
+                  </p>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Tutte le scadenze di {currentFastClosingLabel.replace("Fast Closing ", "")}{" "}
+                    risultano già saldate o gestite. Confermando, il Fast Closing passa comunque
+                    al mese successivo.
+                  </p>
+                </div>
+              )}
               {/* Canoni / Voci Rigide */}
               {preCloseData.rigidItems.length > 0 && (
                 <div className="space-y-2">
