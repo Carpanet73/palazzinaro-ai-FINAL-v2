@@ -265,7 +265,19 @@ export default function RemindersView({
     // causa a se stesso). Filtra qui eventuali residui creati prima di questa regola, senza
     // toccare i dati sottostanti (la voce in Fast Closing resta comunque correttamente
     // "Insoluta" e segnalata tramite l'avviso di soglia di indebitamento in Dashboard).
-    reminders.filter(r => r.debtorType !== "owner").forEach(r => {
+    //
+    // CORREZIONE (14/08/2026, su richiesta esplicita di Massimo) — un Sollecito passato ad
+    // Area Legale (step 5, impostato da handleMoveToLegalAction) deve SPARIRE del tutto dalla
+    // pagina Solleciti, non solo mostrare un badge "In Legale" restando comunque visibile e
+    // conteggiato nel subtotale: altrimenti il tasto "Rientra in Solleciti" in Area Legale non
+    // avrebbe alcun effetto percepibile, dato che il Sollecito non se n'era mai andato. Stessa
+    // identica condizione (`step >= 5`) già usata correttamente da tempo in
+    // DashboardView.tsx (riga ~386) per escludere questi casi dai promemoria — qui prima
+    // mancava, causando l'asimmetria segnalata da Massimo. Il meccanismo "Inquilino Critico" e
+    // il lampeggiamento in Fast Closing (FastClosingView.tsx, basati sulla classificazione del
+    // debitore e sulle voci Fast Closing, non su questo elenco) restano intenzionalmente
+    // invariati — Massimo ha chiesto esplicitamente di non toccarli.
+    reminders.filter(r => r.debtorType !== "owner" && !(r.step && r.step >= 5)).forEach(r => {
       if (!groups[r.tenantName]) groups[r.tenantName] = [];
       groups[r.tenantName].push(r);
     });
@@ -1042,11 +1054,10 @@ export default function RemindersView({
                                 → Area Legale
                               </button>
                             )}
-                            {activeReminderForGroup.step === 5 && (
-                              <span className="px-3 py-1.5 bg-slate-200 text-slate-500 rounded-lg text-[10px] font-bold">
-                                In Legale
-                              </span>
-                            )}
+                            {/* CORREZIONE (14/08/2026) — ramo "step === 5" (badge "In Legale")
+                                rimosso: da oggi i Solleciti con step 5 sono esclusi a monte da
+                                groupedReminders (vedi sopra), quindi non possono più comparire
+                                qui — lasciarlo sarebbe codice morto irraggiungibile. */}
                           </div>
                         </td>
                       </tr>
