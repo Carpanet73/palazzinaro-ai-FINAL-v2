@@ -27,6 +27,7 @@ import { generateMessaInMoraPDF } from "../lib/pdfHelper";
 import emailjs from "@emailjs/browser";
 import LedgerExportToolbar from "./LedgerExportToolbar";
 import { LedgerColumn } from "../lib/ledgerExport";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 
 interface RemindersViewProps {
   reminders: Reminder[];
@@ -278,6 +279,21 @@ export default function RemindersView({
         return { debtorName: name, items, subtotal };
       });
   }, [reminders]);
+
+  // Menù a tendina multi-selezione per filtrare il mastrino Solleciti per stato — stesso
+  // pattern già in uso in Proprietari/Inquilini/Condomini/Fast Closing (Fase 2 punto 2),
+  // richiesto esplicitamente da Massimo il 14/08/2026 per tutti i mastrini dell'app.
+  const [activeReminderStatuses, setActiveReminderStatuses] = useState<string[]>([
+    "Pending", "Sent", "MessaInMora", "Paid", "Cancelled", "Closed"
+  ]);
+  const visibleGroupedReminders = useMemo(() => {
+    return groupedReminders
+      .map(group => ({
+        ...group,
+        items: group.items.filter(r => activeReminderStatuses.includes(r.status))
+      }))
+      .filter(group => group.items.length > 0);
+  }, [groupedReminders, activeReminderStatuses]);
 
   // CORREZIONE CP (13/08/2026) — Fase 2 punto 3: colonne per stampa/esportazione universale
   // della tabella Solleciti per debitore, tramite LedgerExportToolbar.
@@ -658,6 +674,12 @@ export default function RemindersView({
           contractId: activeStepReminder.contractId || "",
           unpaidBalance: activeStepReminder.amount,
           status: "Active",
+          // CORREZIONE (14/08/2026) — collega il fascicolo al Sollecito e alle voci Fast
+          // Closing d'origine con un ID reale, non più solo il nome testuale del debitore:
+          // necessario per poter "rientrare in Solleciti"/riconciliare/segnare pagato
+          // direttamente dall'Area Legale (vedi sezione 5 delle regole di progetto).
+          sourceReminderId: activeStepReminder.id,
+          associatedItemsIds: activeStepReminder.associatedItemsIds || [],
           // CORREZIONE R — non assegnare più un avvocato finto scritto fisso nel codice:
           // la pratica nasce SENZA assegnazione, da affidare con il drag&drop nell'Area Legale.
           zipFileName: `Fascicolo_Legale_${activeStepReminder.tenantName.replace(/\s+/g, "_")}.zip`,
@@ -809,6 +831,25 @@ export default function RemindersView({
         </div>
       </div>
 
+      {/* Filtro Stato — menù a tendina multi-selezione, stesso stile degli altri mastrini */}
+      {reminders.length > 0 && (
+        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 flex flex-wrap gap-1.5 no-print">
+          <MultiSelectFilterDropdown
+            label="Stato"
+            options={[
+              { value: "Pending", label: "Bozza/Pronto" },
+              { value: "Sent", label: "Sollecitato" },
+              { value: "MessaInMora", label: "Messa in Mora" },
+              { value: "Paid", label: "Saldato" },
+              { value: "Cancelled", label: "Annullato" },
+              { value: "Closed", label: "Chiuso" }
+            ]}
+            selected={activeReminderStatuses}
+            onChange={setActiveReminderStatuses}
+          />
+        </div>
+      )}
+
       {/* Reminders — raggruppati per debitore con subtotale, stesso stile del Fast Closing */}
       {reminders.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto mt-8">
@@ -820,8 +861,18 @@ export default function RemindersView({
             Nessun sollecito attivo. I Solleciti vengono generati automaticamente alla chiusura del Fast Closing per le voci insolute.
           </p>
         </div>
+      ) : visibleGroupedReminders.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto mt-8">
+          <div className="bg-slate-50 text-slate-400 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle size={28} />
+          </div>
+          <h3 className="font-sans font-bold text-slate-800 text-base">Nessun risultato con i filtri correnti</h3>
+          <p className="text-xs text-slate-500 mt-2">
+            Modifica il filtro "Stato" qui sopra per vedere altri solleciti.
+          </p>
+        </div>
       ) : (
-        groupedReminders.map((group, groupIdx) => {
+        visibleGroupedReminders.map((group, groupIdx) => {
           const borderColors = ["border-indigo-400", "border-emerald-400", "border-violet-400", "border-amber-400", "border-rose-400"];
           const colorClass = borderColors[groupIdx % borderColors.length];
           // CORREZIONE BA — un solo tasto di passaggio per gruppo, non uno per riga: si

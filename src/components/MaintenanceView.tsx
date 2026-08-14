@@ -6,6 +6,9 @@ import {
   Building, Clock, CheckCircle, Search, TrendingUp, DollarSign, Briefcase
 } from "lucide-react";
 import { Maintenance, Property, FastClosingItem, Owner } from "../types";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 
 interface MaintenanceViewProps {
   maintenance: Maintenance[];
@@ -40,6 +43,22 @@ export default function MaintenanceView({
 
   // Property filter state for the registry sidebar/tab
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+
+  // Menù a tendina multi-selezione per filtrare il Mastrino Manutenzioni per stato — stesso
+  // pattern già in uso negli altri mastrini (Fase 2 punto 2), richiesto da Massimo il
+  // 14/08/2026 per tutti i mastrini dell'app. Colonne di stampa/esportazione universale
+  // tramite LedgerExportToolbar, prima assente su questo mastrino.
+  const [activeTicketStatuses, setActiveTicketStatuses] = useState<string[]>([
+    "New", "In Progress", "Completed", "Cancelled"
+  ]);
+  const maintenanceLedgerExportColumns: LedgerColumn[] = [
+    { key: "date", label: "Data Immissione", format: (t: Maintenance) => new Date(t.date || t.createdAt).toLocaleDateString("it-IT") },
+    { key: "title", label: "Titolo Intervento" },
+    { key: "description", label: "Descrizione" },
+    { key: "status", label: "Stato", format: (t: Maintenance) => t.status === "New" ? "Nuovo" : t.status === "In Progress" ? "In Corso" : t.status === "Completed" ? "Risolto" : "Annullato" },
+    { key: "contractor", label: "Ditta / Tecnico" },
+    { key: "cost", label: "Costo Lordo", align: "right", format: (t: Maintenance) => `€${(t.cost || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }
+  ];
   const [searchQuery, setSearchQuery] = useState("");
 
   // Form Fields for the Wizard
@@ -594,8 +613,32 @@ export default function MaintenanceView({
 
               {/* Excel Spreadsheet style table */}
               <div className="bg-white rounded-2xl border border-slate-150 overflow-hidden shadow-2xs p-5 space-y-3">
-                <h4 className="text-[11px] font-mono font-black uppercase text-slate-400 tracking-wider">FOGLIO DI CALCOLO INTERVENTI (CELLE COMPILATE)</h4>
-                
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
+                  <h4 className="text-[11px] font-mono font-black uppercase text-slate-400 tracking-wider">FOGLIO DI CALCOLO INTERVENTI (CELLE COMPILATE)</h4>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <MultiSelectFilterDropdown
+                      label="Stato"
+                      options={[
+                        { value: "New", label: "Nuovo" },
+                        { value: "In Progress", label: "In Corso" },
+                        { value: "Completed", label: "Risolto" },
+                        { value: "Cancelled", label: "Annullato" }
+                      ]}
+                      selected={activeTicketStatuses}
+                      onChange={setActiveTicketStatuses}
+                    />
+                    <LedgerExportToolbar
+                      title={`Mastrino Manutenzioni — ${activeLedgerData.property.name}`}
+                      subtitle={activeLedgerData.property.address}
+                      columns={maintenanceLedgerExportColumns}
+                      rows={activeLedgerData.tickets.filter(t => activeTicketStatuses.includes(t.status))}
+                      totalsRow={{ title: "TOTALE", cost: `€${activeLedgerData.totManutenzioni.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }}
+                      filenameBase={`mastrino-manutenzioni-${activeLedgerData.property.name}`}
+                      size="md"
+                    />
+                  </div>
+                </div>
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse border border-slate-300">
                     <thead>
@@ -610,7 +653,7 @@ export default function MaintenanceView({
                       </tr>
                     </thead>
                     <tbody>
-                      {activeLedgerData.tickets.map((ticket) => {
+                      {activeLedgerData.tickets.filter(t => activeTicketStatuses.includes(t.status)).map((ticket) => {
                         const ticketClosings = activeLedgerData.closingItems.filter(item => item.sourceId === ticket.id);
                         const displayDate = ticket.date 
                           ? new Date(ticket.date).toLocaleDateString("it-IT") 

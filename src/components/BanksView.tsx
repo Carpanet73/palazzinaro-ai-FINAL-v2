@@ -22,6 +22,7 @@ import {
 import { BankMovement, FastClosingItem, CreditInstitution, BankAccount } from "../types";
 import LedgerExportToolbar from "./LedgerExportToolbar";
 import { LedgerColumn } from "../lib/ledgerExport";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 
 interface BanksViewProps {
   movements: BankMovement[];
@@ -49,6 +50,7 @@ export default function BanksView({
   // Navigation Drill-down States
   const [selectedInstId, setSelectedInstId] = useState<string | null>(null);
   const [selectedAccId, setSelectedAccId] = useState<string | null>(null);
+  const [activeMovementStatuses, setActiveMovementStatuses] = useState<string[]>(["reconciled", "pending"]);
 
   // Modals States
   const [showInstModal, setShowInstModal] = useState(false);
@@ -288,7 +290,12 @@ export default function BanksView({
 
   // Filter accounts and movements
   const activeAccounts = bankAccounts.filter(acc => acc.institutionId === selectedInstId);
-  const activeMovements = movements.filter(m => m.bankAccountId === selectedAccId);
+  const activeMovementsRaw = movements.filter(m => m.bankAccountId === selectedAccId);
+  // Menù a tendina multi-selezione per filtrare il registro movimenti — mancante finora su
+  // questo mastrino (Fase 2 punto 2, richiesto da Massimo il 14/08/2026 per tutti i mastrini).
+  const activeMovements = activeMovementsRaw.filter(m =>
+    activeMovementStatuses.includes(m.reconciled ? "reconciled" : "pending")
+  );
 
   // CORREZIONE CP (13/08/2026) — Fase 2 punto 3: colonne per stampa/esportazione universale
   // del registro movimenti bancari, tramite LedgerExportToolbar.
@@ -725,7 +732,18 @@ export default function BanksView({
               <h2 className="text-xl font-bold text-slate-900 tracking-tight">Registro Movimenti Bancari</h2>
               <p className="text-xs text-slate-500 mt-0.5">Gestisci ed esegui la riconciliazione contabile per questo conto corrente specifico.</p>
             </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center gap-2 self-start sm:self-auto no-print">
+              {activeMovementsRaw.length > 0 && (
+                <MultiSelectFilterDropdown
+                  label="Stato"
+                  options={[
+                    { value: "reconciled", label: "Riconciliato" },
+                    { value: "pending", label: "Da riconciliare" }
+                  ]}
+                  selected={activeMovementStatuses}
+                  onChange={setActiveMovementStatuses}
+                />
+              )}
               {activeMovements.length > 0 && (
                 <LedgerExportToolbar
                   title={`Registro Movimenti — ${currentAcc?.iban || ""}`}
@@ -756,17 +774,17 @@ export default function BanksView({
             <div className="flex space-x-2">
               <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5 text-center min-w-[100px]">
                 <p className="text-[9px] uppercase font-mono text-indigo-400 font-extrabold">Riconciliati</p>
-                <p className="text-base font-black text-indigo-900">{activeMovements.filter(m => m.reconciled).length}</p>
+                <p className="text-base font-black text-indigo-900">{activeMovementsRaw.filter(m => m.reconciled).length}</p>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-center min-w-[100px]">
                 <p className="text-[9px] uppercase font-mono text-slate-400 font-extrabold">In attesa</p>
-                <p className="text-base font-black text-slate-800">{activeMovements.filter(m => !m.reconciled).length}</p>
+                <p className="text-base font-black text-slate-800">{activeMovementsRaw.filter(m => !m.reconciled).length}</p>
               </div>
             </div>
           </div>
 
           {/* Movements list table (Excel-style / Mastrino) */}
-          {activeMovements.length === 0 ? (
+          {activeMovementsRaw.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto">
               <div className="bg-slate-50 text-slate-400 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4">
                 <FileSpreadsheet size={28} />
@@ -782,6 +800,10 @@ export default function BanksView({
                 <Plus size={14} />
                 <span>Importa ora</span>
               </button>
+            </div>
+          ) : activeMovements.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center max-w-lg mx-auto no-print">
+              <p className="text-xs text-slate-500">Nessun movimento corrisponde al filtro "Stato" selezionato qui sopra.</p>
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">

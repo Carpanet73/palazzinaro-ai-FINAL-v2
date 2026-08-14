@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
-import { Scale, FolderOpen, X, Trash2, Briefcase, Download, FileText, User, Pencil, CheckCircle2, Mail, AlertTriangle } from "lucide-react";
-import { LegalCase, Property, Lawyer, Tenant, OwnerProfile, Contract, Reminder, DeliveryReport } from "../types";
+import { Scale, FolderOpen, X, Trash2, Briefcase, Download, FileText, User, Pencil, CheckCircle2, Mail, AlertTriangle, Wallet, RotateCcw, Landmark } from "lucide-react";
+import { LegalCase, Property, Lawyer, Tenant, OwnerProfile, Contract, Reminder, DeliveryReport, FastClosingItem, BankMovement } from "../types";
 import JSZip from "jszip";
 import emailjs from "@emailjs/browser";
 
@@ -14,6 +14,15 @@ interface LegalViewProps {
   reminders?: Reminder[]; // per i Solleciti/Messa in Mora reali nel fascicolo ZIP
   deliveryReports?: DeliveryReport[]; // per i Verbali di Consegna/Riconsegna reali nel fascicolo ZIP
   lawyers?: Lawyer[];
+  // CORREZIONE (14/08/2026, su richiesta di Massimo) — necessari per le azioni "Rientra in
+  // Solleciti / Riconcilia / Segna come Pagato" direttamente da Area Legale (sezione 5 delle
+  // regole di progetto): prima la pratica legale non aveva alcun collegamento al motore di
+  // riconciliazione condiviso (src/lib/reconciliation.ts), quindi un pagamento incassato
+  // mentre la pratica era in mano al legale non poteva mai essere tolto dal saldo insoluto.
+  fastClosing?: FastClosingItem[];
+  movements?: BankMovement[];
+  onCumulativeReconcile?: (itemIds: string[], options?: { movementId?: string | null; cashAmount?: number }) => Promise<void>;
+  onUpdateReminderStatus?: (id: string, status: string, notes?: string, extraFields?: any) => Promise<void>;
   onAddLegalCase: (caseData: Omit<LegalCase, "id" | "userId" | "createdAt">) => Promise<void>;
   onUpdateLegalCaseStatus: (id: string, status: "Active" | "Pending" | "Closed") => Promise<void>;
   onUpdateLegalCase?: (id: string, updates: Partial<LegalCase>) => Promise<void>;
@@ -44,6 +53,10 @@ export default function LegalView({
   reminders = [],
   deliveryReports = [],
   lawyers = [],
+  fastClosing = [],
+  movements = [],
+  onCumulativeReconcile,
+  onUpdateReminderStatus,
   onAddLegalCase,
   onUpdateLegalCaseStatus,
   onUpdateLegalCase,
@@ -500,6 +513,150 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
     }
   };
 
+  // ── CORREZIONE (14/08/2026) — Riconciliazione/Pagamento/Rientro in Solleciti dall'Area
+  // Legale, richiesto da Massimo: "quando la pratica è al legale deve essere possibile o
+  // riportarla in solleciti o riconciliarla o darla per pagata come nelle altre parti".
+  // Prima non esisteva alcuna azione economica su una pratica legale: un pagamento incassato
+  // mentre il fascicolo era in mano al legale non poteva mai essere tolto dal saldo insoluto.
+
+  // Trova il Sollecito d'origine di una pratica: per ID reale (sourceReminderId, impostato
+  // dal 14/08/2026 in poi in RemindersView.handleMoveToLegalAction), oppure — solo per i
+  // fascicoli storici creati prima di questa data — per abbinamento sul nome del debitore,
+  // stessa logica già usata (con gli stessi limiti) da buildDossierZipBlob più sopra.
+  const resolveCaseReminder = (legalCase: LegalCase): Reminder | undefined => {
+    if (legalCase.sourceReminderId) {
+      const byId = reminders.find(r => r.id === legalCase.sourceReminderId);
+      if (byId) return byId;
+    }
+    return reminders
+      .filter(r => (r.tenantName || "").toLowerCase().trim() === (legalCase.tenantName || "").toLowerCase().trim())
+      .sort((a, b) => (b.step || 0) - (a.step || 0))[0];
+  };
+
+  // Voci Fast Closing ancora da saldare collegate alla pratica (canoni + spese accessorie),
+  // stessa fonte reale usata in Solleciti — mai un fallback per nome+stato generico (regola 5).
+  const getCaseLinkedItems = (legalCase: LegalCase): FastClosingItem[] => {
+    const reminder = resolveCaseReminder(legalCase);
+    const ids = new Set<string>(
+      (legalCase.associatedItemsIds && legalCase.associatedItemsIds.length > 0)
+        ? legalCase.associatedItemsIds
+        : (reminder?.associatedItemsIds || [])
+    );
+    return fastClosing.filter(item => ids.has(item.id) && (item.status === "Pending" || item.status === "Overdue"));
+  };
+
+  const handleCaseMarkPaid = async (legalCase: LegalCase) => {
+    const reminder = resolveCaseReminder(legalCase);
+    const linkedItems = getCaseLinkedItems(legalCase);
+    if (!reminder) {
+      alert("Impossibile trovare il Sollecito d'origine di questa pratica (fascicolo storico senza collegamento reale). Segna come pagato direttamente dalla pagina Solleciti.");
+      return;
+    }
+    const total = linkedItems.reduce((s, i) => s + i.amount, 0) || legalCase.unpaidBalance || reminder.amount || 0;
+    if (!confirm(`Confermi che il debitore "${legalCase.tenantName}" ha saldato per intero €${total.toLocaleString("it-IT", { minimumFractionDigits: 2 })}? Le voci collegate in Fast Closing e il Sollecito verranno segnati come Pagati.`)) {
+      return;
+    }
+    try {
+      await onUpdateReminderStatus?.(reminder.id, "Paid", "Saldato direttamente da Area Legale.");
+      await onUpdateLegalCase?.(legalCase.id, {
+        unpaidBalance: 0,
+        balanceSettledAt: new Date().toISOString(),
+        balanceSettledNotes: `${legalCase.balanceSettledNotes ? legalCase.balanceSettledNotes + "\n" : ""}Saldo azzerato da Area Legale il ${new Date().toLocaleDateString("it-IT")}: pagamento diretto di €${total.toLocaleString("it-IT", { minimumFractionDigits: 2 })}.`
+      });
+      alert("Pratica saldata con successo. Il saldo insoluto è stato azzerato.");
+    } catch (err) {
+      console.error("Error marking legal case as paid", err);
+    }
+  };
+
+  const handleCaseReturnToReminders = async (legalCase: LegalCase) => {
+    const reminder = resolveCaseReminder(legalCase);
+    if (!reminder) {
+      alert("Impossibile trovare il Sollecito d'origine di questa pratica (fascicolo storico senza collegamento reale). Contatta l'assistenza per ripristinare il collegamento.");
+      return;
+    }
+    if (!confirm(`Confermi di voler riportare la posizione di "${legalCase.tenantName}" in Area Solleciti? La pratica legale verrà archiviata (non eliminata) e il Sollecito tornerà attivo e azionabile dalla pagina Solleciti.`)) {
+      return;
+    }
+    try {
+      // Riporta il Sollecito allo step "Messa in Mora già inviata" (4), togliendolo dallo
+      // stato "In Legale" (step 5) — resta comunque tutta la cronologia dei passaggi già fatti.
+      await onUpdateReminderStatus?.(reminder.id, reminder.status === "Paid" ? "Paid" : "MessaInMora", "Pratica riportata in Area Solleciti dall'Area Legale.", { step: 4 });
+      await onUpdateLegalCase?.(legalCase.id, {
+        status: "Closed",
+        notes: `${legalCase.notes ? legalCase.notes + "\n\n" : ""}Pratica riportata in Area Solleciti il ${new Date().toLocaleDateString("it-IT")} (archiviata qui, non eliminata).`
+      });
+      alert("Posizione riportata in Area Solleciti. La pratica legale resta archiviata qui per lo storico, non è stata eliminata.");
+    } catch (err) {
+      console.error("Error returning legal case to reminders", err);
+    }
+  };
+
+  // Stato del modulo di riconciliazione con bonifico bancario
+  const [reconcileCaseId, setReconcileCaseId] = useState<string | null>(null);
+  const [caseSelectedItemIds, setCaseSelectedItemIds] = useState<string[]>([]);
+  const [caseSelectedMovementId, setCaseSelectedMovementId] = useState("");
+  const [caseReconcileCashMode, setCaseReconcileCashMode] = useState(false);
+  const [caseReconciliationError, setCaseReconciliationError] = useState("");
+
+  const handleOpenCaseReconcile = (legalCase: LegalCase) => {
+    setReconcileCaseId(legalCase.id);
+    setCaseSelectedItemIds(getCaseLinkedItems(legalCase).map(i => i.id));
+    setCaseSelectedMovementId("");
+    setCaseReconcileCashMode(false);
+    setCaseReconciliationError("");
+  };
+
+  const unreconciledMovements = movements.filter(m => !m.reconciled);
+
+  const handleConfirmCaseReconciliation = async () => {
+    const legalCase = legalCases.find(c => c.id === reconcileCaseId);
+    if (!legalCase || !onCumulativeReconcile) return;
+    const linkedItems = getCaseLinkedItems(legalCase);
+    const selectedItems = linkedItems.filter(i => caseSelectedItemIds.includes(i.id));
+    if (selectedItems.length === 0) return;
+    if (!caseReconcileCashMode && !caseSelectedMovementId) return;
+
+    const totalNeeded = selectedItems.reduce((s, i) => s + i.amount, 0);
+    const currentUnpaid = legalCase.unpaidBalance || 0;
+
+    try {
+      if (caseReconcileCashMode) {
+        if (!confirm(`Confermi di aver saldato in contanti (o comunque verificato personalmente) €${totalNeeded.toFixed(2)} per "${legalCase.tenantName}"?`)) return;
+        await onCumulativeReconcile(caseSelectedItemIds, { cashAmount: totalNeeded });
+        const newUnpaid = Math.max(0, currentUnpaid - totalNeeded);
+        await onUpdateLegalCase?.(legalCase.id, {
+          unpaidBalance: newUnpaid,
+          balanceSettledAt: newUnpaid === 0 ? new Date().toISOString() : legalCase.balanceSettledAt,
+          balanceSettledNotes: `${legalCase.balanceSettledNotes ? legalCase.balanceSettledNotes + "\n" : ""}Incasso in contanti registrato da Area Legale il ${new Date().toLocaleDateString("it-IT")}: €${totalNeeded.toFixed(2)}.`
+        });
+        alert("Incasso registrato con successo.");
+      } else {
+        const movement = movements.find(m => m.id === caseSelectedMovementId);
+        if (!movement) return;
+        await onCumulativeReconcile(caseSelectedItemIds, { movementId: movement.id });
+        const applied = Math.min(movement.amount, totalNeeded);
+        const newUnpaid = Math.max(0, currentUnpaid - applied);
+        await onUpdateLegalCase?.(legalCase.id, {
+          unpaidBalance: newUnpaid,
+          balanceSettledAt: newUnpaid === 0 ? new Date().toISOString() : legalCase.balanceSettledAt,
+          balanceSettledNotes: `${legalCase.balanceSettledNotes ? legalCase.balanceSettledNotes + "\n" : ""}Riconciliato da Area Legale il ${new Date().toLocaleDateString("it-IT")} con bonifico di €${movement.amount.toFixed(2)}.`
+        });
+        if (movement.amount < totalNeeded) {
+          alert(`Riconciliazione parziale eseguita! Bonifico da €${movement.amount.toFixed(2)} applicato su €${totalNeeded.toFixed(2)}. Il residuo resta sulla relativa voce.`);
+        } else {
+          alert("Riconciliazione completata con successo.");
+        }
+      }
+      setReconcileCaseId(null);
+      setCaseSelectedItemIds([]);
+      setCaseSelectedMovementId("");
+      setCaseReconciliationError("");
+    } catch (err) {
+      console.error("Error reconciling legal case", err);
+    }
+  };
+
   return (
     <div className="space-y-6" id="legal-view-container">
       {/* View Header */}
@@ -690,6 +847,54 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
                   {lawsuit.description && (
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed">{lawsuit.description}</p>
                   )}
+
+                  {/* CORREZIONE (14/08/2026) — Posizione Debitoria: prima una pratica in Area
+                      Legale non aveva alcuna azione economica, il saldo insoluto restava
+                      "congelato" anche a pagamento avvenuto. */}
+                  <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-1.5 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                        <Wallet size={14} className="text-indigo-600" />
+                        <span>Posizione Debitoria</span>
+                      </div>
+                      <span className={`text-xs font-mono font-black ${(lawsuit.unpaidBalance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                        €{(lawsuit.unpaidBalance || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    {lawsuit.balanceSettledAt && (lawsuit.unpaidBalance || 0) === 0 && (
+                      <p className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-2 py-1.5">
+                        Saldo azzerato il {new Date(lawsuit.balanceSettledAt).toLocaleDateString("it-IT")}.
+                      </p>
+                    )}
+                    {(lawsuit.unpaidBalance || 0) > 0 && lawsuit.status !== "Closed" && (
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          onClick={() => handleOpenCaseReconcile(lawsuit)}
+                          className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-500 hover:bg-amber-400 px-2.5 py-1.5 rounded-lg transition-colors"
+                          title="Riconcilia con un bonifico bancario registrato"
+                        >
+                          <Landmark size={11} />
+                          Riconcilia
+                        </button>
+                        <button
+                          onClick={() => handleCaseMarkPaid(lawsuit)}
+                          className="inline-flex items-center gap-1 text-[10px] font-black text-white bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1.5 rounded-lg transition-colors"
+                          title="Segna come saldato per intero (contanti o verifica personale)"
+                        >
+                          <CheckCircle2 size={11} />
+                          Segna Pagato
+                        </button>
+                        <button
+                          onClick={() => handleCaseReturnToReminders(lawsuit)}
+                          className="inline-flex items-center gap-1 text-[10px] font-black text-slate-700 bg-slate-200 hover:bg-slate-300 px-2.5 py-1.5 rounded-lg transition-colors"
+                          title="Chiude la pratica legale (archiviata, non eliminata) e riporta il Sollecito attivo in Area Solleciti"
+                        >
+                          <RotateCcw size={11} />
+                          Rientra in Solleciti
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Dynamic Studio Legale Association */}
                   <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
@@ -1157,6 +1362,120 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
           </div>
         </div>
       )}
+
+      {/* CORREZIONE (14/08/2026) — Modulo di riconciliazione con bonifico/incasso in
+          contanti per una pratica in Area Legale, stesso motore condiviso e stessa UX già
+          in uso in Solleciti (src/lib/reconciliation.ts). */}
+      {reconcileCaseId && (() => {
+        const legalCase = legalCases.find(c => c.id === reconcileCaseId);
+        if (!legalCase) return null;
+        const linkedItems = getCaseLinkedItems(legalCase);
+        const selectionTotal = linkedItems.filter(i => caseSelectedItemIds.includes(i.id)).reduce((s, i) => s + i.amount, 0);
+        return (
+          <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+              <div className="px-6 py-4 bg-amber-600 text-white flex items-center justify-between shrink-0">
+                <h3 className="font-sans font-bold text-base">Riconcilia — {legalCase.tenantName}</h3>
+                <button onClick={() => setReconcileCaseId(null)} className="text-amber-100 hover:text-white transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-6 space-y-4 overflow-y-auto">
+                {linkedItems.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    Nessuna voce Fast Closing ancora da saldare risulta collegata a questa pratica (fascicolo storico senza collegamento reale al Sollecito d'origine). Usa "Segna Pagato" oppure gestisci la riconciliazione direttamente dalla pagina Solleciti.
+                  </p>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700 mb-2">Voci da saldare:</p>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {linkedItems.map(item => (
+                          <label key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-100 hover:bg-slate-50 text-xs cursor-pointer">
+                            <span className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={caseSelectedItemIds.includes(item.id)}
+                                onChange={() => setCaseSelectedItemIds(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])}
+                              />
+                              <span className="truncate text-slate-700">{item.title}</span>
+                            </span>
+                            <span className="font-mono font-bold text-slate-900 shrink-0">€{item.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-right text-xs font-mono font-black text-slate-900 mt-2">
+                        Totale selezionato: €{selectionTotal.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setCaseReconcileCashMode(false)}
+                        className={`flex-1 text-xs font-bold px-3 py-2 rounded-xl border transition-colors ${!caseReconcileCashMode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200"}`}
+                      >
+                        Bonifico Bancario
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCaseReconcileCashMode(true)}
+                        className={`flex-1 text-xs font-bold px-3 py-2 rounded-xl border transition-colors ${caseReconcileCashMode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200"}`}
+                      >
+                        Contanti / Verifica Manuale
+                      </button>
+                    </div>
+
+                    {!caseReconcileCashMode && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                          Movimento Bancario da Abbinare
+                        </label>
+                        <select
+                          value={caseSelectedMovementId}
+                          onChange={(e) => setCaseSelectedMovementId(e.target.value)}
+                          className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500"
+                        >
+                          <option value="">Seleziona un movimento non riconciliato...</option>
+                          {unreconciledMovements.map(m => (
+                            <option key={m.id} value={m.id}>
+                              {new Date(m.date).toLocaleDateString("it-IT")} — {m.description} — €{m.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                            </option>
+                          ))}
+                        </select>
+                        {unreconciledMovements.length === 0 && (
+                          <p className="text-[10px] text-slate-400 mt-1">Nessun movimento bancario non riconciliato disponibile. Importalo prima dall'Area Banche.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {caseReconciliationError && (
+                      <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">{caseReconciliationError}</p>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end space-x-2 shrink-0">
+                <button
+                  onClick={() => setReconcileCaseId(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-white transition-colors"
+                >
+                  Annulla
+                </button>
+                {linkedItems.length > 0 && (
+                  <button
+                    onClick={handleConfirmCaseReconciliation}
+                    disabled={caseSelectedItemIds.length === 0 || (!caseReconcileCashMode && !caseSelectedMovementId)}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black shadow-sm"
+                  >
+                    Conferma Riconciliazione
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

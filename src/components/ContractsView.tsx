@@ -11,6 +11,9 @@ import {
 import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner, FastClosingItem, OwnerProfile } from "../types";
 import ContractGeneratorWizard from "./ContractGeneratorWizard";
 import DeliveryReportWizard from "./DeliveryReportWizard";
+import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
+import LedgerExportToolbar from "./LedgerExportToolbar";
+import { LedgerColumn } from "../lib/ledgerExport";
 import emailjs from "@emailjs/browser";
 import { generateDisdettaAnticipataPDF } from "../lib/pdfHelper";
 import {
@@ -88,6 +91,19 @@ export default function ContractsView({
   setCurrentSection,
   setSelectedTenantIdForLedger
 }: ContractsViewProps) {
+  // Menù a tendina multi-selezione + stampa/esportazione universale per il Mastrino
+  // Contabile del contratto — mancante finora su questo mastrino (Fase 2 punto 2/3,
+  // richiesto da Massimo il 14/08/2026 per tutti i mastrini dell'app).
+  const [activeContractLedgerStatuses, setActiveContractLedgerStatuses] = useState<string[]>([
+    "Pending", "Paid", "Overdue", "Cancelled"
+  ]);
+  const contractLedgerExportColumns: LedgerColumn[] = [
+    { key: "dueDate", label: "Data Scadenza", format: (i: FastClosingItem) => new Date(i.dueDate).toLocaleDateString("it-IT") },
+    { key: "title", label: "Descrizione" },
+    { key: "amount", label: "Importo Canone", align: "right", format: (i: FastClosingItem) => `€${i.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` },
+    { key: "status", label: "Stato", format: (i: FastClosingItem) => i.status === "Paid" ? "Pagato" : i.status === "Overdue" ? "Insoluto" : i.status === "Cancelled" ? "Annullato" : "Da Pagare" }
+  ];
+
   const [showModal, setShowModal] = useState(false);
   const [showGeneratorWizard, setShowGeneratorWizard] = useState(false); // CORREZIONE BQ
   const [editingContract, setEditingContract] = useState<Contract | null>(null);
@@ -1161,9 +1177,34 @@ export default function ContractsView({
                 generate in Fast Closing da questo contratto, prima non mostrate da nessuna
                 parte nella scheda contratto) */}
             <div className="bg-white rounded-2xl border border-amber-100 p-6 space-y-4">
-              <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide pb-2.5 flex items-center space-x-1.5">
-                <Calculator size={16} className="text-indigo-700 shrink-0" /> <span>2. Mastrino Contabile — Canoni e Scadenze</span>
-              </h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
+                <h4 className="font-sans font-black text-slate-900 text-xs uppercase tracking-wide flex items-center space-x-1.5">
+                  <Calculator size={16} className="text-indigo-700 shrink-0" /> <span>2. Mastrino Contabile — Canoni e Scadenze</span>
+                </h4>
+                {contractLedger.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <MultiSelectFilterDropdown
+                      label="Stato"
+                      options={[
+                        { value: "Paid", label: "Pagato" },
+                        { value: "Overdue", label: "Insoluto" },
+                        { value: "Pending", label: "Da Pagare" },
+                        { value: "Cancelled", label: "Annullato" }
+                      ]}
+                      selected={activeContractLedgerStatuses}
+                      onChange={setActiveContractLedgerStatuses}
+                    />
+                    <LedgerExportToolbar
+                      title={`Mastrino Contabile — ${selectedContract.tenantName || matchingTenant?.name || "Contratto"}`}
+                      subtitle={matchingProperty ? `${matchingProperty.name} — ${matchingProperty.address}` : undefined}
+                      columns={contractLedgerExportColumns}
+                      rows={contractLedger.filter(i => activeContractLedgerStatuses.includes(i.status))}
+                      totalsRow={{ title: "TOTALE", amount: `€${contractLedger.reduce((s, i) => s + i.amount, 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` }}
+                      filenameBase={`mastrino-contratto-${matchingTenant?.name || selectedContract.id}`}
+                    />
+                  </div>
+                )}
+              </div>
               {contractLedger.length === 0 ? (
                 <p className="text-xs text-slate-400 italic">
                   Nessuna riga contabile trovata in Fast Closing per questo contratto.
@@ -1180,7 +1221,7 @@ export default function ContractsView({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 text-xs">
-                      {contractLedger.map(item => (
+                      {contractLedger.filter(i => activeContractLedgerStatuses.includes(i.status)).map(item => (
                         <tr key={item.id} className="hover:bg-slate-50/50">
                           <td className="py-2.5 font-mono text-slate-500">
                             {new Date(item.dueDate).toLocaleDateString("it-IT")}
