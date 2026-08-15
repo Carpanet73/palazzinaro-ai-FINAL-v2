@@ -1062,12 +1062,16 @@ export default function CondominiumsView({
       <>
       {!selectedCondo ? (
         <div className="space-y-4">
-          {unassignedConstitutedProperties.length > 0 && (
-            <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4">
-              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <Home size={13} className="text-indigo-700 shrink-0" />
-                Immobili da Collegare — trascina su un Condominio
-              </h3>
+          {/* CORREZIONE AZ (15/08/2026, seguito) — Area sempre visibile (anche vuota), su
+              richiesta esplicita: prima era nascosta del tutto quando non c'era nulla da
+              trascinare, rendendo il drag&drop non scopribile. Ora resta sempre a schermo,
+              con un messaggio di stato vuoto quando non ci sono immobili in attesa. */}
+          <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4">
+            <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Home size={13} className="text-indigo-700 shrink-0" />
+              Immobili da Collegare — trascina su un Condominio
+            </h3>
+            {unassignedConstitutedProperties.length > 0 ? (
               <div className="flex flex-wrap gap-2.5">
                 {unassignedConstitutedProperties.map(p => (
                   <div
@@ -1085,8 +1089,12 @@ export default function CondominiumsView({
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="text-[11px] text-amber-700/70 italic leading-relaxed">
+                Nessun immobile in attesa di collegamento al momento. Gli immobili segnati "Condominio Costituito" senza ancora un condominio specifico assegnato compariranno qui come etichette da trascinare su una delle card qui sotto.
+              </p>
+            )}
+          </div>
 
           {condominiums.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto">
@@ -1238,21 +1246,24 @@ export default function CondominiumsView({
 
           {/* Left panel: immobili collegati a QUESTO condominio */}
           <div className="lg:col-span-4 space-y-4">
-            {unassignedConstitutedProperties.length > 0 && (
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOverTargetId(selectedCondo.id); }}
-                onDragLeave={() => setDragOverTargetId(null)}
-                onDrop={(e) => handleDropOnCondo(e, selectedCondo)}
-                className={`border-2 border-dashed rounded-2xl p-4 transition-all ${
-                  dragOverTargetId === selectedCondo.id
-                    ? "bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200"
-                    : "bg-amber-50/60 border-amber-200"
-                }`}
-              >
-                <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Home size={13} className="text-indigo-700 shrink-0" />
-                  Immobili da Collegare — trascina qui
-                </h3>
+            {/* CORREZIONE AZ (15/08/2026, seguito) — Sempre visibile (anche vuota), stesso
+                motivo del box gemello al 1° livello: resta comunque un'area di rilascio
+                valida (onDragOver/onDrop attivi) anche senza nulla da trascinare ora. */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOverTargetId(selectedCondo.id); }}
+              onDragLeave={() => setDragOverTargetId(null)}
+              onDrop={(e) => handleDropOnCondo(e, selectedCondo)}
+              className={`border-2 border-dashed rounded-2xl p-4 transition-all ${
+                dragOverTargetId === selectedCondo.id
+                  ? "bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200"
+                  : "bg-amber-50/60 border-amber-200"
+              }`}
+            >
+              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <Home size={13} className="text-indigo-700 shrink-0" />
+                Immobili da Collegare — trascina qui
+              </h3>
+              {unassignedConstitutedProperties.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {unassignedConstitutedProperties.map(p => (
                     <div
@@ -1270,8 +1281,12 @@ export default function CondominiumsView({
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-[11px] text-amber-700/70 italic leading-relaxed">
+                  Nessun immobile in attesa al momento. Puoi comunque trascinare qui un immobile "Condominio Costituito" non ancora assegnato, non appena ne avrai uno.
+                </p>
+              )}
+            </div>
 
             <div className="bg-white p-4 rounded-2xl border border-slate-100">
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Immobili Collegati ({condoProperties.length})</h3>
