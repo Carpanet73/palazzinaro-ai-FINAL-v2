@@ -564,8 +564,36 @@ export default function OwnersView({
       });
     });
 
+    // CORREZIONE (15/08/2026) — segnalato da Massimo: un Proprietario appena creato dal
+    // Wizard (anagrafica REALE, salvata in Firestore da handleAddOwner) compariva subito nel
+    // menù a tendina "Seleziona esistente" del wizard stesso (che legge `owners` reale), ma
+    // NON otteneva alcun badge/card né una propria "area" (scheda di dettaglio) in questa
+    // pagina — perché l'elenco qui sopra viene costruito SOLO scandendo `properties[].owner`
+    // (testo libero), mai la collezione reale `owners`. Un proprietario creato in modo
+    // standalone, senza ancora nessun immobile assegnato, non produceva quindi alcuna voce.
+    // Corretto senza toccare l'architettura esistente (nessun secondo flusso parallelo): ogni
+    // Owner reale privo di un immobile già abbinato (cioè non già presente come nome/individuo
+    // nell'elenco costruito sopra) viene aggiunto qui come card a sé, con zero immobili — la
+    // card e l'area di dettaglio funzionano già correttamente anche a "0 proprietà" (stesso
+    // stato che avrebbe comunque un proprietario reale i cui immobili fossero stati rimossi).
+    owners.forEach(realOwner => {
+      const cleanName = (realOwner.name || "").trim();
+      if (!cleanName) return;
+      const alreadyPresent = Array.from(ownersMap.values()).some(o =>
+        o.name.toLowerCase().trim() === cleanName.toLowerCase() ||
+        o.individualNames.some(n => n.toLowerCase().trim() === cleanName.toLowerCase())
+      );
+      if (!alreadyPresent) {
+        ownersMap.set(cleanName, {
+          name: cleanName,
+          isCompound: false,
+          individualNames: [cleanName]
+        });
+      }
+    });
+
     return Array.from(ownersMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [properties]);
+  }, [properties, owners]);
 
   // Filter owners by search term
   const filteredOwners = useMemo(() => {
