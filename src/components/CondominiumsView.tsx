@@ -4,7 +4,7 @@ import AddressFields, { AddressValue } from "./AddressFields";
 import {
   Plus, Edit3, Trash2, Building, Building2, Calendar, UserCheck,
   Sparkles, X, AlertCircle, Eye, Info, MapPin, User,
-  FileText, Upload, RefreshCw, CheckCircle2, ChevronRight,
+  FileText, Upload, RefreshCw, CheckCircle2, ChevronRight, ChevronLeft,
   ShieldCheck, ShieldAlert, CreditCard, Receipt, FileUp, DollarSign,
   Home, Phone, Mail, Briefcase, FolderOpen, Save, Camera
 } from "lucide-react";
@@ -76,8 +76,15 @@ export default function CondominiumsView({
   const [showModal, setShowModal] = useState(false);
   const [editingCondo, setEditingCondo] = useState<Condominium | null>(null);
 
-  // CORREZIONE L — Fase 1.5: Amministratori come vista principale della pagina
-  const [viewMode, setViewMode] = useState<"administrators" | "condominiums">("administrators");
+  // CORREZIONE AZ (15/08/2026) — "Condomini & Immobili" è ora la vista principale della
+  // pagina (prima pagina che si vede aprendo l'Area Condomini): mostra subito tutti i
+  // condomini costituiti. "Amministratori" resta disponibile come tab secondaria, per
+  // selezionarli/gestirli in un secondo momento.
+  const [viewMode, setViewMode] = useState<"administrators" | "condominiums">("condominiums");
+  // CORREZIONE AZ (15/08/2026) — navigazione a due livelli, omogenea al resto dell'app
+  // (stesso pattern di Anagrafica Immobili): 1° livello = griglia di card, una per ogni
+  // Condominio costituito; selezionandone una si apre la pagina di dettaglio di 2° livello.
+  const [selectedCondoId, setSelectedCondoId] = useState<string>("");
 
   // Form Fields for Condominium
   const [name, setName] = useState("");
@@ -171,6 +178,16 @@ export default function CondominiumsView({
     return condominiums.filter(c => !c.administratorId);
   }, [condominiums]);
 
+  // CORREZIONE AZ (15/08/2026) — Condominio selezionato per il 2° livello, e soli gli
+  // immobili collegati a QUESTO condominio (non più a tutti i condomini insieme).
+  const selectedCondo = useMemo(() => {
+    return condominiums.find(c => c.id === selectedCondoId) || null;
+  }, [condominiums, selectedCondoId]);
+
+  const condoProperties = useMemo(() => {
+    return constitutedProperties.filter(p => p.condominiumId === selectedCondoId);
+  }, [constitutedProperties, selectedCondoId]);
+
   // ── CORREZIONE Q — Drag&Drop universale ──
   // Stesso identico meccanismo per Immobile→Condominio e Condominio→Amministratore:
   // trascina, conferma, breve animazione di unione, poi si crea davvero il collegamento.
@@ -236,17 +253,21 @@ export default function CondominiumsView({
   // Selected relationship ID (defaults to first constituted property if present)
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
 
+  // CORREZIONE AZ (15/08/2026) — l'immobile attivo è ora sempre scelto tra quelli del
+  // condominio attualmente selezionato (2° livello), non più tra tutti gli immobili
+  // costituiti dell'intera applicazione: evita di mostrare per errore il fascicolo di un
+  // immobile che appartiene a un condominio diverso da quello aperto.
   const activeProperty = useMemo(() => {
-    if (constitutedProperties.length === 0) return null;
-    return constitutedProperties.find(p => p.id === selectedPropertyId) || constitutedProperties[0];
-  }, [constitutedProperties, selectedPropertyId]);
+    if (condoProperties.length === 0) return null;
+    return condoProperties.find(p => p.id === selectedPropertyId) || condoProperties[0];
+  }, [condoProperties, selectedPropertyId]);
 
-  // Sync selectedPropertyId
+  // Sync selectedPropertyId: quando cambia il condominio selezionato (o cambiano i suoi
+  // immobili collegati), se l'immobile attualmente scelto non appartiene più a questo
+  // condominio si passa al primo disponibile (o a nessuno, se il condominio non ne ha).
   React.useEffect(() => {
-    if (activeProperty && !selectedPropertyId) {
-      setSelectedPropertyId(activeProperty.id);
-    }
-  }, [activeProperty, selectedPropertyId]);
+    setSelectedPropertyId(prev => (condoProperties.some(p => p.id === prev) ? prev : (condoProperties[0]?.id || "")));
+  }, [selectedCondoId, condoProperties]);
 
   // Calculate matching details for activeProperty
   const activeCondo = useMemo(() => {
@@ -267,6 +288,12 @@ export default function CondominiumsView({
     if (matchedCondo) {
       const matchedProperty = properties.find(p => p.condominiumId === matchedCondo.id);
       if (matchedProperty) {
+        // CORREZIONE AZ (15/08/2026) — con la navigazione a due livelli, bisogna anche aprire
+        // esplicitamente il condominio individuato (2° livello), non solo l'immobile: senza
+        // questo il modulo precompilato risulterebbe invisibile se si era rimasti sul 1°
+        // livello o sulla tab Amministratori.
+        setViewMode("condominiums");
+        setSelectedCondoId(matchedCondo.id);
         setSelectedPropertyId(matchedProperty.id);
       } else {
         alert(`Trovato il condominio "${matchedCondo.name}", ma nessun immobile collegato: aggiungilo prima di poter ripartire la spesa.`);
@@ -863,19 +890,9 @@ export default function CondominiumsView({
         </div>
       </div>
 
-      {/* CORREZIONE L — Selettore vista: Amministratori (predefinita) / Condomini & Immobili */}
+      {/* CORREZIONE AZ (15/08/2026) — Selettore vista: Condomini & Immobili (predefinita,
+          prima pagina) / Amministratori (tab secondaria, selezionabile in un secondo momento) */}
       <div className="flex gap-2 bg-white p-1.5 rounded-xl border border-slate-100 w-fit">
-        <button
-          onClick={() => setViewMode("administrators")}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
-            viewMode === "administrators" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
-          }`}
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <User size={13} />
-            Amministratori
-          </span>
-        </button>
         <button
           onClick={() => setViewMode("condominiums")}
           className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
@@ -885,6 +902,17 @@ export default function CondominiumsView({
           <span className="inline-flex items-center gap-1.5">
             <Building2 size={13} />
             Condomini & Immobili
+          </span>
+        </button>
+        <button
+          onClick={() => setViewMode("administrators")}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+            viewMode === "administrators" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
+          }`}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <User size={13} />
+            Amministratori
           </span>
         </button>
       </div>
@@ -1026,233 +1054,301 @@ export default function CondominiumsView({
         </div>
       )}
 
-      {/* Main split dashboard: Left relationship list, Right active relationship details */}
+      {/* CORREZIONE AZ (15/08/2026) — Vista principale a due livelli, omogenea al resto
+          dell'app: 1° livello = griglia di card, una per ogni Condominio costituito (come
+          Anagrafica Immobili); selezionandone una si apre la pagina di dettaglio di 2°
+          livello, con immobili collegati, documentazione, gestione spese/rate e mastrino. */}
       {viewMode === "condominiums" && (
       <>
-      {unassignedConstitutedProperties.length > 0 && (
-        <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4 mb-4">
-          <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <Home size={13} className="text-indigo-700 shrink-0" />
-            Immobili da Collegare — trascina su un Condominio
-          </h3>
-          <div className="flex flex-wrap gap-2.5">
-            {unassignedConstitutedProperties.map(p => (
-              <div
-                key={p.id}
-                draggable
-                onDragStart={(e) => handleDragStartItem(e, "property", p.id, p.name)}
-                className={`px-3.5 py-2.5 bg-white border-2 border-dashed border-amber-300 rounded-xl text-xs font-bold text-slate-700 cursor-grab active:cursor-grabbing hover:border-amber-500 hover:shadow-sm transition-all ${
-                  mergingIds?.from === p.id ? "animate-pulse scale-95 opacity-50" : ""
-                }`}
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <Home size={12} className="text-indigo-700 shrink-0" />
-                  {p.name}
-                </span>
+      {!selectedCondo ? (
+        <div className="space-y-4">
+          {unassignedConstitutedProperties.length > 0 && (
+            <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4">
+              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <Home size={13} className="text-indigo-700 shrink-0" />
+                Immobili da Collegare — trascina su un Condominio
+              </h3>
+              <div className="flex flex-wrap gap-2.5">
+                {unassignedConstitutedProperties.map(p => (
+                  <div
+                    key={p.id}
+                    draggable
+                    onDragStart={(e) => handleDragStartItem(e, "property", p.id, p.name)}
+                    className={`px-3.5 py-2.5 bg-white border-2 border-dashed border-amber-300 rounded-xl text-xs font-bold text-slate-700 cursor-grab active:cursor-grabbing hover:border-amber-500 hover:shadow-sm transition-all ${
+                      mergingIds?.from === p.id ? "animate-pulse scale-95 opacity-50" : ""
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <Home size={12} className="text-indigo-700 shrink-0" />
+                      {p.name}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {constitutedProperties.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto">
-          <div className="bg-slate-50 text-indigo-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-indigo-50/50">
-            <Building size={28} />
-          </div>
-          <h3 className="font-sans font-bold text-slate-800 text-base">Nessun condominio costituito</h3>
-          <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-            Per visualizzare relazioni condominiali qui, apri l'<b>Anagrafica Immobili</b>, modifica un immobile e spunta l'opzione <b>"Condominio Costituito"</b> associandogli un condominio con amministratore.
-          </p>
-          <button
-            onClick={() => setCurrentSection && setCurrentSection("properties")}
-            className="mt-5 inline-flex items-center space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-4 py-2 rounded-lg text-xs transition-colors"
-          >
-            <span>Vai ad Anagrafica Immobili</span>
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          
-          {/* Left panel: List of relationships represented as badges */}
-          <div className="lg:col-span-4 space-y-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-100">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Immobili con Condominio Attivo ({constitutedProperties.length})</h3>
-              
-              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                {constitutedProperties.map((prop) => {
-                  const condo = condominiums.find(c => c.id === prop.condominiumId);
-                  const isSelected = activeProperty?.id === prop.id;
-                  const balance = propertyBalances[prop.id] || { isRegular: true, tenantUnpaid: 0, ownerUnpaid: 0 };
+            </div>
+          )}
 
-                  return (
-                    <div
-                      key={prop.id}
-                      onClick={() => setSelectedPropertyId(prop.id)}
-                      className={`w-full p-4 rounded-xl border text-left flex flex-col space-y-2.5 transition-all outline-hidden cursor-pointer relative group ${
-                        isSelected 
-                          ? "bg-indigo-50/45 border-indigo-200 ring-1 ring-indigo-200/30 shadow-xs" 
-                          : "bg-slate-50/30 border-slate-100 hover:border-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDisconnectTarget({ kind: "property-condo", id: prop.id, name: prop.name });
-                          setDisconnectConfirmText("");
-                        }}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-opacity p-1"
-                        title="Sciogli collegamento con questo condominio"
-                      >
-                        <X size={13} />
-                      </button>
-                      <div className="flex justify-between items-start gap-1">
-                        <div>
-                          <h4 className="font-sans font-extrabold text-xs text-slate-900 truncate max-w-[180px] flex items-center gap-1">
-                            <Home size={11} className="text-indigo-700 shrink-0" />
-                            {prop.name}
-                          </h4>
-                          <span className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 truncate max-w-[170px]">
-                            <MapPin size={10} className="text-rose-700 shrink-0" />
-                            {prop.address}
-                          </span>
+          {condominiums.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto">
+              <div className="bg-slate-50 text-indigo-500 p-4 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-4 border border-indigo-50/50">
+                <Building2 size={28} />
+              </div>
+              <h3 className="font-sans font-bold text-slate-800 text-base">Nessun condominio costituito</h3>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                Crea il primo condominio per iniziare a collegare immobili, amministratore, spese e rate in un'unica scheda.
+              </p>
+              <button
+                onClick={handleOpenAddModal}
+                className="mt-5 inline-flex items-center space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-4 py-2 rounded-lg text-xs transition-colors"
+              >
+                <Plus size={14} />
+                <span>Crea Nuovo Condominio</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {condominiums.map(condo => {
+                const condoProps = constitutedProperties.filter(p => p.condominiumId === condo.id);
+                const hasArrears = condoProps.some(p => !(propertyBalances[p.id]?.isRegular ?? true));
+                return (
+                  <div
+                    key={condo.id}
+                    onClick={() => setSelectedCondoId(condo.id)}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverTargetId(condo.id); }}
+                    onDragLeave={() => setDragOverTargetId(null)}
+                    onDrop={(e) => handleDropOnCondo(e, condo)}
+                    className={`group cursor-pointer bg-white rounded-2xl border p-5 space-y-3.5 hover:shadow-sm transition-all ${
+                      dragOverTargetId === condo.id
+                        ? "border-indigo-500 ring-2 ring-indigo-200 scale-[1.02]"
+                        : "border-slate-100 hover:border-indigo-200"
+                    } ${mergingIds?.to === condo.id ? "animate-pulse ring-2 ring-emerald-300" : ""}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-11 h-11 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                          <Building2 size={20} />
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="font-black text-sm text-slate-900 leading-tight truncate">{condo.name}</h4>
+                          {condo.address && (
+                            <span className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 truncate">
+                              <MapPin size={10} className="text-rose-700 shrink-0" />
+                              {condo.address}
+                            </span>
+                          )}
                         </div>
-                        
-                        {balance.isRegular ? (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-700 border border-emerald-100/50 flex items-center gap-1">
-                            <ShieldCheck size={10} />
-                            Regolare
-                          </span>
-                        ) : (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-amber-50 text-amber-700 border border-amber-100 flex items-center gap-1">
+                      </div>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleOpenEditModal(condo); }}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded transition-all"
+                          title="Modifica anagrafica condominio"
+                        >
+                          <Edit3 size={12} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteCondo(condo.id); }}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-50 rounded transition-all"
+                          title="Elimina"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-[11px]">
+                      <span className="inline-flex items-center gap-1 text-slate-500">
+                        <Home size={11} className="text-indigo-700 shrink-0" />
+                        {condoProps.length} immobili collegati
+                      </span>
+                      {condoProps.length > 0 && (
+                        hasArrears ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-amber-50 text-amber-700 border border-amber-100 inline-flex items-center gap-1">
                             <ShieldAlert size={10} />
                             Arretrati
                           </span>
-                        )}
-                      </div>
-
-                      <div className="bg-white/90 p-2.5 rounded-lg border border-slate-100/60 text-[10px] space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Condominio:</span>
-                          <span className="font-semibold text-slate-700 truncate max-w-[120px] inline-flex items-center gap-1">
-                            <Building2 size={11} className="text-indigo-700 shrink-0" />
-                            {condo?.name || "N/A"}
+                        ) : (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-700 border border-emerald-100/50 inline-flex items-center gap-1">
+                            <ShieldCheck size={10} />
+                            Regolare
                           </span>
-                        </div>
-                        <div className="flex justify-between font-mono pt-1 border-t border-slate-50">
-                          <span className="text-slate-400">Debito Inquilino:</span>
-                          <span className={`font-bold ${balance.tenantUnpaid > 0 ? "text-amber-600" : "text-slate-500"}`}>
-                            €{balance.tenantUnpaid.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between font-mono">
-                          <span className="text-slate-400">Debito Proprietario:</span>
-                          <span className={`font-bold ${balance.ownerUnpaid > 0 ? "text-rose-600" : "text-slate-500"}`}>
-                            €{balance.ownerUnpaid.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
+                        )
+                      )}
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                      <UserCheck size={11} className="text-emerald-600 shrink-0" />
+                      {condo.administrator ? (
+                        <span>Amm.: <strong className="text-slate-700">{condo.administrator}</strong></span>
+                      ) : (
+                        <span className="italic text-slate-400">Nessun amministratore assegnato</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Level 2 header: torna al 1° livello + identità del condominio + azioni */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <button
+              onClick={() => setSelectedCondoId("")}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 w-fit"
+            >
+              <ChevronLeft size={14} />
+              Torna a tutti i Condomini
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleOpenEditModal(selectedCondo)}
+                className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors"
+              >
+                <Edit3 size={12} />
+                Modifica Condominio
+              </button>
+              <button
+                onClick={() => handleDeleteCondo(selectedCondo.id)}
+                className="inline-flex items-center gap-1.5 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-500 hover:text-rose-600 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors"
+              >
+                <Trash2 size={12} />
+                Elimina
+              </button>
+            </div>
+          </div>
 
-            {/* CORREZIONE L — Fase 1: Amministratori come entità reale, con avatar */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-100 space-y-3">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Amministratori ({administrators.length})
-                </h3>
-                <button
-                  onClick={handleOpenAddAdminModal}
-                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-                >
-                  <Plus size={12} />
-                  Nuovo
-                </button>
-              </div>
-
-              {administrators.length === 0 ? (
-                <p className="text-[11px] text-slate-400 italic">
-                  Nessun amministratore creato. Aggiungine uno per collegarlo ai condomini.
+          <div className="bg-white rounded-2xl border border-slate-100 p-6 flex items-center gap-4">
+            <span className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <Building2 size={22} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-lg font-black text-slate-900 leading-tight truncate">{selectedCondo.name}</h2>
+              {selectedCondo.address && (
+                <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                  <MapPin size={11} className="text-rose-700 shrink-0" />
+                  {selectedCondo.address}
                 </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+          {/* Left panel: immobili collegati a QUESTO condominio */}
+          <div className="lg:col-span-4 space-y-4">
+            {unassignedConstitutedProperties.length > 0 && (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOverTargetId(selectedCondo.id); }}
+                onDragLeave={() => setDragOverTargetId(null)}
+                onDrop={(e) => handleDropOnCondo(e, selectedCondo)}
+                className={`border-2 border-dashed rounded-2xl p-4 transition-all ${
+                  dragOverTargetId === selectedCondo.id
+                    ? "bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200"
+                    : "bg-amber-50/60 border-amber-200"
+                }`}
+              >
+                <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <Home size={13} className="text-indigo-700 shrink-0" />
+                  Immobili da Collegare — trascina qui
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {unassignedConstitutedProperties.map(p => (
+                    <div
+                      key={p.id}
+                      draggable
+                      onDragStart={(e) => handleDragStartItem(e, "property", p.id, p.name)}
+                      className={`px-3 py-2 bg-white border-2 border-dashed border-amber-300 rounded-xl text-[11px] font-bold text-slate-700 cursor-grab active:cursor-grabbing hover:border-amber-500 hover:shadow-sm transition-all ${
+                        mergingIds?.from === p.id ? "animate-pulse scale-95 opacity-50" : ""
+                      }`}
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <Home size={11} className="text-indigo-700 shrink-0" />
+                        {p.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-100">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Immobili Collegati ({condoProperties.length})</h3>
+
+              {condoProperties.length === 0 ? (
+                <p className="text-[11px] text-slate-400 italic">Nessun immobile ancora collegato a questo condominio.</p>
               ) : (
-                <div className="flex flex-wrap gap-3">
-                  {administrators.map(admin => {
-                    const managedCount = condominiums.filter(c => c.administratorId === admin.id).length;
-                    const initials = admin.name
-                      .split(" ")
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map(w => w[0]?.toUpperCase())
-                      .join("");
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                  {condoProperties.map((prop) => {
+                    const isSelected = activeProperty?.id === prop.id;
+                    const balance = propertyBalances[prop.id] || { isRegular: true, tenantUnpaid: 0, ownerUnpaid: 0 };
+
                     return (
-                      <button
-                        key={admin.id}
-                        onClick={() => handleOpenEditAdminModal(admin)}
-                        className="flex flex-col items-center w-20 group"
-                        title={`${admin.name} — ${managedCount} condomini/o gestiti`}
+                      <div
+                        key={prop.id}
+                        onClick={() => setSelectedPropertyId(prop.id)}
+                        className={`w-full p-4 rounded-xl border text-left flex flex-col space-y-2.5 transition-all outline-hidden cursor-pointer relative group ${
+                          isSelected
+                            ? "bg-indigo-50/45 border-indigo-200 ring-1 ring-indigo-200/30 shadow-xs"
+                            : "bg-slate-50/30 border-slate-100 hover:border-slate-200 hover:bg-slate-50"
+                        }`}
                       >
-                        <span className="relative w-12 h-12 rounded-full bg-indigo-600 text-white font-black text-sm flex items-center justify-center shadow-sm group-hover:bg-indigo-700 transition-colors">
-                          {initials || "?"}
-                          {managedCount > 0 && (
-                            <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white text-[8px] font-black rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">
-                              {managedCount}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDisconnectTarget({ kind: "property-condo", id: prop.id, name: prop.name });
+                            setDisconnectConfirmText("");
+                          }}
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-opacity p-1"
+                          title="Sciogli collegamento con questo condominio"
+                        >
+                          <X size={13} />
+                        </button>
+                        <div className="flex justify-between items-start gap-1">
+                          <div>
+                            <h4 className="font-sans font-extrabold text-xs text-slate-900 truncate max-w-[180px] flex items-center gap-1">
+                              <Home size={11} className="text-indigo-700 shrink-0" />
+                              {prop.name}
+                            </h4>
+                            <span className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 truncate max-w-[170px]">
+                              <MapPin size={10} className="text-rose-700 shrink-0" />
+                              {prop.address}
+                            </span>
+                          </div>
+
+                          {balance.isRegular ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-700 border border-emerald-100/50 flex items-center gap-1">
+                              <ShieldCheck size={10} />
+                              Regolare
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-amber-50 text-amber-700 border border-amber-100 flex items-center gap-1">
+                              <ShieldAlert size={10} />
+                              Arretrati
                             </span>
                           )}
-                        </span>
-                        <span className="text-[10px] font-semibold text-slate-700 mt-1.5 truncate w-full text-center">
-                          {admin.name}
-                        </span>
-                      </button>
+                        </div>
+
+                        <div className="bg-white/90 p-2.5 rounded-lg border border-slate-100/60 text-[10px] space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Debito Inquilino:</span>
+                            <span className={`font-bold ${balance.tenantUnpaid > 0 ? "text-amber-600" : "text-slate-500"}`}>
+                              €{balance.tenantUnpaid.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between font-mono">
+                            <span className="text-slate-400">Debito Proprietario:</span>
+                            <span className={`font-bold ${balance.ownerUnpaid > 0 ? "text-rose-600" : "text-slate-500"}`}>
+                              €{balance.ownerUnpaid.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
               )}
-            </div>
-
-            {/* List of general administrators and basic contacts */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-100 space-y-3">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Censimento Condomini ({condominiums.length})</h3>
-              </div>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {condominiums.map(c => (
-                  <div
-                    key={c.id}
-                    onDragOver={(e) => { e.preventDefault(); setDragOverTargetId(c.id); }}
-                    onDragLeave={() => setDragOverTargetId(null)}
-                    onDrop={(e) => handleDropOnCondo(e, c)}
-                    className={`p-2.5 rounded-lg border flex justify-between items-center text-xs transition-all ${
-                      dragOverTargetId === c.id
-                        ? "bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200 scale-[1.02]"
-                        : "bg-slate-50 border-slate-100/50"
-                    } ${mergingIds?.to === c.id ? "animate-pulse ring-2 ring-emerald-300" : ""}`}
-                  >
-                    <div>
-                      <p className="font-bold text-slate-800">{c.name}</p>
-                      <p className="text-[10px] text-slate-400">Amm: {c.administrator || "N/A"}</p>
-                    </div>
-                    <div className="flex space-x-1">
-                      <button 
-                        onClick={() => handleOpenEditModal(c)}
-                        className="p-1 hover:text-indigo-600 hover:bg-white rounded transition-all"
-                        title="Modifica anagrafica condominio"
-                      >
-                        <Edit3 size={11} />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteCondo(c.id)}
-                        className="p-1 hover:text-rose-600 hover:bg-white rounded transition-all"
-                        title="Elimina"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -1752,11 +1848,12 @@ export default function CondominiumsView({
             ) : (
               <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center text-slate-500">
                 <Building size={32} className="mx-auto text-slate-300 mb-3" />
-                <p className="text-xs font-semibold">Seleziona un immobile con condominio attivo dal pannello sinistro per visualizzare il relativo fascicolo.</p>
+                <p className="text-xs font-semibold">Collega un immobile a questo condominio (trascinandolo qui sopra) per visualizzare il relativo fascicolo.</p>
               </div>
             )}
           </div>
 
+          </div>
         </div>
       )}
       </>
