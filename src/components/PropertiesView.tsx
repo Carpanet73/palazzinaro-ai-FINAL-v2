@@ -548,6 +548,715 @@ export default function PropertiesView({
     }
   };
 
+
+  const editPropertyModal = showModal ? (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="font-sans font-bold text-base">
+                {editingProperty ? "Modifica Immobile" : "Nuovo Immobile"}
+              </h3>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Nome Immobile / Unità *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Esempio: Bilocale Via Torino 15"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Indirizzo Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Via, Civico, Città, CAP"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Tipologia Unità
+                  </label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500 transition-all"
+                  >
+                    <option value="Appartamento">Appartamento</option>
+                    <option value="Monolocale">Monolocale</option>
+                    <option value="Bilocale">Bilocale</option>
+                    <option value="Ufficio">Ufficio</option>
+                    <option value="Negozio">Negozio</option>
+                    <option value="Garage/Box">Garage/Box</option>
+                    <option value="Villa">Villa</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Stato Locazione
+                  </label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as any)}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500 transition-all"
+                  >
+                    <option value="Available">Libero (Disponibile)</option>
+                    <option value="Rented">Locato (Occupato)</option>
+                    <option value="Maintenance">In Manutenzione</option>
+                    <option value="Archived">Archiviato</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Proprietario / Locatore Section (Required & Guided) */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                    Proprietario / Locatore *
+                  </label>
+                  <span className="text-[10px] font-bold text-indigo-600 uppercase">Obbligatorio</span>
+                </div>
+                
+                <div className="flex bg-white p-1 rounded-xl border border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={() => setOwnerMode("select")}
+                    className={`flex-1 inline-flex items-center justify-center gap-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
+                      ownerMode === "select"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    <Users size={12} />
+                    Seleziona Esistente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOwnerMode("guided")}
+                    className={`flex-1 inline-flex items-center justify-center gap-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
+                      ownerMode === "guided"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    <Wand2 size={12} />
+                    Procedura Guidata
+                  </button>
+                </div>
+
+                {ownerMode === "select" ? (
+                  <div className="space-y-1.5">
+                    {getUniqueOwners().length === 0 ? (
+                      <p className="text-[11px] text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-150 font-semibold leading-relaxed">
+                        Nessun proprietario presente in anagrafica. Usa la <strong>Procedura Guidata</strong> per crearne uno nuovo su questo immobile.
+                      </p>
+                    ) : (
+                      <select
+                        value={selectedExistingOwner}
+                        onChange={(e) => setSelectedExistingOwner(e.target.value)}
+                        className="w-full text-sm border border-slate-200 bg-white rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 transition-all font-bold text-slate-800"
+                      >
+                        <option value="">-- Seleziona un proprietario esistente --</option>
+                        {getUniqueOwners().map((o) => (
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3 border-t border-slate-200/60 pt-3">
+                    {/* Guided flow types */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: "individual", label: "Privato", icon: User },
+                        { id: "company", label: "Società", icon: Building2 },
+                        { id: "multiple", label: "Multipli", icon: Users }
+                      ].map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setGuidedOwnerType(t.id as any)}
+                          className={`inline-flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold border rounded-lg text-center transition-all ${
+                            guidedOwnerType === t.id
+                              ? "bg-indigo-50 text-indigo-700 border-indigo-300 font-black"
+                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          <t.icon size={11} />
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Conditional inputs */}
+                    {guidedOwnerType === "individual" && (
+                      <div className="grid grid-cols-2 gap-3 animate-fadeIn">
+                        <div>
+                          <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                            Nome
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Mario"
+                            value={indFirstName}
+                            onChange={(e) => setIndFirstName(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                            Cognome
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Rossi"
+                            value={indLastName}
+                            onChange={(e) => setIndLastName(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {guidedOwnerType === "company" && (
+                      <div className="space-y-1 animate-fadeIn">
+                        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                          Ragione Sociale / Ente
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Immobiliare Duomo S.r.l."
+                          value={companyName}
+                          onChange={(e) => setCompanyName(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
+                        />
+                      </div>
+                    )}
+
+                    {guidedOwnerType === "multiple" && (
+                      <div className="space-y-2 animate-fadeIn">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider">
+                            Comproprietari
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setMultipleOwnersList([...multipleOwnersList, ""])}
+                            className="text-[10px] text-indigo-600 font-extrabold hover:underline"
+                          >
+                            + Aggiungi
+                          </button>
+                        </div>
+                        <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                          {multipleOwnersList.map((ownerName, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-mono text-slate-400 w-4">#{idx + 1}</span>
+                              <input
+                                type="text"
+                                placeholder={`Comprietario ${idx + 1}`}
+                                value={ownerName}
+                                onChange={(e) => {
+                                  const updated = [...multipleOwnersList];
+                                  updated[idx] = e.target.value;
+                                  setMultipleOwnersList(updated);
+                                }}
+                                className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 outline-hidden focus:border-indigo-500"
+                              />
+                              {multipleOwnersList.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = multipleOwnersList.filter((_, i) => i !== idx);
+                                    setMultipleOwnersList(updated);
+                                  }}
+                                  className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
+                                >
+                                  <X size={12} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-150">
+                <div className="flex items-center space-x-2.5">
+                  <input
+                    type="checkbox"
+                    id="isBareOwnership"
+                    checked={isBareOwnership}
+                    onChange={(e) => setIsBareOwnership(e.target.checked)}
+                    className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <label htmlFor="isBareOwnership" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                    Nuda Proprietà (Bare Ownership)
+                  </label>
+                </div>
+
+                <div className="flex flex-col justify-center">
+                  <div className="flex items-center space-x-2.5">
+                    <input
+                      type="checkbox"
+                      id="isCondoConstituted"
+                      checked={isCondoConstituted}
+                      onChange={(e) => setIsCondoConstituted(e.target.checked)}
+                      className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <label htmlFor="isCondoConstituted" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                      Condominio Costituito
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {isCondoConstituted && (
+                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50 space-y-1.5 animate-fadeIn">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Condominio & Amministratore Associato *
+                  </label>
+                  <select
+                    value={condominiumId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__new__") {
+                        setShowInlineCondoCreate(true);
+                        setInlineCondoName("");
+                        setCondoAddressMismatchWarning(null);
+                        return;
+                      }
+                      setCondominiumId(val);
+                      // CORREZIONE P — un condominio è legato a un edificio fisico: l'indirizzo
+                      // deve coincidere con quello dell'immobile. Se non coincide, avviso subito
+                      // (non blocco del tutto, per non impedire correzioni manuali di refusi minori).
+                      const selectedCondo = condominiums.find(c => c.id === val);
+                      if (selectedCondo?.address && address) {
+                        const a = selectedCondo.address.toLowerCase().trim();
+                        const b = address.toLowerCase().trim();
+                        if (a !== b && !a.includes(b) && !b.includes(a)) {
+                          setCondoAddressMismatchWarning(
+                            `Attenzione: questo condominio risulta all'indirizzo "${selectedCondo.address}", diverso da quello di questo immobile ("${address}"). Un condominio corrisponde a un edificio fisico: verifica di aver selezionato quello giusto.`
+                          );
+                        } else {
+                          setCondoAddressMismatchWarning(null);
+                        }
+                      } else {
+                        setCondoAddressMismatchWarning(null);
+                      }
+                    }}
+                    required={isCondoConstituted}
+                    className="w-full text-sm border border-slate-200 bg-white rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 transition-all font-bold text-slate-800"
+                  >
+                    <option value="">-- Seleziona Condominio --</option>
+                    {condominiums.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.administrator ? `(Amministratore: ${c.administrator})` : ""}
+                      </option>
+                    ))}
+                    <option value="__new__">Crea nuovo condominio per questo immobile…</option>
+                  </select>
+
+                  {condoAddressMismatchWarning && (
+                    <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 mt-1.5 leading-relaxed flex items-start gap-1.5">
+                      <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                      <span>{condoAddressMismatchWarning}</span>
+                    </p>
+                  )}
+
+                  {showInlineCondoCreate && (
+                    <div className="mt-2 p-3 bg-white border border-indigo-200 rounded-xl space-y-2">
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                        Nome Nuovo Condominio
+                      </label>
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Es: Condominio Via Roma 5"
+                        value={inlineCondoName}
+                        onChange={(e) => setInlineCondoName(e.target.value)}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-hidden focus:border-indigo-500"
+                      />
+                      <p className="text-[10px] text-slate-400">
+                        Indirizzo: <strong>{address || "(inserisci prima l'indirizzo dell'immobile qui sopra)"}</strong> — coincide sempre con quello dell'immobile, non modificabile qui.
+                      </p>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowInlineCondoCreate(false)}
+                          className="px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 rounded-lg border border-slate-200"
+                        >
+                          Annulla
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!inlineCondoName.trim() || !address.trim() || !onAddCondominium) {
+                              alert("Inserisci un nome per il condominio (e l'indirizzo dell'immobile qui sopra).");
+                              return;
+                            }
+                            const newId = await onAddCondominium({
+                              name: inlineCondoName.trim(),
+                              address: address.trim()
+                            });
+                            if (newId) {
+                              setCondominiumId(newId);
+                            }
+                            setShowInlineCondoCreate(false);
+                          }}
+                          className="px-3 py-1.5 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
+                        >
+                          Crea e Collega
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {condominiums.length === 0 && !showInlineCondoCreate && (
+                    <p className="text-[10px] text-amber-600">
+                      Nessun condominio esistente nel sistema. Usa "Crea nuovo condominio" qui sopra.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Quota Millesimale ed Utenze */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1">
+                    Quota Millesimale *
+                  </label>
+                  <p className="text-[10px] text-slate-500 mb-2">Inserisci il valore in millesimi (es. 120 per 120/1000) utilizzato per la ripartizione reale delle spese condominiali.</p>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      max="1000"
+                      value={millesimi}
+                      onChange={(e) => setMillesimi(Number(e.target.value) || 0)}
+                      className="w-32 text-xs border border-slate-200 bg-white rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500 font-bold"
+                    />
+                    <span className="text-xs font-mono font-bold text-slate-500">/ 1000 millesimi</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-200/60 pt-3">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center space-x-1">
+                    <Zap size={13} className="text-amber-700" />
+                    <span>Gestione Contatori Utenze</span>
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mb-3">Registra i dettagli dei contatori dell'immobile e indica a chi sono intestate le utenze (ON: conduttore, OFF: proprietario).</p>
+
+                  <div className="space-y-4">
+                    {/* Luce Meter */}
+                    <div className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2">
+                      <div className="flex items-center justify-between pb-1.5">
+                        <span className="text-[11px] font-bold text-indigo-700 uppercase flex items-center space-x-1">
+                          <Lightbulb size={12} /> <span>Utenza Luce</span>
+                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] font-semibold text-slate-500">Intestazione:</span>
+                          <button
+                            type="button"
+                            onClick={() => setLuceActiveFlag(luceActiveFlag === "conduttore" ? "proprietario" : "conduttore")}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
+                              luceActiveFlag === "conduttore"
+                                ? "bg-amber-100 text-amber-800 border border-amber-250 font-black"
+                                : "bg-slate-100 text-slate-700 border border-slate-250 font-bold"
+                            }`}
+                          >
+                            {luceActiveFlag === "conduttore" ? "Conduttore (ON)" : "Proprietario (OFF)"}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">N. Contatore</label>
+                          <input
+                            type="text"
+                            placeholder="Es. IT001E..."
+                            value={luceMeterNo}
+                            onChange={(e) => setLuceMeterNo(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Ultima Lettura</label>
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={luceLastReading || ""}
+                            onChange={(e) => setLuceLastReading(Number(e.target.value) || 0)}
+                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Data Lettura</label>
+                          <input
+                            type="date"
+                            value={luceReadingDate}
+                            onChange={(e) => setLuceReadingDate(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Gas Meter */}
+                    <div className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2">
+                      <div className="flex items-center justify-between pb-1.5">
+                        <span className="text-[11px] font-bold text-orange-700 uppercase flex items-center space-x-1">
+                          <Flame size={12} /> <span>Utenza Gas</span>
+                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] font-semibold text-slate-500">Intestazione:</span>
+                          <button
+                            type="button"
+                            onClick={() => setGasActiveFlag(gasActiveFlag === "conduttore" ? "proprietario" : "conduttore")}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
+                              gasActiveFlag === "conduttore"
+                                ? "bg-amber-100 text-amber-800 border border-amber-250 font-black"
+                                : "bg-slate-100 text-slate-700 border border-slate-250 font-bold"
+                            }`}
+                          >
+                            {gasActiveFlag === "conduttore" ? "Conduttore (ON)" : "Proprietario (OFF)"}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">N. Contatore</label>
+                          <input
+                            type="text"
+                            placeholder="Es. IT002G..."
+                            value={gasMeterNo}
+                            onChange={(e) => setGasMeterNo(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Ultima Lettura</label>
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={gasLastReading || ""}
+                            onChange={(e) => setGasLastReading(Number(e.target.value) || 0)}
+                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Data Lettura</label>
+                          <input
+                            type="date"
+                            value={gasReadingDate}
+                            onChange={(e) => setGasReadingDate(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Acqua Meter */}
+                    <div className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2">
+                      <div className="flex items-center justify-between pb-1.5">
+                        <span className="text-[11px] font-bold text-sky-700 uppercase flex items-center space-x-1">
+                          <Droplets size={12} /> <span>Utenza Acqua</span>
+                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] font-semibold text-slate-500">Intestazione:</span>
+                          <button
+                            type="button"
+                            onClick={() => setAcquaActiveFlag(acquaActiveFlag === "conduttore" ? "proprietario" : "conduttore")}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
+                              acquaActiveFlag === "conduttore"
+                                ? "bg-amber-100 text-amber-800 border border-amber-250 font-black"
+                                : "bg-slate-100 text-slate-700 border border-slate-250 font-bold"
+                            }`}
+                          >
+                            {acquaActiveFlag === "conduttore" ? "Conduttore (ON)" : "Proprietario (OFF)"}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">N. Contatore</label>
+                          <input
+                            type="text"
+                            placeholder="Es. IT003W..."
+                            value={acquaMeterNo}
+                            onChange={(e) => setAcquaMeterNo(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Ultima Lettura</label>
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={acquaLastReading || ""}
+                            onChange={(e) => setAcquaLastReading(Number(e.target.value) || 0)}
+                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Data Lettura</label>
+                          <input
+                            type="date"
+                            value={acquaReadingDate}
+                            onChange={(e) => setAcquaReadingDate(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* CORREZIONE BO — Dati Catastali e Classe Energetica, con scanner */}
+                  <div className="mt-5 pt-4 border-t border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h5 className="text-xs font-black text-slate-700 uppercase tracking-wider">Dati Catastali & Classe Energetica</h5>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setScannerOpenFor("cadastral")}
+                          disabled={processingScan}
+                          className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-2.5 py-1.5 rounded-lg"
+                        >
+                          {processingScan ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
+                          {processingScan ? "In corso..." : "Fotografa Visura Catastale"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setScannerOpenFor("energy")}
+                          disabled={processingScan}
+                          className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white px-2.5 py-1.5 rounded-lg"
+                        >
+                          {processingScan ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
+                          {processingScan ? "In corso..." : "Fotografa APE"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Foglio</label>
+                        <input type="text" value={cadastralFoglio} onChange={(e) => setCadastralFoglio(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Particella</label>
+                        <input type="text" value={cadastralParticella} onChange={(e) => setCadastralParticella(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Subalterno</label>
+                        <input type="text" value={cadastralSubalterno} onChange={(e) => setCadastralSubalterno(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Categoria</label>
+                        <input type="text" placeholder="A/3" value={cadastralCategoria} onChange={(e) => setCadastralCategoria(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Vani Catastali</label>
+                        <input type="text" value={cadastralVani} onChange={(e) => setCadastralVani(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Classe</label>
+                        <input type="text" value={cadastralClasse} onChange={(e) => setCadastralClasse(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Rendita Catastale €</label>
+                        <input type="text" value={cadastralRendita} onChange={(e) => setCadastralRendita(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Piano</label>
+                        <input type="text" value={cadastralPiano} onChange={(e) => setCadastralPiano(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Classe Energetica</label>
+                        <input type="text" placeholder="F" value={energyClasse} onChange={(e) => setEnergyClasse(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">IPE Globale</label>
+                        <input type="text" placeholder="201.48 KWh/mq anno" value={energyIpe} onChange={(e) => setEnergyIpe(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Scadenza APE</label>
+                        <input type="date" value={energyExpiry} onChange={(e) => setEnergyExpiry(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
+                      </div>
+                    </div>
+                    {propertyDocuments.length > 0 && (
+                      <div className="pt-1.5 border-t border-slate-200 space-y-1">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Documenti conservati agli atti</p>
+                        {propertyDocuments.map(doc => (
+                          <a key={doc.id} href={doc.storageLink || "#"} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-indigo-600 hover:underline truncate">
+                            <Paperclip size={10} className="shrink-0 text-slate-600" />
+                            <span className="truncate">{doc.category} — {doc.fileName}</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Note Addizionali
+                </label>
+                <textarea
+                  placeholder="Annotazioni catastali, impianti, dettagli interni, spese..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 transition-all"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end space-x-3 border-t border-slate-50">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+                >
+                  Salva
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+  ) : null;
+
   if (selectedPropertyDetails) {
     const prop = selectedPropertyDetails;
     
@@ -1954,6 +2663,7 @@ export default function PropertiesView({
             </div>
           </div>
         )}
+        {editPropertyModal}
       </div>
     );
   }
@@ -2133,713 +2843,7 @@ export default function PropertiesView({
       )}
 
       {/* Property Form Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <h3 className="font-sans font-bold text-base">
-                {editingProperty ? "Modifica Immobile" : "Nuovo Immobile"}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Nome Immobile / Unità *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Esempio: Bilocale Via Torino 15"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Indirizzo Completo *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Via, Civico, Città, CAP"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Tipologia Unità
-                  </label>
-                  <select
-                    value={type}
-                    onChange={(e) => setType(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500 transition-all"
-                  >
-                    <option value="Appartamento">Appartamento</option>
-                    <option value="Monolocale">Monolocale</option>
-                    <option value="Bilocale">Bilocale</option>
-                    <option value="Ufficio">Ufficio</option>
-                    <option value="Negozio">Negozio</option>
-                    <option value="Garage/Box">Garage/Box</option>
-                    <option value="Villa">Villa</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Stato Locazione
-                  </label>
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as any)}
-                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white outline-hidden focus:border-indigo-500 transition-all"
-                  >
-                    <option value="Available">Libero (Disponibile)</option>
-                    <option value="Rented">Locato (Occupato)</option>
-                    <option value="Maintenance">In Manutenzione</option>
-                    <option value="Archived">Archiviato</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Proprietario / Locatore Section (Required & Guided) */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
-                    Proprietario / Locatore *
-                  </label>
-                  <span className="text-[10px] font-bold text-indigo-600 uppercase">Obbligatorio</span>
-                </div>
-                
-                <div className="flex bg-white p-1 rounded-xl border border-slate-200/80">
-                  <button
-                    type="button"
-                    onClick={() => setOwnerMode("select")}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
-                      ownerMode === "select"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "text-slate-500 hover:text-slate-900"
-                    }`}
-                  >
-                    <Users size={12} />
-                    Seleziona Esistente
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOwnerMode("guided")}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
-                      ownerMode === "guided"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "text-slate-500 hover:text-slate-900"
-                    }`}
-                  >
-                    <Wand2 size={12} />
-                    Procedura Guidata
-                  </button>
-                </div>
-
-                {ownerMode === "select" ? (
-                  <div className="space-y-1.5">
-                    {getUniqueOwners().length === 0 ? (
-                      <p className="text-[11px] text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-150 font-semibold leading-relaxed">
-                        Nessun proprietario presente in anagrafica. Usa la <strong>Procedura Guidata</strong> per crearne uno nuovo su questo immobile.
-                      </p>
-                    ) : (
-                      <select
-                        value={selectedExistingOwner}
-                        onChange={(e) => setSelectedExistingOwner(e.target.value)}
-                        className="w-full text-sm border border-slate-200 bg-white rounded-xl px-3 py-2.5 outline-hidden focus:border-indigo-500 transition-all font-bold text-slate-800"
-                      >
-                        <option value="">-- Seleziona un proprietario esistente --</option>
-                        {getUniqueOwners().map((o) => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-3 border-t border-slate-200/60 pt-3">
-                    {/* Guided flow types */}
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: "individual", label: "Privato", icon: User },
-                        { id: "company", label: "Società", icon: Building2 },
-                        { id: "multiple", label: "Multipli", icon: Users }
-                      ].map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => setGuidedOwnerType(t.id as any)}
-                          className={`inline-flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold border rounded-lg text-center transition-all ${
-                            guidedOwnerType === t.id
-                              ? "bg-indigo-50 text-indigo-700 border-indigo-300 font-black"
-                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                          }`}
-                        >
-                          <t.icon size={11} />
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Conditional inputs */}
-                    {guidedOwnerType === "individual" && (
-                      <div className="grid grid-cols-2 gap-3 animate-fadeIn">
-                        <div>
-                          <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">
-                            Nome
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Mario"
-                            value={indFirstName}
-                            onChange={(e) => setIndFirstName(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">
-                            Cognome
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Rossi"
-                            value={indLastName}
-                            onChange={(e) => setIndLastName(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {guidedOwnerType === "company" && (
-                      <div className="space-y-1 animate-fadeIn">
-                        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">
-                          Ragione Sociale / Ente
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Immobiliare Duomo S.r.l."
-                          value={companyName}
-                          onChange={(e) => setCompanyName(e.target.value)}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500"
-                        />
-                      </div>
-                    )}
-
-                    {guidedOwnerType === "multiple" && (
-                      <div className="space-y-2 animate-fadeIn">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                            Comproprietari
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setMultipleOwnersList([...multipleOwnersList, ""])}
-                            className="text-[10px] text-indigo-600 font-extrabold hover:underline"
-                          >
-                            + Aggiungi
-                          </button>
-                        </div>
-                        <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-                          {multipleOwnersList.map((ownerName, idx) => (
-                            <div key={idx} className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-mono text-slate-400 w-4">#{idx + 1}</span>
-                              <input
-                                type="text"
-                                placeholder={`Comprietario ${idx + 1}`}
-                                value={ownerName}
-                                onChange={(e) => {
-                                  const updated = [...multipleOwnersList];
-                                  updated[idx] = e.target.value;
-                                  setMultipleOwnersList(updated);
-                                }}
-                                className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 outline-hidden focus:border-indigo-500"
-                              />
-                              {multipleOwnersList.length > 2 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const updated = multipleOwnersList.filter((_, i) => i !== idx);
-                                    setMultipleOwnersList(updated);
-                                  }}
-                                  className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
-                                >
-                                  <X size={12} />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-150">
-                <div className="flex items-center space-x-2.5">
-                  <input
-                    type="checkbox"
-                    id="isBareOwnership"
-                    checked={isBareOwnership}
-                    onChange={(e) => setIsBareOwnership(e.target.checked)}
-                    className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <label htmlFor="isBareOwnership" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-                    Nuda Proprietà (Bare Ownership)
-                  </label>
-                </div>
-
-                <div className="flex flex-col justify-center">
-                  <div className="flex items-center space-x-2.5">
-                    <input
-                      type="checkbox"
-                      id="isCondoConstituted"
-                      checked={isCondoConstituted}
-                      onChange={(e) => setIsCondoConstituted(e.target.checked)}
-                      className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
-                    />
-                    <label htmlFor="isCondoConstituted" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-                      Condominio Costituito
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {isCondoConstituted && (
-                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50 space-y-1.5 animate-fadeIn">
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Condominio & Amministratore Associato *
-                  </label>
-                  <select
-                    value={condominiumId}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "__new__") {
-                        setShowInlineCondoCreate(true);
-                        setInlineCondoName("");
-                        setCondoAddressMismatchWarning(null);
-                        return;
-                      }
-                      setCondominiumId(val);
-                      // CORREZIONE P — un condominio è legato a un edificio fisico: l'indirizzo
-                      // deve coincidere con quello dell'immobile. Se non coincide, avviso subito
-                      // (non blocco del tutto, per non impedire correzioni manuali di refusi minori).
-                      const selectedCondo = condominiums.find(c => c.id === val);
-                      if (selectedCondo?.address && address) {
-                        const a = selectedCondo.address.toLowerCase().trim();
-                        const b = address.toLowerCase().trim();
-                        if (a !== b && !a.includes(b) && !b.includes(a)) {
-                          setCondoAddressMismatchWarning(
-                            `Attenzione: questo condominio risulta all'indirizzo "${selectedCondo.address}", diverso da quello di questo immobile ("${address}"). Un condominio corrisponde a un edificio fisico: verifica di aver selezionato quello giusto.`
-                          );
-                        } else {
-                          setCondoAddressMismatchWarning(null);
-                        }
-                      } else {
-                        setCondoAddressMismatchWarning(null);
-                      }
-                    }}
-                    required={isCondoConstituted}
-                    className="w-full text-sm border border-slate-200 bg-white rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 transition-all font-bold text-slate-800"
-                  >
-                    <option value="">-- Seleziona Condominio --</option>
-                    {condominiums.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.administrator ? `(Amministratore: ${c.administrator})` : ""}
-                      </option>
-                    ))}
-                    <option value="__new__">Crea nuovo condominio per questo immobile…</option>
-                  </select>
-
-                  {condoAddressMismatchWarning && (
-                    <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 mt-1.5 leading-relaxed flex items-start gap-1.5">
-                      <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                      <span>{condoAddressMismatchWarning}</span>
-                    </p>
-                  )}
-
-                  {showInlineCondoCreate && (
-                    <div className="mt-2 p-3 bg-white border border-indigo-200 rounded-xl space-y-2">
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                        Nome Nuovo Condominio
-                      </label>
-                      <input
-                        type="text"
-                        autoFocus
-                        placeholder="Es: Condominio Via Roma 5"
-                        value={inlineCondoName}
-                        onChange={(e) => setInlineCondoName(e.target.value)}
-                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-hidden focus:border-indigo-500"
-                      />
-                      <p className="text-[10px] text-slate-400">
-                        Indirizzo: <strong>{address || "(inserisci prima l'indirizzo dell'immobile qui sopra)"}</strong> — coincide sempre con quello dell'immobile, non modificabile qui.
-                      </p>
-                      <div className="flex justify-end gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setShowInlineCondoCreate(false)}
-                          className="px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 rounded-lg border border-slate-200"
-                        >
-                          Annulla
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (!inlineCondoName.trim() || !address.trim() || !onAddCondominium) {
-                              alert("Inserisci un nome per il condominio (e l'indirizzo dell'immobile qui sopra).");
-                              return;
-                            }
-                            const newId = await onAddCondominium({
-                              name: inlineCondoName.trim(),
-                              address: address.trim()
-                            });
-                            if (newId) {
-                              setCondominiumId(newId);
-                            }
-                            setShowInlineCondoCreate(false);
-                          }}
-                          className="px-3 py-1.5 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
-                        >
-                          Crea e Collega
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {condominiums.length === 0 && !showInlineCondoCreate && (
-                    <p className="text-[10px] text-amber-600">
-                      Nessun condominio esistente nel sistema. Usa "Crea nuovo condominio" qui sopra.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Quota Millesimale ed Utenze */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-4">
-                <div>
-                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1">
-                    Quota Millesimale *
-                  </label>
-                  <p className="text-[10px] text-slate-500 mb-2">Inserisci il valore in millesimi (es. 120 per 120/1000) utilizzato per la ripartizione reale delle spese condominiali.</p>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      max="1000"
-                      value={millesimi}
-                      onChange={(e) => setMillesimi(Number(e.target.value) || 0)}
-                      className="w-32 text-xs border border-slate-200 bg-white rounded-lg px-2.5 py-2 outline-hidden focus:border-indigo-500 font-bold"
-                    />
-                    <span className="text-xs font-mono font-bold text-slate-500">/ 1000 millesimi</span>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-200/60 pt-3">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center space-x-1">
-                    <Zap size={13} className="text-amber-700" />
-                    <span>Gestione Contatori Utenze</span>
-                  </h4>
-                  <p className="text-[10px] text-slate-500 mb-3">Registra i dettagli dei contatori dell'immobile e indica a chi sono intestate le utenze (ON: conduttore, OFF: proprietario).</p>
-
-                  <div className="space-y-4">
-                    {/* Luce Meter */}
-                    <div className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2">
-                      <div className="flex items-center justify-between pb-1.5">
-                        <span className="text-[11px] font-bold text-indigo-700 uppercase flex items-center space-x-1">
-                          <Lightbulb size={12} /> <span>Utenza Luce</span>
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[10px] font-semibold text-slate-500">Intestazione:</span>
-                          <button
-                            type="button"
-                            onClick={() => setLuceActiveFlag(luceActiveFlag === "conduttore" ? "proprietario" : "conduttore")}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
-                              luceActiveFlag === "conduttore"
-                                ? "bg-amber-100 text-amber-800 border border-amber-250 font-black"
-                                : "bg-slate-100 text-slate-700 border border-slate-250 font-bold"
-                            }`}
-                          >
-                            {luceActiveFlag === "conduttore" ? "Conduttore (ON)" : "Proprietario (OFF)"}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">N. Contatore</label>
-                          <input
-                            type="text"
-                            placeholder="Es. IT001E..."
-                            value={luceMeterNo}
-                            onChange={(e) => setLuceMeterNo(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Ultima Lettura</label>
-                          <input
-                            type="number"
-                            placeholder="0"
-                            value={luceLastReading || ""}
-                            onChange={(e) => setLuceLastReading(Number(e.target.value) || 0)}
-                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Data Lettura</label>
-                          <input
-                            type="date"
-                            value={luceReadingDate}
-                            onChange={(e) => setLuceReadingDate(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Gas Meter */}
-                    <div className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2">
-                      <div className="flex items-center justify-between pb-1.5">
-                        <span className="text-[11px] font-bold text-orange-700 uppercase flex items-center space-x-1">
-                          <Flame size={12} /> <span>Utenza Gas</span>
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[10px] font-semibold text-slate-500">Intestazione:</span>
-                          <button
-                            type="button"
-                            onClick={() => setGasActiveFlag(gasActiveFlag === "conduttore" ? "proprietario" : "conduttore")}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
-                              gasActiveFlag === "conduttore"
-                                ? "bg-amber-100 text-amber-800 border border-amber-250 font-black"
-                                : "bg-slate-100 text-slate-700 border border-slate-250 font-bold"
-                            }`}
-                          >
-                            {gasActiveFlag === "conduttore" ? "Conduttore (ON)" : "Proprietario (OFF)"}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">N. Contatore</label>
-                          <input
-                            type="text"
-                            placeholder="Es. IT002G..."
-                            value={gasMeterNo}
-                            onChange={(e) => setGasMeterNo(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Ultima Lettura</label>
-                          <input
-                            type="number"
-                            placeholder="0"
-                            value={gasLastReading || ""}
-                            onChange={(e) => setGasLastReading(Number(e.target.value) || 0)}
-                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Data Lettura</label>
-                          <input
-                            type="date"
-                            value={gasReadingDate}
-                            onChange={(e) => setGasReadingDate(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Acqua Meter */}
-                    <div className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2">
-                      <div className="flex items-center justify-between pb-1.5">
-                        <span className="text-[11px] font-bold text-sky-700 uppercase flex items-center space-x-1">
-                          <Droplets size={12} /> <span>Utenza Acqua</span>
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[10px] font-semibold text-slate-500">Intestazione:</span>
-                          <button
-                            type="button"
-                            onClick={() => setAcquaActiveFlag(acquaActiveFlag === "conduttore" ? "proprietario" : "conduttore")}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
-                              acquaActiveFlag === "conduttore"
-                                ? "bg-amber-100 text-amber-800 border border-amber-250 font-black"
-                                : "bg-slate-100 text-slate-700 border border-slate-250 font-bold"
-                            }`}
-                          >
-                            {acquaActiveFlag === "conduttore" ? "Conduttore (ON)" : "Proprietario (OFF)"}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">N. Contatore</label>
-                          <input
-                            type="text"
-                            placeholder="Es. IT003W..."
-                            value={acquaMeterNo}
-                            onChange={(e) => setAcquaMeterNo(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Ultima Lettura</label>
-                          <input
-                            type="number"
-                            placeholder="0"
-                            value={acquaLastReading || ""}
-                            onChange={(e) => setAcquaLastReading(Number(e.target.value) || 0)}
-                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Data Lettura</label>
-                          <input
-                            type="date"
-                            value={acquaReadingDate}
-                            onChange={(e) => setAcquaReadingDate(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                  </div>
-
-                  {/* CORREZIONE BO — Dati Catastali e Classe Energetica, con scanner */}
-                  <div className="mt-5 pt-4 border-t border-slate-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h5 className="text-xs font-black text-slate-700 uppercase tracking-wider">Dati Catastali & Classe Energetica</h5>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setScannerOpenFor("cadastral")}
-                          disabled={processingScan}
-                          className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-2.5 py-1.5 rounded-lg"
-                        >
-                          {processingScan ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
-                          {processingScan ? "In corso..." : "Fotografa Visura Catastale"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setScannerOpenFor("energy")}
-                          disabled={processingScan}
-                          className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white px-2.5 py-1.5 rounded-lg"
-                        >
-                          {processingScan ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
-                          {processingScan ? "In corso..." : "Fotografa APE"}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Foglio</label>
-                        <input type="text" value={cadastralFoglio} onChange={(e) => setCadastralFoglio(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Particella</label>
-                        <input type="text" value={cadastralParticella} onChange={(e) => setCadastralParticella(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Subalterno</label>
-                        <input type="text" value={cadastralSubalterno} onChange={(e) => setCadastralSubalterno(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Categoria</label>
-                        <input type="text" placeholder="A/3" value={cadastralCategoria} onChange={(e) => setCadastralCategoria(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Vani Catastali</label>
-                        <input type="text" value={cadastralVani} onChange={(e) => setCadastralVani(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Classe</label>
-                        <input type="text" value={cadastralClasse} onChange={(e) => setCadastralClasse(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Rendita Catastale €</label>
-                        <input type="text" value={cadastralRendita} onChange={(e) => setCadastralRendita(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Piano</label>
-                        <input type="text" value={cadastralPiano} onChange={(e) => setCadastralPiano(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Classe Energetica</label>
-                        <input type="text" placeholder="F" value={energyClasse} onChange={(e) => setEnergyClasse(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">IPE Globale</label>
-                        <input type="text" placeholder="201.48 KWh/mq anno" value={energyIpe} onChange={(e) => setEnergyIpe(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Scadenza APE</label>
-                        <input type="date" value={energyExpiry} onChange={(e) => setEnergyExpiry(e.target.value)} className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-hidden focus:border-indigo-500" />
-                      </div>
-                    </div>
-                    {propertyDocuments.length > 0 && (
-                      <div className="pt-1.5 border-t border-slate-200 space-y-1">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Documenti conservati agli atti</p>
-                        {propertyDocuments.map(doc => (
-                          <a key={doc.id} href={doc.storageLink || "#"} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-indigo-600 hover:underline truncate">
-                            <Paperclip size={10} className="shrink-0 text-slate-600" />
-                            <span className="truncate">{doc.category} — {doc.fileName}</span>
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Note Addizionali
-                </label>
-                <textarea
-                  placeholder="Annotazioni catastali, impianti, dettagli interni, spese..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 transition-all"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end space-x-3 border-t border-slate-50">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
-                >
-                  Annulla
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
-                >
-                  Salva
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {editPropertyModal}
 
       {/* CORREZIONE BO — Scanner per Visura Catastale / APE */}
       <DocumentScanner
