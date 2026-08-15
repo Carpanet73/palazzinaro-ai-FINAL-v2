@@ -1895,6 +1895,19 @@ export default function App() {
         taxRegime: data.taxRegime,
         f24OwnerSplitPct: data.f24OwnerSplitPct,
         documents: data.documents,
+        // CORREZIONE CQ (15/08/2026) — BUG REALE CONFERMATO (sospettato da Massimo): il
+        // Deposito Cauzionale era reso obbligatorio nel modulo (ContractsView.tsx) ma non
+        // veniva MAI scritto qui sul documento Contract in Firestore — restava solo nel
+        // valore di ritorno usato per riaprire il wizard del Verbale di Consegna, mai
+        // persistito. La scheda di dettaglio contratto (selectedContract.securityDepositAmount)
+        // risultava quindi sempre vuota per ogni contratto creato da questo flusso.
+        securityDepositAmount: data.securityDepositAmount,
+        securityDepositMonths: data.securityDepositMonths,
+        // Onboarding contratti già in essere con arretrati pregressi (15/08/2026)
+        signingDate: data.signingDate,
+        isPreExisting: data.isPreExisting || false,
+        contractType: data.contractType,
+        securityDepositWaived: data.securityDepositWaived,
         userId: user.uid,
         createdAt: serverTimestamp()
       }));
@@ -2034,6 +2047,10 @@ export default function App() {
         tenantId: finalTenantId,
         tenantName: finalTenantName,
         ownerName: data.ownerName,
+        rentAmount: data.rentAmount,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        isPreExisting: data.isPreExisting || false,
         securityDepositAmount: data.securityDepositAmount
       };
     } catch (error) {
@@ -3569,6 +3586,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             lawyers={lawyers}
             maintenance={maintenance}
             insurancePolicies={insurancePolicies}
+            deliveryReports={deliveryReports}
             setCurrentSection={setCurrentSection}
             userName={user?.displayName || "Gestore Immobili"}
             onSeedDemoData={handleSeedDemoData}

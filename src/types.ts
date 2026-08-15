@@ -355,6 +355,28 @@ export interface Contract {
   // CORREZIONE CA — TASK 1 (verbale di consegna tracciato, non bloccante): true finché
   // il Verbale di Consegna non viene compilato dopo la creazione del contratto.
   deliveryReportPending?: boolean;
+  // CORREZIONE CQ (15/08/2026) — Onboarding contratti già in essere con arretrati pregressi.
+  // `contractType` è VARIABILE SOLO per i contratti marcati `isPreExisting: true`: per un
+  // contratto nuovo a regime resta sempre il vincolo di legge (4+4 per l'abitativo), quindi
+  // per i contratti nuovi questo campo non altera la durata reale, serve solo a classificare
+  // correttamente quale promemoria contrattuale applicare (comunicazione Agenzia Entrate per
+  // cedolare secca vs registrazione annuale F24 per ordinaria, entrambi legati storicamente
+  // a un'assunzione implicita di 4 anni che va invece derivata da questo campo + endDate).
+  contractType?: "Abitativo4+4" | "Transitorio" | "Commerciale6+6" | "Altro";
+  // Data di stipula (firma dell'atto) — DISTINTA dalla decorrenza legale (`startDate`).
+  // Usata per ancorare il promemoria di registrazione entro 30gg, invece della data di
+  // inserimento a sistema (`createdAt`), che non ha alcun significato legale.
+  signingDate?: string; // YYYY-MM-DD
+  // true per un contratto inserito tramite la procedura guidata dedicata ai rapporti già in
+  // essere (PreExistingContractWizard.tsx) con un saldo pregresso — NON un contratto nuovo.
+  // Determina: (a) `contractType` diventa un campo variabile invece che vincolato al 4+4 di
+  // legge, (b) il Verbale di Consegna non viene mai richiesto (il rapporto è già in corso),
+  // (c) l'eccezione `securityDepositWaived` diventa disponibile.
+  isPreExisting?: boolean;
+  // Eccezione al deposito cauzionale obbligatorio, disponibile SOLO per `isPreExisting`:
+  // registra il fatto storico legittimo "rapporto già in corso, deposito non versato/non
+  // dovuto" (es. inquilini da decenni mai stati soggetti a deposito) — non un dato mancante.
+  securityDepositWaived?: boolean;
 }
 
 export interface CondoRate {
@@ -477,6 +499,15 @@ export interface FastClosingItem {
   // Questi due campi sostituiscono quel parsing con dati strutturati:
   groupLabel?: string;      // testo libero della voce originale (es. "Rata Ordinaria Ottobre"), per la UI
   expenseGroupKey?: string; // stesso valore su tutte le righe che fanno parte della stessa spesa/evento
+  // CORREZIONE CQ (15/08/2026) — Onboarding contratti già in essere: marca una riga creata
+  // dalla procedura guidata `PreExistingContractWizard.tsx` (arretrati pregressi inseriti a
+  // mano da Massimo), da distinguere SEMPRE visivamente (badge "Inserimento Manuale", colore
+  // dedicato) da quelle generate automaticamente dal normale ciclo contrattuale — in tutti i
+  // mastrini dove la riga può comparire. `dueDate` su queste righe è la vera scadenza storica
+  // (mai la data di inserimento a sistema): compare comunque nel Fast Closing correntemente
+  // aperto perché `monthFilteredItems` in FastClosingView.tsx include già, per costruzione,
+  // ogni voce Pending/Overdue con `dueDate` nel passato — nessun trucco di data necessario.
+  isManualBacklogEntry?: boolean;
 }
 
 export interface Reminder {
