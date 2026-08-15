@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, addDoc, updateDoc, doc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, Mail, CheckCircle2 } from "lucide-react";
 import { db } from "../firebase";
-import { Contract, DeliveryReport, DeliveryReportItem } from "../types";
+import { Contract, DeliveryReport, DeliveryReportItem, OwnerProfile } from "../types";
+import { useOtpVerification, isEmailJsConfigured } from "../hooks/useOtpVerification";
 
 // Data nel fuso locale (NO UTC: in Italia dopo le 22 darebbe il giorno prima).
 function todayLocalISO(): string {
@@ -42,9 +43,15 @@ interface Props {
   showSuccess: (msg: string) => void;
   onClose: () => void;
   onSaved: (reportId: string) => void;
+  // CORREZIONE CN (task #50/#57) — generalizzazione OTP: entrambi opzionali, per
+  // compatibilità con eventuali altri chiamanti futuri che non li passano ancora.
+  // Quando assenti/non configurati, il comportamento resta quello di sempre (nome
+  // digitato + checkbox, nessuna verifica OTP) — nessuna regressione.
+  ownerProfile?: OwnerProfile | null;
+  tenantEmail?: string;
 }
 
-export default function DeliveryReportWizard({ mode, contract, user, showSuccess, onClose, onSaved }: Props) {
+export default function DeliveryReportWizard({ mode, contract, user, showSuccess, onClose, onSaved, ownerProfile, tenantEmail }: Props) {
   const isRiconsegna = mode === "riconsegna";
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -60,6 +67,46 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
   const [damagesDescription, setDamagesDescription] = useState("");
   const [estimatedDamages, setEstimatedDamages] = useState<number>(0);
   const [closeContract, setCloseContract] = useState(true);
+
+  // CORREZIONE CN (task #50/#57) — verifica OTP via email per le firme, stesso hook
+  // condiviso già usato per la disdetta anticipata in ContractsView.tsx. Opzionale:
+  // se email/credenziali EmailJS non sono disponibili per una parte, si procede come
+  // sempre con solo nome + checkbox per quella parte (nessuna regressione).
+  const emailCreds = { serviceId: ownerProfile?.emailServiceId, templateId: ownerProfile?.emailTemplateId, publicKey: ownerProfile?.emailPublicKey };
+  const emailCredsConfigured = isEmailJsConfigured(emailCreds);
+  const ownerOtp = useOtpVerification();
+  const tenantOtp = useOtpVerification();
+  const ownerEmailAvailable = emailCredsConfigured && !!ownerProfile?.email;
+  const tenantEmailAvailable = emailCredsConfigured && !!tenantEmail;
+  const ownerOtpOk = !ownerEmailAvailable || ownerOtp.verified;
+  const tenantOtpOk = !tenantEmailAvailable || tenantOtp.verified;
+
+  const sendOwnerOtp = async () => {
+    if (!ownerProfile?.email) return;
+    const result = await ownerOtp.sendOtp(emailCreds, { email: ownerProfile.email, name: ownerProfile.name || "Proprietario" }, {
+      subject: `Codice di verifica — Verbale di ${isRiconsegna ? "Riconsegna" : "Consegna"} Immobile`,
+      contextLine: `Codice di verifica per confermare la firma del Verbale di ${isRiconsegna ? "Riconsegna" : "Consegna"} per l'immobile ${contract.propertyName || ""}`,
+    });
+    if (result.ok) alert(`Codice di verifica inviato a ${ownerProfile.email}.`);
+    else alert(`Errore nell'invio del codice via EmailJS:\n${result.error}`);
+  };
+  const verifyOwnerOtp = () => {
+    const result = ownerOtp.verifyOtp();
+    if (!result.ok) alert(result.error);
+  };
+  const sendTenantOtp = async () => {
+    if (!tenantEmail) return;
+    const result = await tenantOtp.sendOtp(emailCreds, { email: tenantEmail, name: tenantName || "Conduttore" }, {
+      subject: `Codice di verifica — Verbale di ${isRiconsegna ? "Riconsegna" : "Consegna"} Immobile`,
+      contextLine: `Codice di verifica per confermare la firma del Verbale di ${isRiconsegna ? "Riconsegna" : "Consegna"} per l'immobile ${contract.propertyName || ""}`,
+    });
+    if (result.ok) alert(`Codice di verifica inviato a ${tenantEmail}.`);
+    else alert(`Errore nell'invio del codice via EmailJS:\n${result.error}`);
+  };
+  const verifyTenantOtp = () => {
+    const result = tenantOtp.verifyOtp();
+    if (!result.ok) alert(result.error);
+  };
 
   // Recupero verbale di consegna iniziale (TASK 2a): prima contractId, fallback
   // propertyId (legacy). Filtro type client-side per evitare indici compositi.
@@ -111,7 +158,7 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
   const addRow = () => setChecklist((prev) => [...prev, { id: `item_new_${Date.now()}`, item: "", status: "Buono", notes: "" }]);
   const removeRow = (id: string) => setChecklist((prev) => prev.filter((it) => it.id !== id));
 
-  const firmeOk = ownerSigned && tenantSigned && ownerName.trim() && tenantName.trim();
+  const firmeOk = !!(ownerSigned && tenantSigned && ownerName.trim() && tenantName.trim() && ownerOtpOk && tenantOtpOk);
   const danniOk = !hasDamages || damagesDescription.trim().length > 0;
 
   const handleConfirm = async () => {
@@ -133,6 +180,8 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
           signatures: {
             ownerSigned, ownerSignatureData: ownerName.trim(), ownerSignedAt: ownerSigned ? nowIso : undefined,
             tenantSigned, tenantSignatureData: tenantName.trim(), tenantSignedAt: tenantSigned ? nowIso : undefined,
+            ownerOtpVerifiedAt: ownerOtp.verified ? nowIso : undefined,
+            tenantOtpVerifiedAt: tenantOtp.verified ? nowIso : undefined,
           },
           documentName: `Verbale_${mode}_${(contract.tenantName || "inquilino").replace(/\s+/g, "_")}_${reportDate}.pdf`,
           hasDamages: isRiconsegna ? hasDamages : undefined,
@@ -317,6 +366,24 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
                     <input type="checkbox" checked={ownerSigned} onChange={(e) => setOwnerSigned(e.target.checked)} />
                     Il locatore conferma e firma
                   </label>
+                  {ownerEmailAvailable && (
+                    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                      <p className="mb-1 text-[10px] font-black uppercase text-slate-500">Verifica via codice email ({ownerProfile!.email})</p>
+                      {!ownerOtp.sent ? (
+                        <button type="button" disabled={ownerOtp.sending} onClick={sendOwnerOtp} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-40">
+                          <Mail size={10} /> {ownerOtp.sending ? "Invio…" : "Invia codice"}
+                        </button>
+                      ) : ownerOtp.verified ? (
+                        <p className="flex items-center gap-1 text-[10px] font-bold text-emerald-700"><CheckCircle2 size={11} /> Codice verificato.</p>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <input type="text" value={ownerOtp.input} onChange={(e) => ownerOtp.setInput(e.target.value)} className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" placeholder="Codice" />
+                          <button type="button" onClick={verifyOwnerOtp} className="rounded-lg bg-indigo-600 px-2 py-1.5 text-[10px] font-bold text-white hover:bg-indigo-700">Verifica</button>
+                          <button type="button" onClick={sendOwnerOtp} className="rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-500 hover:bg-slate-100">Rinvia</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className={LABEL}>Firma Conduttore (nome e cognome)</label>
@@ -325,6 +392,24 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
                     <input type="checkbox" checked={tenantSigned} onChange={(e) => setTenantSigned(e.target.checked)} />
                     Il conduttore conferma e firma
                   </label>
+                  {tenantEmailAvailable && (
+                    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                      <p className="mb-1 text-[10px] font-black uppercase text-slate-500">Verifica via codice email ({tenantEmail})</p>
+                      {!tenantOtp.sent ? (
+                        <button type="button" disabled={tenantOtp.sending} onClick={sendTenantOtp} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-40">
+                          <Mail size={10} /> {tenantOtp.sending ? "Invio…" : "Invia codice"}
+                        </button>
+                      ) : tenantOtp.verified ? (
+                        <p className="flex items-center gap-1 text-[10px] font-bold text-emerald-700"><CheckCircle2 size={11} /> Codice verificato.</p>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <input type="text" value={tenantOtp.input} onChange={(e) => tenantOtp.setInput(e.target.value)} className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" placeholder="Codice" />
+                          <button type="button" onClick={verifyTenantOtp} className="rounded-lg bg-indigo-600 px-2 py-1.5 text-[10px] font-bold text-white hover:bg-indigo-700">Verifica</button>
+                          <button type="button" onClick={sendTenantOtp} className="rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-500 hover:bg-slate-100">Rinvia</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

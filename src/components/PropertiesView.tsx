@@ -5,6 +5,7 @@ import { uploadDocumentToStorage } from "../lib/documentUpload";
 import { formatLedgerLabel } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import LedgerExportToolbar from "./LedgerExportToolbar";
+import ManualBacklogBadge from "./ManualBacklogBadge";
 import { LedgerColumn } from "../lib/ledgerExport";
 import {
   Plus,
@@ -1858,7 +1859,7 @@ export default function PropertiesView({
                             {new Date(debt.dueDate).toLocaleDateString("it-IT")}
                           </td>
                           <td className="py-2.5 font-medium text-slate-800 leading-snug">
-                            {debt.title}
+                            {debt.title} {debt.isManualBacklogEntry && <ManualBacklogBadge className="ml-1 align-middle" />}
                           </td>
                           <td className="py-2.5">
                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider ${
@@ -1967,7 +1968,7 @@ export default function PropertiesView({
                       {regCosts.map(cost => (
                         <tr key={cost.id} className="hover:bg-slate-50/50">
                           <td className="py-2.5 font-medium text-slate-800 leading-snug">
-                            {cost.title}
+                            {cost.title} {cost.isManualBacklogEntry && <ManualBacklogBadge className="ml-1 align-middle" />}
                             <span className="block text-[8px] text-slate-400 mt-0.5 uppercase font-mono">Scadenza: {new Date(cost.dueDate).toLocaleDateString("it-IT")}</span>
                           </td>
                           <td className="py-2.5 text-right font-black text-slate-900">
@@ -2144,7 +2145,7 @@ export default function PropertiesView({
                                     {new Date(debt.dueDate).toLocaleDateString("it-IT")}
                                   </td>
                                   <td className="py-2.5 font-medium text-slate-800">
-                                    <div className="font-bold text-slate-900">{debt.title}</div>
+                                    <div className="font-bold text-slate-900">{debt.title} {debt.isManualBacklogEntry && <ManualBacklogBadge className="ml-1 align-middle" />}</div>
                                     <div className="text-[10px] text-slate-400 font-normal flex items-center gap-1.5 mt-0.5">
                                       <span className={`inline-flex items-center gap-1 px-1 py-0.2 rounded text-[8px] uppercase tracking-wider ${
                                         isTenant

@@ -7,6 +7,7 @@ import { uploadDocumentToStorage } from "../lib/documentUpload";
 import { formatLedgerLabel, formatLedgerDate } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import LedgerExportToolbar from "./LedgerExportToolbar";
+import ManualBacklogBadge from "./ManualBacklogBadge";
 import { LedgerColumn } from "../lib/ledgerExport";
 import {
   Plus,
@@ -463,7 +464,8 @@ export default function TenantsView({
         description: item.description || "Rata canone d'affitto pattuito",
         amount: item.amount,
         status: item.status, // Paid, Pending, Overdue
-        source: "fastClosing"
+        source: "fastClosing",
+        isManualBacklogEntry: item.isManualBacklogEntry
       });
     });
 
@@ -498,7 +500,8 @@ export default function TenantsView({
           description: item.description || "Oneri accessori di condominio",
           amount: item.amount,
           status: item.status,
-          source: "fastClosing"
+          source: "fastClosing",
+          isManualBacklogEntry: item.isManualBacklogEntry
         });
       });
     }
@@ -606,7 +609,8 @@ export default function TenantsView({
         description: item.description || "Quota manutenzione ripartita a carico inquilino",
         amount: item.amount,
         status: item.status,
-        source: "fastClosing"
+        source: "fastClosing",
+        isManualBacklogEntry: item.isManualBacklogEntry
       });
     });
 
@@ -1332,7 +1336,7 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                                 <span>{m.categoryLabel}</span>
                               </span>
                             </div>
-                            <span className="font-extrabold text-slate-900 block leading-tight" style={{ fontSize: `${ledgerScale * 13}px` }}>{m.title}</span>
+                            <span className="font-extrabold text-slate-900 block leading-tight" style={{ fontSize: `${ledgerScale * 13}px` }}>{m.title} {m.isManualBacklogEntry && <ManualBacklogBadge className="ml-1 align-middle" />}</span>
                             <span className="text-slate-500 block font-normal leading-normal" style={{ fontSize: `${ledgerScale * 10}px`, marginTop: `${ledgerScale * 2}px` }}>{m.description}</span>
                           </td>
                           {/* DOVUTO (Doveva Dare) */}
@@ -1400,7 +1404,7 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
                     {futureMovements.map((m, idx) => (
                       <tr key={`future-${m.id}-${idx}`} className="text-slate-500">
                         <td className="py-1.5 pr-3 whitespace-nowrap">{formatLedgerDate(m.date, m)}</td>
-                        <td className="py-1.5 pr-3">{m.title}</td>
+                        <td className="py-1.5 pr-3">{m.title} {m.isManualBacklogEntry && <ManualBacklogBadge className="ml-1" />}</td>
                         <td className="py-1.5 pr-3 text-right font-bold">€{m.amount.toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
                       </tr>
                     ))}

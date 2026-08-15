@@ -36,6 +36,7 @@ import {
 import { FastClosingItem, BankMovement, Tenant, Property, LegalCase, Reminder, Owner, Contract, DeliveryReport, Lawyer } from "../types";
 import { formatLedgerLabel, ITALIAN_MONTHS_FULL, formatLedgerDate } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
+import ManualBacklogBadge from "./ManualBacklogBadge";
 import LedgerExportToolbar from "./LedgerExportToolbar";
 import { LedgerColumn } from "../lib/ledgerExport";
 
@@ -53,7 +54,10 @@ interface FastClosingViewProps {
   lawyers?: Lawyer[]; // CORREZIONE AU
   onSendItemDirectlyToLawyer?: (item: FastClosingItem, legalCase: LegalCase, lawyer: Lawyer) => Promise<void>; // CORREZIONE AU
   reminders?: Reminder[];
-  onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">) => Promise<void>;
+  // CORREZIONE CQ (15/08/2026, seguito) — ora Promise<string | void> (l'id del documento
+  // creato, usato dal wizard PreExistingContractWizard.tsx); questa vista continua a non
+  // usare il valore di ritorno, nessun cambiamento di comportamento qui.
+  onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">, silent?: boolean) => Promise<string | void>;
   onUpdateClosingItemStatus: (id: string, status: "Pending" | "Paid" | "Overdue" | "Cancelled") => Promise<void>;
   // Come onUpdateClosingItemStatus, ma senza l'effetto collaterale di creare/agganciare un
   // Sollecito — usato solo dove il Sollecito consolidato per debitore viene già gestito a
@@ -1400,6 +1404,7 @@ export default function FastClosingView({
                                     Inquilino Critico
                                   </span>
                                 )}
+                                {item.isManualBacklogEntry && <ManualBacklogBadge />}
                               </div>
                               {item.description && (
                                 isHandled ? (
@@ -1663,7 +1668,7 @@ export default function FastClosingView({
                             />
                             <div>
                               <span className="text-xs text-slate-900 block leading-tight">
-                                {item.title} {isRent && <span className="text-[8px] bg-indigo-100 text-indigo-800 font-extrabold rounded px-1 ml-1 font-mono">CANONE PRIORITARIO</span>}
+                                {item.title} {isRent && <span className="text-[8px] bg-indigo-100 text-indigo-800 font-extrabold rounded px-1 ml-1 font-mono">CANONE PRIORITARIO</span>} {item.isManualBacklogEntry && <ManualBacklogBadge className="ml-1" />}
                               </span>
                               <span className="text-[8px] text-slate-400 font-mono">Scad. {formatLedgerDate(item.dueDate, item)}</span>
                             </div>

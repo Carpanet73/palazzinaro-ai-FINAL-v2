@@ -37,6 +37,7 @@ import { Property, Tenant, Contract, FastClosingItem, Reminder, LegalCase, AppSe
 import { getTenantClassification } from "../lib/statusHelper";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import LedgerExportToolbar from "./LedgerExportToolbar";
+import ManualBacklogBadge from "./ManualBacklogBadge";
 import { LedgerColumn } from "../lib/ledgerExport";
 import { formatMonthYear } from "../lib/ledgerLabel";
 
@@ -254,7 +255,8 @@ export default function OwnersView({
             amount: item.amount,
             status: item.status, // Paid, Pending, Overdue, Cancelled
             type: reconciliationType,
-            notes: notes
+            notes: notes,
+            isManualBacklogEntry: item.isManualBacklogEntry
           });
         }
       });
@@ -1771,7 +1773,7 @@ export default function OwnersView({
                                   )}
                                 </td>
                                 <td className="p-3 border border-slate-300 font-semibold text-slate-800">
-                                  {item.description}
+                                  {item.description} {item.isManualBacklogEntry && <ManualBacklogBadge className="ml-1 align-middle" />}
                                   {item.notes && <span className="block text-[10px] text-slate-400 font-normal mt-0.5">{item.notes}</span>}
                                 </td>
                                 <td className="p-3 border border-slate-300 font-black text-slate-900">
@@ -1855,7 +1857,7 @@ export default function OwnersView({
                                     )}
                                   </td>
                                   <td className="p-3 border border-slate-300 font-semibold text-slate-800">
-                                    {item.description}
+                                    {item.description} {item.isManualBacklogEntry && <ManualBacklogBadge className="ml-1 align-middle" />}
                                     {item.notes && <span className="block text-[10px] text-slate-400 font-normal mt-0.5">{item.notes}</span>}
                                   </td>
                                   <td className="p-3 border border-slate-300 font-black text-slate-900">
@@ -1928,7 +1930,7 @@ export default function OwnersView({
                                   )}
                                 </td>
                                 <td className="p-3 border border-slate-300 font-semibold text-slate-800">
-                                  {item.description}
+                                  {item.description} {item.isManualBacklogEntry && <ManualBacklogBadge className="ml-1 align-middle" />}
                                   {item.notes && <span className="block text-[10px] text-slate-400 font-normal mt-0.5">{item.notes}</span>}
                                 </td>
                                 <td className="p-3 border border-slate-300 font-black text-slate-900">
@@ -1990,7 +1992,7 @@ export default function OwnersView({
                                   )}
                                 </td>
                                 <td className="p-3 border border-slate-300 font-semibold text-slate-800">
-                                  {item.description}
+                                  {item.description} {item.isManualBacklogEntry && <ManualBacklogBadge className="ml-1 align-middle" />}
                                   {item.notes && <span className="block text-[10px] text-slate-400 font-normal mt-0.5">{item.notes}</span>}
                                 </td>
                                 <td className="p-3 border border-slate-300 font-black text-slate-900">
@@ -2133,7 +2135,7 @@ export default function OwnersView({
                                   {item.category === "Canoni" ? formatMonthYear(item.dueDate) : new Date(item.dueDate).toLocaleDateString("it-IT")}
                                 </td>
                                 <td className="p-2 border border-slate-200">{item.category}</td>
-                                <td className="p-2 border border-slate-200">{item.description}</td>
+                                <td className="p-2 border border-slate-200">{item.description} {item.isManualBacklogEntry && <ManualBacklogBadge className="ml-1" />}</td>
                                 <td className="p-2 border border-slate-200 font-bold">
                                   €{item.amount.toLocaleString("it-IT")}
                                 </td>

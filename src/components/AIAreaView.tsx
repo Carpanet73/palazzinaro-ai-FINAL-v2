@@ -32,7 +32,9 @@ interface AIAreaViewProps {
   onAddCondominium: (condo: any) => Promise<void>;
   onAddMovement: (movement: any) => Promise<void>;
   onAddReminder: (reminder: any) => Promise<void>;
-  onAddClosingItem: (item: any) => Promise<void>;
+  // CORREZIONE CQ (15/08/2026, seguito) — ora Promise<string | void>, vedi App.tsx
+  // handleAddClosingItem; questa vista continua a non usare il valore di ritorno.
+  onAddClosingItem: (item: any, silent?: boolean) => Promise<string | void>;
   setCurrentSection: (section: AppSection) => void;
 }
 

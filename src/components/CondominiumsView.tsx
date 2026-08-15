@@ -12,6 +12,7 @@ import { Condominium, CondoRate, Property, Tenant, Owner, FastClosingItem, Admin
 import { formatLedgerLabel } from "../lib/ledgerLabel";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import LedgerExportToolbar from "./LedgerExportToolbar";
+import ManualBacklogBadge from "./ManualBacklogBadge";
 import { LedgerColumn } from "../lib/ledgerExport";
 
 interface CondominiumsViewProps {
@@ -33,7 +34,9 @@ interface CondominiumsViewProps {
   onEditCondominium: (id: string, condo: Partial<Condominium>) => Promise<void>;
   onDeleteCondominium: (id: string) => Promise<void>;
   onEditProperty?: (id: string, data: any) => Promise<void>; // CORREZIONE Q — drag&drop Immobile→Condominio
-  onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">) => Promise<void>;
+  // CORREZIONE CQ (15/08/2026, seguito) — ora Promise<string | void>, vedi App.tsx
+  // handleAddClosingItem; questa vista continua a non usare il valore di ritorno.
+  onAddClosingItem: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">, silent?: boolean) => Promise<string | void>;
   setCurrentSection?: (section: any) => void;
   setSelectedTenantIdForLedger?: (id: string | null) => void;
   // CORREZIONE E — consente al tasto flottante globale di aprire QUESTA stessa procedura
@@ -1821,7 +1824,7 @@ export default function CondominiumsView({
                                     {new Date(move.dueDate).toLocaleDateString("it-IT")}
                                   </td>
                                   <td className="py-1 px-2 border border-slate-300 font-semibold text-slate-800">
-                                    {move.title}
+                                    {move.title} {move.isManualBacklogEntry && <ManualBacklogBadge className="ml-1 align-middle" />}
                                   </td>
                                   <td className="py-1 px-2 border border-slate-300 text-right font-black font-mono text-slate-900">
                                     €{move.amount.toFixed(2)}

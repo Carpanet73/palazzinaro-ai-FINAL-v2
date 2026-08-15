@@ -28,6 +28,7 @@ import emailjs from "@emailjs/browser";
 import LedgerExportToolbar from "./LedgerExportToolbar";
 import { LedgerColumn } from "../lib/ledgerExport";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
+import ManualBacklogBadge from "./ManualBacklogBadge";
 
 interface RemindersViewProps {
   reminders: Reminder[];
@@ -1220,7 +1221,7 @@ export default function RemindersView({
                           />
                           <div>
                             <span className="text-xs text-slate-900 block leading-tight">
-                              {item.title} {isRent && <span className="text-[8px] bg-indigo-100 text-indigo-800 font-extrabold rounded px-1 ml-1 font-mono">CANONE PRIORITARIO</span>}
+                              {item.title} {isRent && <span className="text-[8px] bg-indigo-100 text-indigo-800 font-extrabold rounded px-1 ml-1 font-mono">CANONE PRIORITARIO</span>} {item.isManualBacklogEntry && <ManualBacklogBadge className="ml-1" />}
                             </span>
                             <span className="text-[8px] text-slate-400 font-mono">Scad. {new Date(item.dueDate).toLocaleDateString("it-IT")}</span>
                           </div>
@@ -1397,7 +1398,7 @@ export default function RemindersView({
                           }
                           return associated.map(item => (
                             <div key={item.id} className="flex justify-between text-slate-700">
-                              <span>• {item.title.split(" - ")[1] || item.title}</span>
+                              <span>• {item.title.split(" - ")[1] || item.title} {item.isManualBacklogEntry && <ManualBacklogBadge className="ml-1" />}</span>
                               <span className="font-bold text-slate-900">€{item.amount.toFixed(2)}</span>
                             </div>
                           ));

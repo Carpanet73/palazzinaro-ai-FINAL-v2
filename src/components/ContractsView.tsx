@@ -8,13 +8,15 @@ import {
   Search, Handshake, Building2, Calculator, Files, Download,
   FolderOpen, PenLine, Home, Wand2, Camera, Clock, Image
 } from "lucide-react";
-import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner, FastClosingItem, OwnerProfile } from "../types";
+import { Contract, Property, Tenant, Condominium, AppSection, DeliveryReport, Owner, FastClosingItem, OwnerProfile, Reminder, LegalCase } from "../types";
 import ContractGeneratorWizard from "./ContractGeneratorWizard";
 import DeliveryReportWizard from "./DeliveryReportWizard";
+import PreExistingContractWizard from "./PreExistingContractWizard";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 import LedgerExportToolbar from "./LedgerExportToolbar";
 import { LedgerColumn } from "../lib/ledgerExport";
 import emailjs from "@emailjs/browser";
+import { useOtpVerification } from "../hooks/useOtpVerification";
 import { generateDisdettaAnticipataPDF } from "../lib/pdfHelper";
 import {
   EARLY_TERMINATION_REASON_LABELS,
@@ -38,6 +40,14 @@ interface ContractsViewProps {
   deliveryReports?: DeliveryReport[];
   // CORREZIONE BX — per il Mastrino Contabile (canoni e scadenze) nella pagina di dettaglio
   fastClosing?: FastClosingItem[];
+  // CORREZIONE CQ (15/08/2026, seguito) — task #54: servono a PreExistingContractWizard per
+  // creare le righe arretrate e agganciarle (o crearle) sul Sollecito del debitore, con lo
+  // stesso schema già usato da FastClosingView → handleConfirmCloseFastClosing.
+  reminders?: Reminder[];
+  legalCases?: LegalCase[];
+  onAddClosingItem?: (item: Omit<FastClosingItem, "id" | "userId" | "createdAt">, silent?: boolean) => Promise<string | void>;
+  onAddReminder?: (data: any) => Promise<void>;
+  onUpdateReminderStatus?: (id: string, status: string, notes?: string, extraFields?: any) => Promise<void>;
   // CORREZIONE CA — TASK 1: ora restituisce il contratto creato (Promise<any>),
   // serve per aprire subito il Verbale di Consegna tracciato con i dati giusti.
   onAddContract: (
@@ -79,6 +89,11 @@ export default function ContractsView({
   owners = [],
   deliveryReports = [],
   fastClosing = [],
+  reminders = [],
+  legalCases = [],
+  onAddClosingItem,
+  onAddReminder,
+  onUpdateReminderStatus,
   onAddContract,
   onEditContract,
   onEarlyTerminateContract,
@@ -210,16 +225,12 @@ export default function ContractsView({
   }>({ party: "Locatore", reason: "", reasonFreeText: "", date: new Date().toISOString().split("T")[0], notes: "", noticeAck: false });
   // Bozza della comunicazione (step 2), precompilata e poi modificabile a mano.
   const [disdettaLetterDraft, setDisdettaLetterDraft] = useState("");
-  // Step 3: parola di conferma + verifica OTP via email (CORREZIONE CL)
+  // Step 3: parola di conferma + verifica OTP via email (CORREZIONE CL). CORREZIONE CN
+  // (task #50/#57) — l'OTP ora usa l'hook condiviso `useOtpVerification`, riusabile
+  // anche altrove nell'app (es. firma del Verbale di Consegna), invece di una logica
+  // locale cablata solo qui.
   const [disdettaConfirmWord, setDisdettaConfirmWord] = useState("");
-  const [disdettaOtp, setDisdettaOtp] = useState<{
-    code: string;
-    expiresAt: number;
-    sent: boolean;
-    verified: boolean;
-    input: string;
-    sending: boolean;
-  }>({ code: "", expiresAt: 0, sent: false, verified: false, input: "", sending: false });
+  const disdettaOtpHook = useOtpVerification();
   const [disdettaSubmitting, setDisdettaSubmitting] = useState(false);
 
   // Preavviso minimo di legge: 6 mesi. Vale in modo stringente solo per il recesso del
@@ -926,7 +937,7 @@ export default function ContractsView({
                 setDisdettaForm({ party: "Locatore", reason: "", reasonFreeText: "", date: new Date().toISOString().split("T")[0], notes: "", noticeAck: false });
                 setDisdettaLetterDraft("");
                 setDisdettaConfirmWord("");
-                setDisdettaOtp({ code: "", expiresAt: 0, sent: false, verified: false, input: "", sending: false });
+                disdettaOtpHook.reset();
                 setDisdettaWizardStep(1);
               }}
               className="inline-flex items-center space-x-2 bg-rose-50 hover:bg-rose-100 text-rose-800 font-extrabold px-4 py-2.5 rounded-xl text-xs transition-colors border-2 border-rose-150 shadow-sm cursor-pointer self-start"
@@ -1848,48 +1859,34 @@ export default function ContractsView({
         {disdettaWizardStep === 3 && (() => {
           const emailConfigured = !!(ownerProfile?.emailServiceId && ownerProfile?.emailTemplateId && ownerProfile?.emailPublicKey);
           const emailAvailable = emailConfigured && !!ownerProfile?.email;
+          // CORREZIONE CN — shadow locale sull'hook condiviso, per non toccare il resto
+          // della JSX sottostante (che referenzia disdettaOtp.sent/verified/sending/input
+          // esattamente come prima del refactor).
+          const disdettaOtp = disdettaOtpHook;
           const otpOk = !emailAvailable || disdettaOtp.verified;
           const wordOk = disdettaConfirmWord.trim().toUpperCase() === "CONFERMO";
           const canConfirm = wordOk && otpOk && !disdettaSubmitting;
 
           const sendOtp = async () => {
             if (!ownerProfile?.email) return;
-            const code = String(Math.floor(100000 + Math.random() * 900000));
-            const expiresAt = Date.now() + 10 * 60 * 1000;
-            setDisdettaOtp({ ...disdettaOtp, sending: true });
-            try {
-              await emailjs.send(
-                ownerProfile!.emailServiceId!,
-                ownerProfile!.emailTemplateId!,
-                {
-                  to_email: ownerProfile!.email,
-                  tenant_name: ownerProfile!.name || "Proprietario",
-                  subject: "Codice di verifica — Risoluzione Anticipata Contratto",
-                  message: `Codice di verifica per confermare la disdetta anticipata del contratto con ${selectedContract.tenantName}: ${code}\n\nIl codice è valido per 10 minuti. Se non hai richiesto questa operazione, ignora questa email.`,
-                  message_content: `Codice di verifica: ${code} (valido 10 minuti)`,
-                  total_amount: "",
-                  items_list: ""
-                },
-                ownerProfile!.emailPublicKey!
-              );
-              setDisdettaOtp({ code, expiresAt, sent: true, verified: false, input: "", sending: false });
-              alert(`Codice di verifica inviato a ${ownerProfile!.email}.`);
-            } catch (err: any) {
-              setDisdettaOtp({ ...disdettaOtp, sending: false });
-              alert(`Errore nell'invio del codice via EmailJS:\n${err?.text || err?.message || JSON.stringify(err)}`);
+            const result = await disdettaOtpHook.sendOtp(
+              { serviceId: ownerProfile.emailServiceId, templateId: ownerProfile.emailTemplateId, publicKey: ownerProfile.emailPublicKey },
+              { email: ownerProfile.email, name: ownerProfile.name || "Proprietario" },
+              {
+                subject: "Codice di verifica — Risoluzione Anticipata Contratto",
+                contextLine: `Codice di verifica per confermare la disdetta anticipata del contratto con ${selectedContract.tenantName}`,
+              }
+            );
+            if (result.ok) {
+              alert(`Codice di verifica inviato a ${ownerProfile.email}.`);
+            } else {
+              alert(`Errore nell'invio del codice via EmailJS:\n${result.error}`);
             }
           };
 
           const verifyOtp = () => {
-            if (Date.now() > disdettaOtp.expiresAt) {
-              alert("Il codice è scaduto. Richiedine uno nuovo.");
-              return;
-            }
-            if (disdettaOtp.input.trim() !== disdettaOtp.code) {
-              alert("Codice non corretto. Riprova o richiedine uno nuovo.");
-              return;
-            }
-            setDisdettaOtp({ ...disdettaOtp, verified: true });
+            const result = disdettaOtpHook.verifyOtp();
+            if (!result.ok) alert(result.error);
           };
 
           const handleConfirmTermination = async () => {
@@ -2002,7 +1999,7 @@ export default function ContractsView({
                         <input
                           type="text"
                           value={disdettaOtp.input}
-                          onChange={(e) => setDisdettaOtp({ ...disdettaOtp, input: e.target.value })}
+                          onChange={(e) => disdettaOtpHook.setInput(e.target.value)}
                           className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2"
                           placeholder="Codice a 6 cifre"
                         />
@@ -2052,6 +2049,8 @@ export default function ContractsView({
             showSuccess={showSuccess}
             onClose={() => setShowRiconsegnaWizard(false)}
             onSaved={() => setShowRiconsegnaWizard(false)}
+            ownerProfile={ownerProfile}
+            tenantEmail={tenants.find((t) => t.id === selectedContract.tenantId)?.email}
           />
         )}
       </div>
@@ -3279,6 +3278,8 @@ export default function ContractsView({
           showSuccess={showSuccess}
           onClose={() => setContractAppenaCreato(null)}
           onSaved={() => setContractAppenaCreato(null)}
+          ownerProfile={ownerProfile}
+          tenantEmail={tenants.find((t) => t.id === contractAppenaCreato.tenantId)?.email}
         />
       )}
 
@@ -3288,46 +3289,26 @@ export default function ContractsView({
           Riconsegna" nell'intestazione del dettaglio contratto). Coerente con la regola
           "un solo flusso per ogni azione" del progetto. */}
 
-      {/* CORREZIONE CQ (15/08/2026) — Onboarding contratti già in essere: il contratto marcato
-          isPreExisting è già salvato correttamente a questo punto (mai bloccato). La procedura
-          guidata dedicata agli arretrati pregressi (PreExistingContractWizard) è ancora IN
-          LAVORAZIONE — placeholder onesto invece di aprire un modulo inesistente o restare
-          silenziosi (che avrebbe dato l'impressione di un salvataggio fallito). Nessun
-          segnaposto nel codice consegnato: questo è un componente reale e funzionante, solo
-          non ancora collegato al wizard finale di inserimento arretrati. */}
-      {showPreExistingWizard && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100">
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <h3 className="font-sans font-black text-sm flex items-center space-x-2">
-                <Wallet size={16} className="shrink-0" />
-                <span>Contratto Preesistente Salvato</span>
-              </h3>
-              <button type="button" onClick={() => setShowPreExistingWizard(null)} className="text-slate-400 hover:text-white transition-colors cursor-pointer">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-6 space-y-3">
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Il contratto con <strong>{showPreExistingWizard.tenantName}</strong> è stato salvato correttamente
-                come rapporto già in essere.
-              </p>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                La procedura guidata dedicata per inserire eventuali arretrati pregressi (canoni, condominio,
-                manutenzioni, registrazione) è ancora in lavorazione e sarà disponibile a breve. Nel frattempo,
-                eventuali voci scadute e non saldate possono essere inserite manualmente in Fast Closing o
-                marcate direttamente Insolute in Solleciti.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowPreExistingWizard(null)}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs py-2.5 rounded-lg transition-all cursor-pointer"
-              >
-                Ho Capito
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* CORREZIONE CQ (15/08/2026, seguito) — Onboarding contratti già in essere: il contratto
+          marcato isPreExisting è già salvato correttamente a questo punto. Il modale
+          segnaposto precedente è stato sostituito dal componente reale
+          PreExistingContractWizard (task #54), che crea davvero le righe arretrate in Fast
+          Closing e le aggancia al Sollecito del debitore. */}
+      {showPreExistingWizard && onAddClosingItem && (
+        <PreExistingContractWizard
+          contract={showPreExistingWizard}
+          property={properties.find((p) => p.id === showPreExistingWizard.propertyId)}
+          tenant={tenants.find((t) => t.id === showPreExistingWizard.tenantId)}
+          reminders={reminders}
+          legalCases={legalCases}
+          user={user}
+          showSuccess={showSuccess}
+          onClose={() => setShowPreExistingWizard(null)}
+          onAddClosingItem={onAddClosingItem}
+          onAddReminder={onAddReminder}
+          onUpdateReminderStatus={onUpdateReminderStatus}
+          onSaved={() => setShowPreExistingWizard(null)}
+        />
       )}
 
       {/* 5. MODALE FIRMA DIGITALE VERBALE */}
