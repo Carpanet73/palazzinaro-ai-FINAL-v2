@@ -2768,7 +2768,12 @@ export default function App() {
   };
 
   // Fast Closing direct updates
-  const handleAddClosingItem = async (data: any) => {
+  // CORREZIONE CQ (15/08/2026, seguito) — ora restituisce l'id del documento creato
+  // (Promise<string | void>, non più solo Promise<void>): serve al wizard
+  // PreExistingContractWizard.tsx per costruire `associatedItemsIds` del Sollecito subito
+  // dopo aver creato più righe in sequenza. `silent` evita un toast per ogni riga quando
+  // chiamato in un ciclo da un flusso bulk (il chiamante mostra un unico riepilogo finale).
+  const handleAddClosingItem = async (data: any, silent?: boolean): Promise<string | void> => {
     if (!user) return;
     try {
       const cleanData: any = {};
@@ -2777,12 +2782,13 @@ export default function App() {
           cleanData[key] = data[key];
         }
       });
-      await addDoc(collection(db, "fastClosing"), {
+      const docRef = await addDoc(collection(db, "fastClosing"), {
         ...cleanData,
         userId: user.uid,
         createdAt: serverTimestamp()
       });
-      showSuccess("Scadenza aggiunta con successo!");
+      if (!silent) showSuccess("Scadenza aggiunta con successo!");
+      return docRef.id;
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.CREATE, "fastClosing");
       showError("Impossibile salvare la scadenza: " + errInfo.error);
@@ -3659,6 +3665,11 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             ownerProfile={ownerProfile}
             deliveryReports={deliveryReports}
             fastClosing={fastClosing}
+            reminders={reminders}
+            legalCases={legalCases}
+            onAddClosingItem={handleAddClosingItem}
+            onAddReminder={handleAddReminder}
+            onUpdateReminderStatus={handleUpdateReminderStatus}
             onAddDeliveryReport={handleAddDeliveryReport}
             onEditDeliveryReport={handleEditDeliveryReport}
             onDeleteDeliveryReport={handleDeleteDeliveryReport}

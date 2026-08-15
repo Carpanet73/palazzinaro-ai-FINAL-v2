@@ -713,6 +713,13 @@ export interface DeliveryReport {
     tenantSigned: boolean;
     tenantSignatureData?: string;
     tenantSignedAt?: string;
+    // CORREZIONE CN (task #50/#57) — traccia di audit facoltativa: quando la firma è
+    // stata confermata anche con un codice OTP via email (hook condiviso
+    // useOtpVerification, stesso meccanismo già usato per la disdetta anticipata),
+    // non solo dal nome digitato + checkbox. Assente per i verbali storici o quando
+    // l'email/le credenziali EmailJS non erano configurate.
+    ownerOtpVerifiedAt?: string;
+    tenantOtpVerifiedAt?: string;
   };
   documentName?: string; // Completed PDF/report name
   createdAt: string;
