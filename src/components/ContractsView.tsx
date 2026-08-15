@@ -137,6 +137,24 @@ export default function ContractsView({
   // CORREZIONE CA — TASK 2: apre la procedura guidata del Verbale di Riconsegna dalla
   // pagina di dettaglio del contratto
   const [showRiconsegnaWizard, setShowRiconsegnaWizard] = useState(false);
+  // CORREZIONE CQ (15/08/2026) — Onboarding contratti già in essere con arretrati pregressi.
+  // `isPreExisting`: unica eccezione ammessa alla rigidità del 4+4 per l'abitativo — quando
+  // true, `contractType` diventa un campo davvero variabile (vedi select dedicata più sotto),
+  // il Verbale di Consegna NON viene richiesto/aperto affatto (il rapporto è già in corso),
+  // e diventa disponibile l'eccezione `securityDepositWaived` al deposito obbligatorio.
+  const [isPreExisting, setIsPreExisting] = useState(false);
+  const [contractType, setContractType] = useState<"Abitativo4+4" | "Transitorio" | "Commerciale6+6" | "Altro">("Abitativo4+4");
+  // Data di stipula (firma), distinta dalla decorrenza legale (startDate) — usata per
+  // ancorare il promemoria di registrazione a 30gg, non più la data di inserimento a sistema.
+  const [signingDate, setSigningDate] = useState("");
+  // Eccezione al deposito obbligatorio, disponibile solo per isPreExisting: registra un fatto
+  // storico legittimo ("rapporto già in corso, deposito non versato/non dovuto"), non un dato
+  // mancante da segnalare come errore.
+  const [securityDepositWaived, setSecurityDepositWaived] = useState(false);
+  // Apre la procedura guidata dedicata per l'inserimento degli arretrati pregressi (canoni,
+  // condominio, manutenzioni, registrazione) — SEPARATA dal modulo di creazione contratto,
+  // aperta solo dopo il salvataggio del contratto marcato isPreExisting.
+  const [showPreExistingWizard, setShowPreExistingWizard] = useState<Contract | null>(null);
 
   // Ricalcolo automatico del deposito (TASK 3a): solo se l'utente non lo ha editato a mano
   const handleDepositMonthsChange = (m: number) => {
@@ -530,6 +548,14 @@ export default function ContractsView({
     setSecurityDepositAmount(0);
     setSecurityDepositMonths(0);
     setDepositManuallyEdited(false);
+    // CORREZIONE CQ (15/08/2026) — azzerati anche i nuovi campi: senza questo reset, aprendo
+    // "Nuovo Contratto" subito dopo aver modificato/creato un contratto preesistente, i valori
+    // della sessione precedente (isPreExisting, tipologia, ecc.) resterebbero visibili per
+    // errore sul nuovo modulo.
+    setIsPreExisting(false);
+    setContractType("Abitativo4+4");
+    setSigningDate("");
+    setSecurityDepositWaived(false);
 
     // Clear inline states
     setNewPropName("");
@@ -566,7 +592,21 @@ export default function ContractsView({
     setNotes(contract.notes || "");
     setOwnerName(contract.ownerName || "");
     setIsBareOwnership(contract.isBareOwnership || false);
-    
+    // CORREZIONE CQ (15/08/2026) — questi campi non venivano ripristinati qui prima d'ora
+    // (gap preesistente, non introdotto da questa correzione): il modulo di modifica apriva
+    // sempre con i default (Ordinaria, deposito a 0) invece dei valori reali del contratto.
+    // Corretto contestualmente perché altrimenti i nuovi campi di questa sessione (tipologia,
+    // data di stipula, ecc.) sarebbero stati inconsistenti con lo stesso identico problema.
+    setTaxRegime(contract.taxRegime || "Ordinaria");
+    setF24OwnerSplitPct(contract.f24OwnerSplitPct ?? 50);
+    setSecurityDepositAmount(contract.securityDepositAmount || 0);
+    setSecurityDepositMonths(contract.securityDepositMonths || 0);
+    setDepositManuallyEdited(true); // evita che il ricalcolo automatico sovrascriva l'importo reale già salvato
+    setIsPreExisting(contract.isPreExisting || false);
+    setContractType(contract.contractType || "Abitativo4+4");
+    setSigningDate(contract.signingDate || "");
+    setSecurityDepositWaived(contract.securityDepositWaived || false);
+
     setShowModal(true);
   };
 
@@ -698,10 +738,20 @@ export default function ContractsView({
       alert("Compila tutti i parametri obbligatori del contratto (canone, date).");
       return;
     }
+    // CORREZIONE CQ (15/08/2026) — la data di stipula è richiesta esplicitamente per ogni
+    // contratto (nuovo o preesistente): ancora il promemoria di registrazione a 30gg, non
+    // può più essere assente.
+    if (!signingDate) {
+      alert("Specifica la Data di Stipula (firma dell'atto) — necessaria per calcolare correttamente la scadenza di registrazione.");
+      return;
+    }
     // CORREZIONE CF — il deposito cauzionale non è facoltativo: Massimo ha chiarito che
     // va sempre versato alla creazione del contratto e va tracciato, non lasciato vuoto.
-    if (!securityDepositAmount || securityDepositAmount <= 0) {
-      alert("Il Deposito Cauzionale è obbligatorio: specifica l'importo (o le mensilità anticipate per calcolarlo automaticamente).");
+    // CORREZIONE CQ (15/08/2026) — eccezione ammessa SOLO per i contratti preesistenti
+    // marcati esplicitamente "deposito non versato/non dovuto" (rapporto storico legittimo,
+    // es. inquilini da decenni mai stati soggetti a deposito — non un dato mancante).
+    if (!(isPreExisting && securityDepositWaived) && (!securityDepositAmount || securityDepositAmount <= 0)) {
+      alert("Il Deposito Cauzionale è obbligatorio: specifica l'importo (o le mensilità anticipate per calcolarlo automaticamente), oppure marca l'eccezione per i rapporti storici già in essere.");
       return;
     }
 
@@ -724,7 +774,15 @@ export default function ContractsView({
       f24OwnerSplitPct: taxRegime === "Ordinaria" ? f24OwnerSplitPct : undefined,
       // CORREZIONE CA — TASK 3a: deposito cauzionale
       securityDepositMonths: securityDepositMonths > 0 ? securityDepositMonths : undefined,
-      securityDepositAmount: securityDepositAmount > 0 ? securityDepositAmount : undefined
+      securityDepositAmount: securityDepositAmount > 0 ? securityDepositAmount : undefined,
+      // CORREZIONE CQ (15/08/2026) — Onboarding contratti già in essere con arretrati pregressi
+      signingDate,
+      isPreExisting,
+      // contractType è variabile solo per i preesistenti; per i contratti nuovi resta sempre
+      // il vincolo di legge (Abitativo 4+4), lo stato locale è comunque forzato a quel valore
+      // quando isPreExisting è false (vedi handler della checkbox più sotto nel JSX).
+      contractType,
+      securityDepositWaived: isPreExisting ? securityDepositWaived : undefined
     };
 
     if (wizardPropertyMode === "create") {
@@ -769,14 +827,31 @@ export default function ContractsView({
           status,
           notes,
           ownerName,
-          isBareOwnership
+          isBareOwnership,
+          // CORREZIONE CQ (15/08/2026) — mantenuti allineati anche in modifica, stessi campi
+          // della creazione, mai un secondo insieme di dati per la stessa entità.
+          taxRegime,
+          f24OwnerSplitPct: taxRegime === "Ordinaria" ? f24OwnerSplitPct : undefined,
+          securityDepositMonths: securityDepositMonths > 0 ? securityDepositMonths : undefined,
+          securityDepositAmount: securityDepositAmount > 0 ? securityDepositAmount : undefined,
+          signingDate,
+          isPreExisting,
+          contractType,
+          securityDepositWaived: isPreExisting ? securityDepositWaived : undefined
         });
       } else {
         const created = await onAddContract(payload);
-        // CORREZIONE CA — TASK 1: Verbale di Consegna TRACCIATO, NON bloccante (il
-        // contratto è già salvato in ogni caso). TODO: rendere bloccante se richiesto in futuro.
+        // CORREZIONE CA — TASK 1: Verbale di Consegna TRACCIATO, NON bloccante (il contratto
+        // è già salvato in ogni caso). CORREZIONE CQ (15/08/2026): per i contratti preesistenti
+        // il Verbale di Consegna non va richiesto affatto (il rapporto è già in corso da prima
+        // dell'inserimento a sistema) — si apre invece la procedura guidata dedicata agli
+        // arretrati pregressi, se il flag è attivo.
         if (created && created.id) {
-          setContractAppenaCreato(created);
+          if (!isPreExisting) {
+            setContractAppenaCreato(created);
+          } else {
+            setShowPreExistingWizard(created);
+          }
         }
 
         // Store the original scan as physical documentation for this newly created relation
@@ -2716,36 +2791,99 @@ export default function ContractsView({
                     </div>
                   </div>
 
-                  {/* CORREZIONE CA/CF — Deposito Cauzionale: OBBLIGATORIO, non facoltativo */}
+                  {/* CORREZIONE CQ (15/08/2026) — Onboarding contratti già in essere: unica
+                      eccezione ammessa alla rigidità del 4+4 per l'abitativo. Attiva anche
+                      l'eccezione al deposito obbligatorio e disattiva la richiesta del
+                      Verbale di Consegna (il rapporto è già in corso da prima dell'inserimento
+                      a sistema) — la procedura guidata dedicata agli arretrati pregressi si
+                      apre subito dopo il salvataggio del contratto, separatamente da questo
+                      modulo (mai una sezione "pregressi" inline qui dentro). */}
+                  <div className="bg-amber-50/40 p-4 rounded-xl border border-amber-200/60 space-y-2">
+                    <label className="flex items-start space-x-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isPreExisting}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsPreExisting(checked);
+                          if (!checked) {
+                            // Per i contratti nuovi resta sempre il vincolo di legge: Abitativo 4+4.
+                            setContractType("Abitativo4+4");
+                            setSecurityDepositWaived(false);
+                          }
+                        }}
+                        className="mt-0.5 rounded-sm border-slate-300 text-amber-700 focus:ring-amber-600"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">
+                          Contratto già in essere (con eventuali arretrati pregressi)
+                        </span>
+                        <span className="text-[9px] text-slate-500 block mt-0.5">
+                          Attiva questa opzione se stai inserendo un rapporto di locazione già in corso tra le
+                          parti (non un contratto nuovo). Dopo il salvataggio si apre una procedura guidata
+                          separata per registrare eventuali canoni, condominio, manutenzioni o registrazione
+                          già scaduti e non ancora saldati — le voci create resteranno sempre marcate
+                          "Inserimento Manuale" nei mastrini.
+                        </span>
+                      </div>
+                    </label>
+
+                    {isPreExisting && (
+                      <div className="pt-2 mt-1 border-t border-amber-200/60">
+                        <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">
+                          Tipologia Contratto (reale, come da atto)
+                        </label>
+                        <select
+                          value={contractType}
+                          onChange={(e) => setContractType(e.target.value as any)}
+                          className="w-full sm:w-64 text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden"
+                        >
+                          <option value="Abitativo4+4">Abitativo 4+4</option>
+                          <option value="Transitorio">Transitorio</option>
+                          <option value="Commerciale6+6">Commerciale 6+6</option>
+                          <option value="Altro">Altro</option>
+                        </select>
+                        <p className="text-[9px] text-slate-400 mt-1">
+                          Variabile solo per i contratti preesistenti: determina come vengono calcolati i
+                          promemoria di registrazione/comunicazione a metà periodo.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CORREZIONE CA/CF — Deposito Cauzionale: OBBLIGATORIO, non facoltativo,
+                      salvo l'eccezione per i contratti preesistenti (rapporto storico). */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">
-                        Mensilità Anticipate (Deposito) <span className="text-rose-500">*</span>
+                        Mensilità Anticipate (Deposito) {!(isPreExisting && securityDepositWaived) && <span className="text-rose-500">*</span>}
                       </label>
                       <input
                         type="number"
-                        required
+                        required={!(isPreExisting && securityDepositWaived)}
+                        disabled={isPreExisting && securityDepositWaived}
                         min="1"
                         step="1"
                         placeholder="3"
                         value={securityDepositMonths || ""}
                         onChange={(e) => handleDepositMonthsChange(Number(e.target.value))}
-                        className="w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden"
+                        className="w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden disabled:bg-slate-100 disabled:text-slate-400"
                       />
                     </div>
                     <div>
                       <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">
-                        Deposito Cauzionale (€) <span className="text-rose-500">*</span>
+                        Deposito Cauzionale (€) {!(isPreExisting && securityDepositWaived) && <span className="text-rose-500">*</span>}
                       </label>
                       <input
                         type="number"
-                        required
+                        required={!(isPreExisting && securityDepositWaived)}
+                        disabled={isPreExisting && securityDepositWaived}
                         min="0.01"
                         step="0.01"
                         placeholder="2550"
                         value={securityDepositAmount || ""}
                         onChange={(e) => { setDepositManuallyEdited(true); setSecurityDepositAmount(Number(e.target.value)); }}
-                        className="w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden"
+                        className="w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden disabled:bg-slate-100 disabled:text-slate-400"
                       />
                     </div>
                     <div className="flex items-end">
@@ -2756,7 +2894,46 @@ export default function ContractsView({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {isPreExisting && (
+                    <label className="flex items-start space-x-2.5 cursor-pointer bg-slate-50/60 p-3 rounded-xl border border-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={securityDepositWaived}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSecurityDepositWaived(checked);
+                          if (checked) {
+                            setSecurityDepositAmount(0);
+                            setSecurityDepositMonths(0);
+                          }
+                        }}
+                        className="mt-0.5 rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">
+                          Rapporto storico: deposito non versato / non dovuto
+                        </span>
+                        <span className="text-[9px] text-slate-500 block mt-0.5">
+                          Da usare quando il rapporto è in corso da molto tempo e il deposito non è mai stato
+                          richiesto (es. inquilini da decenni) — non un dato mancante, ma un fatto storico
+                          legittimo. Disattiva l'obbligo di indicare importo/mensilità qui sopra.
+                        </span>
+                      </div>
+                    </label>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Data di Stipula (firma atto) *</label>
+                      <input
+                        type="date"
+                        required
+                        value={signingDate}
+                        onChange={(e) => setSigningDate(e.target.value)}
+                        className="w-full text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 outline-hidden"
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Data Inizio Decorrenza *</label>
                       <input
@@ -3110,6 +3287,48 @@ export default function ContractsView({
           (vedi il blocco contractAppenaCreato qui sopra, e il tasto "Registra Verbale di
           Riconsegna" nell'intestazione del dettaglio contratto). Coerente con la regola
           "un solo flusso per ogni azione" del progetto. */}
+
+      {/* CORREZIONE CQ (15/08/2026) — Onboarding contratti già in essere: il contratto marcato
+          isPreExisting è già salvato correttamente a questo punto (mai bloccato). La procedura
+          guidata dedicata agli arretrati pregressi (PreExistingContractWizard) è ancora IN
+          LAVORAZIONE — placeholder onesto invece di aprire un modulo inesistente o restare
+          silenziosi (che avrebbe dato l'impressione di un salvataggio fallito). Nessun
+          segnaposto nel codice consegnato: questo è un componente reale e funzionante, solo
+          non ancora collegato al wizard finale di inserimento arretrati. */}
+      {showPreExistingWizard && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="font-sans font-black text-sm flex items-center space-x-2">
+                <Wallet size={16} className="shrink-0" />
+                <span>Contratto Preesistente Salvato</span>
+              </h3>
+              <button type="button" onClick={() => setShowPreExistingWizard(null)} className="text-slate-400 hover:text-white transition-colors cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Il contratto con <strong>{showPreExistingWizard.tenantName}</strong> è stato salvato correttamente
+                come rapporto già in essere.
+              </p>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                La procedura guidata dedicata per inserire eventuali arretrati pregressi (canoni, condominio,
+                manutenzioni, registrazione) è ancora in lavorazione e sarà disponibile a breve. Nel frattempo,
+                eventuali voci scadute e non saldate possono essere inserite manualmente in Fast Closing o
+                marcate direttamente Insolute in Solleciti.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowPreExistingWizard(null)}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs py-2.5 rounded-lg transition-all cursor-pointer"
+              >
+                Ho Capito
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 5. MODALE FIRMA DIGITALE VERBALE */}
       {showSignatureModal && (

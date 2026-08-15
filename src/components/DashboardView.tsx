@@ -43,7 +43,7 @@ import {
   Hourglass,
   Lock
 } from "lucide-react";
-import { Property, Contract, Tenant, FastClosingItem, Reminder, Condominium, LegalCase, AppSection, Communication, Lawyer, Maintenance, OwnerProfile, InsurancePolicy } from "../types";
+import { Property, Contract, Tenant, FastClosingItem, Reminder, Condominium, LegalCase, AppSection, Communication, Lawyer, Maintenance, OwnerProfile, InsurancePolicy, DeliveryReport } from "../types";
 import { getTenantClassification } from "../lib/statusHelper";
 import MultiSelectFilterDropdown from "./MultiSelectFilterDropdown";
 
@@ -59,6 +59,7 @@ interface DashboardViewProps {
   lawyers?: Lawyer[];
   maintenance?: Maintenance[];
   insurancePolicies?: InsurancePolicy[];
+  deliveryReports?: DeliveryReport[];
   setCurrentSection: (section: AppSection) => void;
   userName: string;
   onSeedDemoData?: () => Promise<void>;
@@ -84,6 +85,7 @@ export default function DashboardView({
   lawyers = [],
   maintenance = [],
   insurancePolicies = [],
+  deliveryReports = [],
   setCurrentSection,
   userName,
   onSeedDemoData,
@@ -641,7 +643,18 @@ export default function DashboardView({
 
     contracts.forEach(c => {
       if (c.status !== "Active" || !c.startDate) return;
-      const start = new Date(c.startDate);
+      // CORREZIONE CQ (15/08/2026) — il termine di 30gg per la registrazione decorre dalla
+      // data di stipula (`signingDate`, campo nuovo, richiesto esplicitamente ora ad ogni
+      // creazione contratto), non dalla decorrenza legale (`startDate`) né tantomeno dalla
+      // data di inserimento a sistema (mai stata usata qui, verificato). Per i contratti
+      // storici privi di `signingDate` si ricade su `startDate`, comportamento invariato.
+      // Quando entrambe le date sono note si usa la più risalente delle due (prudenziale:
+      // il termine di legge decorre dalla prima delle due formalità).
+      const referenceDateStr = (() => {
+        if (c.signingDate && c.startDate) return c.signingDate < c.startDate ? c.signingDate : c.startDate;
+        return c.signingDate || c.startDate;
+      })();
+      const start = new Date(referenceDateStr);
       const deadline = new Date(start.getTime() + 30 * 24 * 3600 * 1000);
       const now = new Date();
 
@@ -675,6 +688,29 @@ export default function DashboardView({
 
     return alerts;
   }, [contracts, propertyDocs]);
+
+  // CORREZIONE CQ (15/08/2026) — nuovo promemoria: Verbale di Consegna mai registrato per un
+  // contratto NUOVO (non preesistente). Prima non esisteva alcun promemoria in Dashboard per
+  // questo (verificato via grep, zero occorrenze) — il Verbale di Consegna, pur tracciato,
+  // restava facilmente dimenticato senza che nulla lo segnalasse. Per i contratti preesistenti
+  // (isPreExisting) questo promemoria non si applica MAI: il rapporto è già in corso da prima
+  // dell'inserimento a sistema, non ha senso chiedere un verbale di consegna che non c'è mai
+  // stato — l'unico verbale rilevante per loro sarà, in futuro, quello di riconsegna. SOLO
+  // stato/date, mai importi (regola 6); nessuna azione diretta da qui, solo redirect a
+  // Contratti (stesso pattern di tutti gli altri promemoria di questa pagina).
+  const missingDeliveryReportReminders = useMemo(() => {
+    return contracts
+      .filter(c => c.status === "Active" && !c.isPreExisting)
+      .filter(c => !deliveryReports.some(dr => dr.contractId === c.id && dr.type === "consegna"))
+      .map(c => ({
+        id: `missing-delivery-report-${c.id}`,
+        contractId: c.id,
+        propertyName: c.propertyName || "Immobile",
+        tenantName: c.tenantName || "Inquilino",
+        title: "Verbale di Consegna mai registrato",
+        description: `Contratto con ${c.tenantName || "Inquilino"} su ${c.propertyName || "Immobile"}: il Verbale di Consegna non risulta ancora compilato. Vai in Contratti per registrarlo.`
+      }));
+  }, [contracts, deliveryReports]);
 
   // 2. Custom Contract Expiration Reminder (8 months before, monthly)
   const customContractExpiryReminders = useMemo(() => {
@@ -961,13 +997,30 @@ export default function DashboardView({
     // (generate alla creazione del contratto quando taxRegime è "Ordinaria", vedi
     // handleAddContract in App.tsx), con sourceId nel formato f24-{contractId}-y{N}: qui si
     // limita a leggerne lo stato reale per mostrare il pallino colorato, mai a duplicarle.
-    const registrationYearsF24Reminder = activeContract && activeContract.taxRegime !== "CedolareSecca"
-      ? Array.from({ length: 4 }, (_, i) => ({
+    // CORREZIONE CQ (15/08/2026) — BUG CONFERMATO: questo elenco era fisso a 4 iterazioni
+    // (`Array.from({length:4})`), indipendentemente dalla reale durata dichiarata nel
+    // contratto (`endDate`, un campo libero) — per un contratto Transitorio più breve
+    // mostrava annualità mai dovute, per un rinnovo/durata più lunga ne mancavano alcune.
+    // Corretto derivando il numero di annualità dalla reale differenza `startDate`/`endDate`,
+    // fermandosi comunque a `endDate` — stesso identico pattern già corretto poco più sopra
+    // in questo file in `pendingRegistrations` (mai discostati, regola 2).
+    const registrationYearsF24Reminder = (() => {
+      if (!activeContract || activeContract.taxRegime === "CedolareSecca" || !activeContract.startDate) return [];
+      const start = new Date(activeContract.startDate);
+      const end = activeContract.endDate ? new Date(activeContract.endDate) : null;
+      const totalYears = end && end > start ? Math.max(1, end.getFullYear() - start.getFullYear()) : 4;
+      const rows: { year: string; dueDate: string; key: string }[] = [];
+      for (let i = 0; i < totalYears; i++) {
+        const dueDate = i === 0 ? activeContract.startDate : getAnniversaryDate(activeContract.startDate, i);
+        if (end && new Date(dueDate) > end) break;
+        rows.push({
           year: i === 0 ? "1° Anno (Registrazione Iniziale)" : `${i + 1}° Anno (Annualità successiva)`,
-          dueDate: i === 0 ? activeContract.startDate : getAnniversaryDate(activeContract.startDate, i),
+          dueDate,
           key: `f24-${activeContract.id}-y${i + 1}`,
-        }))
-      : [];
+        });
+      }
+      return rows;
+    })();
 
     // Find any active payment reminders / sequences
     // CORREZIONE CM (08/08/2026) — RIMOSSI handleRegisterLocalPayment/handleSendLocalNotice:
@@ -1443,16 +1496,44 @@ export default function DashboardView({
                   </span>
                 </div>
               ) : activeContract.taxRegime === "CedolareSecca" ? (
-                <div className="mt-4 flex items-center gap-3 text-xs text-slate-600">
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                    new Date() >= new Date(getAnniversaryDate(activeContract.startDate, 4)) ? "bg-amber-500" : "bg-emerald-500"
-                  }`} />
-                  <span>
-                    Regime Cedolare Secca: nessuna imposta di registro annuale dovuta. Promemoria comunicazione di proroga
-                    all'Agenzia delle Entrate {new Date() >= new Date(getAnniversaryDate(activeContract.startDate, 4)) ? "da inviare" : "in scadenza"} il{" "}
-                    <strong>{new Date(getAnniversaryDate(activeContract.startDate, 4)).toLocaleDateString("it-IT")}</strong> (4 anni dalla decorrenza).
-                  </span>
-                </div>
+                // CORREZIONE CQ (15/08/2026) — BUG CONFERMATO: la scadenza dei 4 anni era
+                // calcolata da `getAnniversaryDate(startDate, 4)` senza mai verificare che il
+                // contratto durasse davvero (almeno) 4 anni (`endDate`, campo libero) né quale
+                // fosse la reale tipologia contrattuale (`contractType`, prima inesistente nello
+                // schema) — mostrava una scadenza a 4 anni anche per un contratto Transitorio
+                // più breve, dove quella specifica comunicazione non si applica in questi
+                // termini. La comunicazione a metà periodo per Cedolare Secca riguarda per
+                // costruzione l'Abitativo 4+4 (o i contratti storici senza `contractType`
+                // valorizzato, trattati come tali per compatibilità) — mostrata solo se il
+                // contratto raggiunge davvero quell'anniversario entro la propria `endDate`.
+                (() => {
+                  const isRelevantType = !activeContract.contractType || activeContract.contractType === "Abitativo4+4";
+                  const anniversary = getAnniversaryDate(activeContract.startDate, 4);
+                  const end = activeContract.endDate ? new Date(activeContract.endDate) : null;
+                  const withinDuration = !end || new Date(anniversary) <= end;
+                  if (!isRelevantType || !withinDuration) {
+                    return (
+                      <div className="mt-4 flex items-center gap-3 text-xs text-slate-600">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-emerald-500" />
+                        <span>
+                          Regime Cedolare Secca: nessuna imposta di registro annuale dovuta. Nessuna comunicazione di
+                          proroga a metà periodo applicabile per questa tipologia/durata di contratto.
+                        </span>
+                      </div>
+                    );
+                  }
+                  const isDue = new Date() >= new Date(anniversary);
+                  return (
+                    <div className="mt-4 flex items-center gap-3 text-xs text-slate-600">
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isDue ? "bg-amber-500" : "bg-emerald-500"}`} />
+                      <span>
+                        Regime Cedolare Secca: nessuna imposta di registro annuale dovuta. Promemoria comunicazione di proroga
+                        all'Agenzia delle Entrate {isDue ? "da inviare" : "in scadenza"} il{" "}
+                        <strong>{new Date(anniversary).toLocaleDateString("it-IT")}</strong> (4 anni dalla decorrenza).
+                      </span>
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-left text-slate-600 text-[11px] leading-relaxed">
@@ -2067,6 +2148,40 @@ export default function DashboardView({
                 </div>
               ))}
 
+              {/* CORREZIONE CQ (15/08/2026) — nuovo promemoria: Verbale di Consegna mai
+                  registrato per un contratto nuovo (mai per i contratti preesistenti, esclusi
+                  a monte dal useMemo). Solo stato/date, nessun importo (regola 6); nessuna
+                  azione diretta qui, solo redirect a Contratti (regola 6). */}
+              {missingDeliveryReportReminders.map((alert) => (
+                <div
+                  key={alert.id}
+                  className="p-4 rounded-xl border-2 border-amber-500 bg-amber-50/70 shadow-2xs"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-start space-x-3">
+                      <FileText size={20} className="text-amber-600 mt-0.5 shrink-0" />
+                      <div>
+                        <h4 className="font-extrabold text-xs text-amber-950 leading-snug">
+                          {alert.title}: {alert.propertyName}
+                        </h4>
+                        <p className="text-[10px] text-amber-900/80 mt-1 leading-relaxed">
+                          {alert.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="sm:text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center pt-3 sm:pt-0 border-t sm:border-t-0 border-amber-200">
+                      <button
+                        onClick={() => setCurrentSection("contracts")}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] px-3.5 py-2 rounded-lg -2 border-indigo-800 active:-0 transition-all cursor-pointer"
+                      >
+                        Vai in Contratti
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
               {/* Contracts close to expiration warnings */}
               {contractsCloseToExpiration.map((contract) => {
                 const now = new Date();
@@ -2324,11 +2439,12 @@ export default function DashboardView({
               ))}
 
               {/* Warnings and alerts only empty state checking */}
-              {rentedPropertiesMissingContract.length === 0 && 
-               contractsCloseToExpiration.length === 0 && 
-               sequenceAlerts.length === 0 && 
+              {rentedPropertiesMissingContract.length === 0 &&
+               contractsCloseToExpiration.length === 0 &&
+               sequenceAlerts.length === 0 &&
                pendingRegistrations.length === 0 &&
                initialRegistrationContractReminders.length === 0 &&
+               missingDeliveryReportReminders.length === 0 &&
                customContractExpiryReminders.length === 0 &&
                customDueRentReminders.length === 0 &&
                insuranceExpiryAlerts.length === 0 ? (
