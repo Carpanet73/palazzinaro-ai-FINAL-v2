@@ -93,6 +93,28 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // Ripartizione spese condominiali senza amministratore (29/08/2026)
+    match /selfManagedBuildings/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
+    }
+
+    match /meterReadings/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
+    }
+
+    match /sharedExpenses/{id} {
+      allow read:   if isOwner();
+      allow create: if stampsOwner();
+      allow update: if isOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner();
+    }
+
     match /movements/{id} {
       allow read:   if isOwner();
       allow create: if stampsOwner();
