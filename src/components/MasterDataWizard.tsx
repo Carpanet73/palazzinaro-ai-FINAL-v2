@@ -1,4 +1,3 @@
-
 /**
  * MasterDataWizard — Inserimento guidato unico
  *
@@ -49,6 +48,7 @@ import {
   Condominium,
   Owner,
 } from "../types";
+import type { SelfManagedBuilding } from "../types-shared-expenses";
 
 // ============================================================================
 // Props
@@ -68,6 +68,10 @@ export interface MasterDataWizardProps {
   onPersist: (data: MasterDataPayload) => Promise<void>;
   existingOwners: Owner[]; // CORREZIONE B: record reali, non più stringhe
   existingCondominiums: Condominium[];
+  // Ripartizione spese condominiali senza amministratore (29/08/2026): edifici autogestiti
+  // esistenti, selezionabili qui quando l'immobile non ha un condominio costituito ma
+  // condivide comunque spese comuni con altre unità.
+  existingSelfManagedBuildings?: SelfManagedBuilding[];
   existingTenants: Tenant[];
   onCreateOwner?: (data: Omit<Owner, "id" | "userId" | "createdAt">) => Promise<string | null>; // ritorna id del proprietario creato/riusato
   // CORREZIONE E — inserimento isolato: quando valorizzato, il wizard mostra SOLO il passo
@@ -96,6 +100,16 @@ export interface MasterDataPayload {
     isCondoConstituted?: boolean;
     condominiumId?: string;
     millesimi?: number;
+    // Ripartizione spese condominiali senza amministratore: collega l'immobile a un
+    // Edificio Autogestito esistente quando non c'è condominio costituito ma ci sono
+    // spese comuni condivise con altre unità.
+    selfManagedBuildingId?: string;
+  };
+  // Se valorizzato, App.tsx deve creare un nuovo Edificio Autogestito e collegare
+  // l'immobile appena creato (stesso pattern del nuovo Condominio sopra).
+  newSelfManagedBuilding?: {
+    name: string;
+    address: string;
   };
   owner?: {
     // CORREZIONE B — nuovo oggetto Owner da creare in Firestore
@@ -193,6 +207,7 @@ export default function MasterDataWizard({
   prefillData,
   existingOwners,
   existingCondominiums,
+  existingSelfManagedBuildings,
   existingTenants,
   onCreateOwner,
   standaloneEntity,
@@ -218,6 +233,12 @@ export default function MasterDataWizard({
   const [condoAdmin, setCondoAdmin] = useState("");
   const [condoPhone, setCondoPhone] = useState("");
   const [condoEmail, setCondoEmail] = useState("");
+  // Ripartizione spese condominiali senza amministratore: quando NON c'è condominio
+  // costituito, si può comunque segnalare che l'immobile condivide spese comuni.
+  const [hasSharedExpenses, setHasSharedExpenses] = useState(false);
+  const [sharedBuildingMode, setSharedBuildingMode] = useState<"existing" | "new">("new");
+  const [existingSharedBuildingId, setExistingSharedBuildingId] = useState("");
+  const [newSharedBuildingName, setNewSharedBuildingName] = useState("");
   const [condoNotes, setCondoNotes] = useState("");
   const [condoMillesimi, setCondoMillesimi] = useState<number>(0);
 
@@ -484,7 +505,11 @@ export default function MasterDataWizard({
       case 1:
         return propName.trim().length > 0 && propAddress.trim().length > 0;
       case 2:
-        if (!isCondominium) return true;
+        if (!isCondominium) {
+          if (!hasSharedExpenses) return true;
+          if (sharedBuildingMode === "existing") return !!existingSharedBuildingId;
+          return newSharedBuildingName.trim().length > 0;
+        }
         if (condoMode === "existing") return !!existingCondoId;
         return condoName.trim().length > 0;
       case 3:
@@ -591,8 +616,21 @@ export default function MasterDataWizard({
             : undefined // will be set after condo creation
           : "",
         millesimi: isCondominium ? Number(condoMillesimi) || 0 : 0,
+        // Ripartizione spese condominiali senza amministratore: valorizzato solo quando
+        // NON c'è condominio costituito ma l'immobile condivide spese comuni.
+        selfManagedBuildingId:
+          !isCondominium && hasSharedExpenses && sharedBuildingMode === "existing"
+            ? existingSharedBuildingId
+            : undefined, // se sharedBuildingMode === "new", viene collegato da App.tsx dopo la creazione
       },
     };
+
+    if (!isCondominium && hasSharedExpenses && sharedBuildingMode === "new") {
+      payload.newSelfManagedBuilding = {
+        name: newSharedBuildingName.trim(),
+        address: propAddress.trim(),
+      };
+    }
 
     // CORREZIONE B — passa i dati del nuovo Owner al payload
     if (newOwnerData) {
@@ -999,10 +1037,89 @@ export default function MasterDataWizard({
               )}
 
               {!isCondominium && (
-                <InfoBox>
-                  L'immobile verrà registrato senza associazione condominiale. Potrai
-                  sempre aggiungere il condominio in seguito dalla sezione "Condomini".
-                </InfoBox>
+                <div className="space-y-4">
+                  <InfoBox>
+                    L'immobile verrà registrato senza associazione condominiale. Potrai
+                    sempre aggiungere il condominio in seguito dalla sezione "Condomini".
+                  </InfoBox>
+
+                  <label className="flex items-center gap-2 text-[13px] text-slate-700 cursor-pointer p-3 rounded-lg bg-slate-50 border border-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={hasSharedExpenses}
+                      onChange={(e) => setHasSharedExpenses(e.target.checked)}
+                      className="w-4 h-4 accent-slate-900"
+                    />
+                    <span>
+                      Questo immobile <strong>condivide spese comuni</strong> con altre unità
+                      (acqua condivisa, luce scale, ecc.), pur senza un amministratore
+                    </span>
+                  </label>
+
+                  {hasSharedExpenses && (
+                    <>
+                      <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => setSharedBuildingMode("existing")}
+                          className={`flex-1 py-2 text-[12px] font-medium rounded-md transition-colors ${
+                            sharedBuildingMode === "existing"
+                              ? "bg-white text-slate-900 shadow-sm"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          Edificio esistente
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSharedBuildingMode("new")}
+                          className={`flex-1 py-2 text-[12px] font-medium rounded-md transition-colors ${
+                            sharedBuildingMode === "new"
+                              ? "bg-white text-slate-900 shadow-sm"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          Nuovo edificio
+                        </button>
+                      </div>
+
+                      {sharedBuildingMode === "existing" ? (
+                        <Field label="Seleziona edificio autogestito" required>
+                          <select
+                            value={existingSharedBuildingId}
+                            onChange={(e) => setExistingSharedBuildingId(e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
+                          >
+                            <option value="">— Scegli —</option>
+                            {(existingSelfManagedBuildings || []).map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {b.name}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                      ) : (
+                        <Field label="Nome edificio" required>
+                          <input
+                            type="text"
+                            value={newSharedBuildingName}
+                            onChange={(e) => setNewSharedBuildingName(e.target.value)}
+                            placeholder="es. Via Roma 12"
+                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                          />
+                        </Field>
+                      )}
+
+                      <InfoBox>
+                        Questo immobile comparirà anche nella sezione "Spese Comuni (No
+                        Amm.)", dove potrai registrare bollette e spese condivise: le
+                        quote a carico dell'inquilino confluiranno automaticamente nel
+                        Fast Closing, esattamente come per un condominio con
+                        amministratore.
+                      </InfoBox>
+                    </>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -1866,4 +1983,3 @@ function InfoBox({
     </div>
   );
 }
-
