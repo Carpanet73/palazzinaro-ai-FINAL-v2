@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import { 
   onAuthStateChanged, 
@@ -63,6 +62,8 @@ import OwnerOnboarding from "./components/OwnerOnboarding";
 import SettingsView from "./components/SettingsView";
 import MasterDataWizard from "./components/MasterDataWizard";
 import UniversalAddButton from "./components/UniversalAddButton";
+import SelfManagedBuildingsView from "./components/SelfManagedBuildingsView";
+import type { SelfManagedBuilding, MeterReading, SharedExpense } from "./types-shared-expenses";
 import { earlyTerminationReasonLabel } from "./lib/earlyTermination";
 import { formatLedgerLabel } from "./lib/ledgerLabel";
 import { allocatePayment, buildPartialPaymentNote } from "./lib/reconciliation";
@@ -147,6 +148,10 @@ export default function App() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [condominiums, setCondominiums] = useState<Condominium[]>([]);
+  // Ripartizione spese condominiali senza amministratore (29/08/2026)
+  const [selfManagedBuildings, setSelfManagedBuildings] = useState<SelfManagedBuilding[]>([]);
+  const [meterReadings, setMeterReadings] = useState<MeterReading[]>([]);
+  const [sharedExpenses, setSharedExpenses] = useState<SharedExpense[]>([]);
   const [owners, setOwners] = useState<Owner[]>([]);
   // CORREZIONE L — Amministratori condominiali come entità reale
   const [administrators, setAdministrators] = useState<Administrator[]>([]);
@@ -334,6 +339,9 @@ export default function App() {
     const unsubAccounts = listenToCollection("bankAccounts", setBankAccounts, "createdAt");
     const unsubInsurancePolicies = listenToCollection("insurancePolicies", setInsurancePolicies, "createdAt");
     const unsubDeliveryReports = listenToCollection("deliveryReports", setDeliveryReports, "createdAt");
+    const unsubSelfManagedBuildings = listenToCollection("selfManagedBuildings", setSelfManagedBuildings, "createdAt");
+    const unsubMeterReadings = listenToCollection("meterReadings", setMeterReadings, "createdAt");
+    const unsubSharedExpenses = listenToCollection("sharedExpenses", setSharedExpenses, "createdAt");
 
     // CORREZIONE AP — Listener del documento singolo (non una collezione) che tiene il
     // "mese attivo" del Fast Closing di QUESTO utente — un documento per utente, isolato
@@ -365,6 +373,9 @@ export default function App() {
       unsubAccounts();
       unsubInsurancePolicies();
       unsubDeliveryReports();
+      unsubSelfManagedBuildings();
+      unsubMeterReadings();
+      unsubSharedExpenses();
       unsubFastClosingPeriod();
     };
   }, [user]);
@@ -2266,6 +2277,20 @@ export default function App() {
         condominiumId = condoDoc.id;
       }
 
+      // 1a. Ripartizione spese condominiali senza amministratore: crea l'Edificio
+      // Autogestito nuovo se richiesto dal wizard immobile (stesso pattern del condominio).
+      let selfManagedBuildingId: string | undefined = p.selfManagedBuildingId;
+      if (payload.newSelfManagedBuilding) {
+        const buildingDoc = await addDoc(collection(db, "selfManagedBuildings"), {
+          name: payload.newSelfManagedBuilding.name,
+          address: payload.newSelfManagedBuilding.address,
+          propertyIds: [],
+          userId: user.uid,
+          createdAt: serverTimestamp(),
+        });
+        selfManagedBuildingId = buildingDoc.id;
+      }
+
       // 1b. CORREZIONE B — Crea Owner in Firestore se nuovo (anti-duplicato in handleAddOwner)
       let ownerId: string | undefined = p.ownerId;
       let ownerString: string | undefined = p.owner;
@@ -2310,9 +2335,19 @@ export default function App() {
         isCondoConstituted: !!p.isCondoConstituted,
         condominiumId: condominiumId || "",
         millesimi: Number(p.millesimi) || 0,
+        selfManagedBuildingId: selfManagedBuildingId || "",
         userId: user.uid,
         createdAt: serverTimestamp(),
       });
+
+      // Aggiorna la lista propertyIds dell'Edificio Autogestito con l'immobile appena creato
+      if (selfManagedBuildingId) {
+        const targetBuilding = selfManagedBuildings.find((b: any) => b.id === selfManagedBuildingId);
+        const updatedPropertyIds = [...(targetBuilding?.propertyIds || []), propDoc.id];
+        await updateDoc(doc(db, "selfManagedBuildings", selfManagedBuildingId), {
+          propertyIds: updatedPropertyIds,
+        });
+      }
 
       // 3. Crea inquilino se nuovo
       let tenantId: string | undefined;
@@ -3004,6 +3039,115 @@ export default function App() {
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.UPDATE, `fastClosing/${id}`);
       showError("Impossibile rinviare la scadenza: " + errInfo.error);
+    }
+  };
+
+
+  // ── Ripartizione spese condominiali senza amministratore (29/08/2026) ──
+  // Entità separata da Condominium, come deciso con Massimo. Le voci di Fast Closing
+  // generate riusano source: "condominium" (valore già esistente), per comparire già
+  // correttamente etichettate in tutti i mastrini esistenti senza doverli modificare.
+
+  const handleCreateSelfManagedBuilding = async (data: { name: string; address?: string; notes?: string; propertyIds: string[] }) => {
+    if (!user) return;
+    try {
+      const cleanData: any = {};
+      Object.keys(data).forEach((key) => {
+        if ((data as any)[key] !== undefined) cleanData[key] = (data as any)[key];
+      });
+      const buildingDoc = await addDoc(collection(db, "selfManagedBuildings"), {
+        ...cleanData,
+        userId: user.uid,
+        createdAt: serverTimestamp()
+      });
+      for (const propertyId of data.propertyIds) {
+        await updateDoc(doc(db, "properties", propertyId), { selfManagedBuildingId: buildingDoc.id });
+      }
+      showSuccess("Edificio autogestito creato con successo!");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.CREATE, "selfManagedBuildings");
+      showError("Impossibile creare l'edificio: " + errInfo.error);
+    }
+  };
+
+  const handleAddMeterReading = async (data: any) => {
+    if (!user) return;
+    try {
+      const cleanData: any = {};
+      Object.keys(data).forEach((key) => {
+        if (data[key] !== undefined) cleanData[key] = data[key];
+      });
+      await addDoc(collection(db, "meterReadings"), {
+        ...cleanData,
+        userId: user.uid,
+        createdAt: serverTimestamp()
+      });
+      showSuccess("Lettura contatore registrata!");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.CREATE, "meterReadings");
+      showError("Impossibile salvare la lettura: " + errInfo.error);
+    }
+  };
+
+  // Crea la spesa comune E sincronizza Fast Closing nello stesso passaggio, riusando
+  // handleAddClosingItem con silent=true in loop (stesso pattern collaudato del
+  // PreExistingContractWizard — mai richiamare handleUpdateClosingItemStatus in loop, vedi
+  // nota storica in STATO_E_PROSSIMI_PASSI.md).
+  const handleAddSharedExpense = async (payload: any) => {
+    if (!user) return;
+    try {
+      const cleanData: any = {};
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] !== undefined) cleanData[key] = payload[key];
+      });
+      const expenseDoc = await addDoc(collection(db, "sharedExpenses"), {
+        ...cleanData,
+        userId: user.uid,
+        createdAt: serverTimestamp()
+      });
+
+      const dueDate = payload.installments?.[0]?.dueDate || new Date().toISOString().split("T")[0];
+
+      for (const alloc of payload.allocations) {
+        if (Number(alloc.amountTenant) > 0) {
+          await handleAddClosingItem({
+            propertyId: alloc.propertyId,
+            source: "condominium",
+            sourceId: `sharedexp-${expenseDoc.id}-${alloc.propertyId}-${alloc.lineItemId}`,
+            title: `[Spesa Comune] ${payload.title} — Quota Inquilino (${alloc.propertyName})`,
+            description: alloc.calculationNote,
+            amount: Number(alloc.amountTenant),
+            dueDate,
+            status: "Pending"
+          }, true);
+        }
+      }
+
+      showSuccess("Spesa comune registrata e Fast Closing sincronizzato!");
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.CREATE, "sharedExpenses");
+      showError("Impossibile salvare la spesa comune: " + errInfo.error);
+    }
+  };
+
+  const handleMarkRendicontoSent = async (expenseId: string, sentTo: string[]) => {
+    try {
+      await updateDoc(doc(db, "sharedExpenses", expenseId), {
+        rendicontoSentAt: new Date().toISOString(),
+        rendicontoSentTo: sentTo
+      });
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `sharedExpenses/${expenseId}`);
+      showError("Rendiconto inviato ma non è stato possibile aggiornare lo stato: " + errInfo.error);
+    }
+  };
+
+  const handleUpdateResidentsCount = async (propertyId: string, residentsCount: number) => {
+    try {
+      await updateDoc(doc(db, "properties", propertyId), { residentsCount });
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `properties/${propertyId}`);
+      showError("Impossibile aggiornare il numero di abitanti: " + errInfo.error);
     }
   };
 
@@ -3708,6 +3852,22 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
           />
         )}
 
+        {currentSection === "shared_expenses" && ownerProfile && (
+          <SelfManagedBuildingsView
+            buildings={selfManagedBuildings}
+            properties={properties}
+            meterReadings={meterReadings}
+            sharedExpenses={sharedExpenses}
+            tenants={tenants}
+            ownerProfile={ownerProfile}
+            onCreateBuilding={handleCreateSelfManagedBuilding}
+            onAddMeterReading={handleAddMeterReading}
+            onAddSharedExpense={handleAddSharedExpense}
+            onMarkRendicontoSent={handleMarkRendicontoSent}
+            onUpdateResidentsCount={handleUpdateResidentsCount}
+          />
+        )}
+
         {currentSection === "banks" && (
           <BanksView 
             movements={movements}
@@ -3889,7 +4049,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
           - Area Legale → crea un nuovo Studio Legale (CORREZIONE Q)
           - Dashboard/Area AI → nascosto: in queste pagine non si "aggiunge" nulla
           - Altre pagine → fallback sulla procedura guidata completa (comportamento precedente) */}
-      {currentSection !== "dashboard" && currentSection !== "ai_area" && currentSection !== "fast_closing" && currentSection !== "reminders" && (
+      {currentSection !== "dashboard" && currentSection !== "ai_area" && currentSection !== "fast_closing" && currentSection !== "reminders" && currentSection !== "shared_expenses" && (
       <UniversalAddButton
         label={
           currentSection === "properties" ? "Aggiungi Immobile" :
@@ -3931,6 +4091,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
         onPersist={handleMasterDataSave}
         existingOwners={owners}
         existingCondominiums={condominiums}
+        existingSelfManagedBuildings={selfManagedBuildings}
         existingTenants={tenants}
         onCreateOwner={handleAddOwner}
         standaloneEntity={wizardStandaloneEntity}
@@ -3938,4 +4099,3 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
     </div>
   );
 }
-
