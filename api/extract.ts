@@ -1,4 +1,3 @@
-
 /**
  * Vercel Serverless Function — /api/extract
  *
@@ -50,6 +49,62 @@ interface ContextConfig {
 
 function buildContextConfig(context: string, userPrompt?: string): ContextConfig {
   switch (context) {
+    case "sharedExpenseBill":
+      return {
+        systemInstruction: `Sei un assistente specializzato in gestione immobiliare. Stai analizzando una bolletta o fattura di spesa comune (es. acqua, luce parti comuni, manutenzioni) per un edificio senza amministratore di condominio.
+Estrai TUTTE le singole voci che compongono il documento, così come appaiono, senza aggregarle in un unico importo. Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
+{
+  "title": "Titolo sintetico del documento (es: Bolletta Acqua 3\u00b0 Bimestre 2026)",
+  "billingPeriodStart": "Data inizio periodo fatturato in formato YYYY-MM-DD, se presente",
+  "billingPeriodEnd": "Data fine periodo fatturato in formato YYYY-MM-DD, se presente",
+  "lineItems": [
+    { "description": "Descrizione esatta della voce come nel documento", "amount": 0 }
+  ],
+  "rawText": "Trascrizione integrale del testo riconosciuto, per audit"
+}
+Se una voce non ha un importo chiaramente leggibile, non includerla. Non inventare mai importi o descrizioni non presenti nel documento.`,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            billingPeriodStart: { type: Type.STRING },
+            billingPeriodEnd: { type: Type.STRING },
+            lineItems: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  description: { type: Type.STRING },
+                  amount: { type: Type.NUMBER },
+                },
+                required: ["description", "amount"],
+              },
+            },
+            rawText: { type: Type.STRING },
+          },
+          required: ["lineItems"],
+        },
+      };
+
+    case "meterReading":
+      return {
+        systemInstruction: `Sei un assistente specializzato nella lettura di contatori dell'acqua domestici da fotografia. Leggi con attenzione le cifre visualizzate sul display meccanico o digitale del contatore (ignora le cifre rosse/decimali se il contatore le distingue graficamente dalle cifre intere in nero, a meno che non siano l'unica lettura visibile).
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
+{
+  "readingValue": 1234.567,
+  "confidence": "alta"
+}
+Se non riesci a leggere chiaramente il numero, restituisci readingValue: null.`,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            readingValue: { type: Type.NUMBER, nullable: true },
+            confidence: { type: Type.STRING },
+          },
+          required: ["readingValue"],
+        },
+      };
+
     case "contracts":
       return {
         systemInstruction: `Sei un assistente specializzato in gestione immobiliare. Estrai i dettagli di un contratto di locazione dal testo o immagine fornita.
@@ -569,4 +624,3 @@ Segui rigorosamente le istruzioni di sistema per restituire solo JSON.`;
     });
   }
 }
-
