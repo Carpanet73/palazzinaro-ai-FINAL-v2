@@ -1,4 +1,3 @@
-
 import React from "react";
 import { 
   LayoutDashboard, 
@@ -18,7 +17,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Settings
+  Settings,
+  Droplet
 } from "lucide-react";
 import { AppSection } from "../types";
 import Logo from "./Logo";
@@ -78,6 +78,7 @@ export default function Sidebar({
     { id: "contracts", label: "Contratti", icon: FileText },
     { id: "tenants", label: "Inquilini", icon: Users },
     { id: "condominiums", label: "Condomini", icon: Building },
+    { id: "shared_expenses", label: "Spese Comuni (No Amm.)", icon: Droplet },
     { id: "banks", label: "Banche", icon: Landmark },
     { id: "reminders", label: "Solleciti", icon: AlertTriangle },
     { id: "maintenance", label: "Manutenzioni", icon: Wrench },
@@ -241,4 +242,3 @@ export default function Sidebar({
     </>
   );
 }
-
