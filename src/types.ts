@@ -1,4 +1,3 @@
-
 export interface UserProfile {
   uid: string;
   email: string;
@@ -89,6 +88,12 @@ export interface Property {
   };
   documents?: StoredDocument[]; // documenti fotografati (visura catastale, APE) conservati agli atti
   millesimi?: number; // Quota millesimale (modificabile)
+  // Ripartizione spese condominiali senza amministratore (29/08/2026): numero di abitanti
+  // dell'unità (criterio di ripartizione "per abitanti" + indice di plausibilità consumi) e
+  // link opzionale all'Edificio Autogestito (entità separata da Condominium, vedi
+  // src/types-shared-expenses.ts).
+  residentsCount?: number;
+  selfManagedBuildingId?: string;
   luceMeter?: UtilityMeter;
   gasMeter?: UtilityMeter;
   acquaMeter?: UtilityMeter;
@@ -672,7 +677,8 @@ export type AppSection =
   | "legal"
   | "ai_area"
   | "owners"
-  | "settings";
+  | "settings"
+  | "shared_expenses";
 
 export interface InsurancePolicy {
   id: string;
@@ -735,5 +741,3 @@ export interface DeliveryReport {
   estimatedDamagesAmount?: number;
   driveBackupUrl?: string;
 }
-
-
