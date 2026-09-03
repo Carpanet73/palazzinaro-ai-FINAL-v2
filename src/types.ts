@@ -382,6 +382,17 @@ export interface Contract {
   // registra il fatto storico legittimo "rapporto già in corso, deposito non versato/non
   // dovuto" (es. inquilini da decenni mai stati soggetti a deposito) — non un dato mancante.
   securityDepositWaived?: boolean;
+  // Ripartizione spese condominiali... no: tracciamento restituzione Deposito Cauzionale
+  // (01/09/2026, su segnalazione di Massimo): il deposito genera una voce economica
+  // dedicata in Fast Closing alla creazione del contratto (vedi App.tsx,
+  // handleAddClosingItem con source "contract" e titolo "[Deposito Cauzionale]"). Questi
+  // campi tracciano solo l'EVENTO di restituzione a fine locazione, mostrato nei mastrini
+  // e nella scheda contratto — non generano un secondo movimento in Fast Closing (il
+  // deposito non è mai stato un'entrata da riconciliare in banca come un canone, resta
+  // fuori dal flusso Solleciti per lo stesso motivo delle spese accessorie non marcate).
+  securityDepositReturned?: boolean;
+  securityDepositReturnedDate?: string; // YYYY-MM-DD
+  securityDepositReturnedAmount?: number; // può differire dall'importo versato per compensazioni
 }
 
 export interface CondoRate {
