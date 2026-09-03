@@ -68,8 +68,18 @@ export default function SelfManagedBuildingsView({
     () => (selectedBuilding ? properties.filter((p) => selectedBuilding.propertyIds.includes(p.id)) : []),
     [selectedBuilding, properties]
   );
+  // Helper: Firestore Timestamp, Date o stringa — mai un confronto diretto con
+  // localeCompare, che esiste solo sulle stringhe (causa reale del crash del 03/09/2026:
+  // createdAt è un Timestamp, non una stringa, essendo scritto con serverTimestamp()).
+  const toComparableMillis = (val: any): number => {
+    if (val && typeof val === "object" && "seconds" in val) return val.seconds * 1000 + (val.nanoseconds || 0) / 1000000;
+    if (val instanceof Date) return val.getTime();
+    if (typeof val === "string") { const p = Date.parse(val); return isNaN(p) ? 0 : p; }
+    return 0;
+  };
+
   const buildingExpenses = useMemo(
-    () => sharedExpenses.filter((e) => e.buildingId === selectedBuildingId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    () => sharedExpenses.filter((e) => e.buildingId === selectedBuildingId).sort((a, b) => toComparableMillis(b.createdAt) - toComparableMillis(a.createdAt)),
     [sharedExpenses, selectedBuildingId]
   );
 
