@@ -1982,7 +1982,12 @@ export default function App() {
           propertyId: finalPropertyId,
           amount: securityDepositAmount,
           dueDate: data.startDate,
-          source: "contract",
+          // CORREZIONE (01/09/2026, su segnalazione di Massimo): il deposito è
+          // funzionalmente una spesa accessoria, non un canone — source "contract" lo faceva
+          // andare AUTOMATICAMENTE in Sollecito alla chiusura mensile se non pagato (stessa
+          // regola rigida degli affitti). Con "condominium" segue invece le regole delle
+          // spese accessorie: Sollecito solo se marcato Insoluto a mano.
+          source: "condominium",
           sourceId: `deposit-${contractDoc.id}`,
           status: "Pending",
           debtorId: finalTenantId || null,
@@ -2489,7 +2494,8 @@ export default function App() {
             propertyId: propDoc.id,
             amount: wizardSecurityDepositAmount,
             dueDate: ct.startDate,
-            source: "contract",
+            // Stessa correzione del wizard contratti completo: spesa accessoria, non canone.
+            source: "condominium",
             sourceId: `deposit-${contractDoc.id}`,
             status: "Pending",
             debtorId: tenantId || null,
@@ -3156,18 +3162,38 @@ export default function App() {
         createdAt: serverTimestamp()
       });
 
-      const dueDate = payload.installments?.[0]?.dueDate || new Date().toISOString().split("T")[0];
+      // Rateizzazione (01/09/2026, su richiesta di Massimo): la quota proprietario non è
+      // mai tracciata qui (paga sempre lui il fornitore, obbligazione solidale) — solo la
+      // quota inquilino genera voci in Fast Closing, una per rata per ogni unità, sempre
+      // con le stesse regole delle spese accessorie (source "condominium": mai un
+      // Sollecito automatico, solo se marcata insoluta a mano).
+      const installments: { dueDate: string; amount: number }[] =
+        payload.installments && payload.installments.length > 0
+          ? payload.installments
+          : [{ dueDate: payload.dueDate || new Date().toISOString().split("T")[0], amount: 0 }];
+      const totalInstallmentsAmount = installments.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+      const nInstallments = installments.length;
 
       for (const alloc of payload.allocations) {
-        if (Number(alloc.amountTenant) > 0) {
+        if (Number(alloc.amountTenant) <= 0) continue;
+        for (let idx = 0; idx < installments.length; idx++) {
+          const inst = installments[idx];
+          // Scadenza unica: l'intera quota va nella singola voce. Rateizzata: ogni rata
+          // prende la stessa proporzione della quota inquilino di questa unità — se le rate
+          // non sono esattamente uguali (personalizzate a mano), la proporzione resta comunque
+          // fedele a quanto impostato, mai un importo inventato.
+          const fraction = totalInstallmentsAmount > 0 ? (Number(inst.amount) || 0) / totalInstallmentsAmount : 1 / nInstallments;
+          const rataAmount = Number((Number(alloc.amountTenant) * fraction).toFixed(2));
+          if (rataAmount <= 0) continue;
+          const rataLabel = nInstallments > 1 ? ` — Rata ${idx + 1}/${nInstallments}` : "";
           await handleAddClosingItem({
             propertyId: alloc.propertyId,
             source: "condominium",
-            sourceId: `sharedexp-${expenseDoc.id}-${alloc.propertyId}-${alloc.lineItemId}`,
-            title: `[Spesa Comune] ${payload.title} — Quota Inquilino (${alloc.propertyName})`,
+            sourceId: `sharedexp-${expenseDoc.id}-${alloc.propertyId}-${alloc.lineItemId}-r${idx}`,
+            title: `[Spesa Comune] ${payload.title} — Quota Inquilino (${alloc.propertyName})${rataLabel}`,
             description: alloc.calculationNote,
-            amount: Number(alloc.amountTenant),
-            dueDate,
+            amount: rataAmount,
+            dueDate: inst.dueDate,
             status: "Pending"
           }, true);
         }
