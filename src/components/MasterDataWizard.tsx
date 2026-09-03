@@ -61,7 +61,18 @@ export interface MasterDataWizardProps {
     property?: { name?: string; address?: string; type?: string };
     tenant?: { name?: string; email?: string; phone?: string; fiscalCode?: string };
     owner?: { name?: string };
-    contract?: { startDate?: string; endDate?: string; rentAmount?: number; frequency?: string };
+    contract?: {
+      startDate?: string;
+      endDate?: string;
+      rentAmount?: number;
+      frequency?: string;
+      // Allineamento al wizard contratti completo (01/09/2026): stessi campi strutturati,
+      // mai più solo suggeriti dentro una nota libera — regola "un solo flusso" (sezione 3).
+      taxRegime?: "CedolareSecca" | "Ordinaria";
+      f24OwnerSplitPct?: number;
+      securityDepositAmount?: number;
+      securityDepositMonths?: number;
+    };
   } | null;
   isOpen: boolean;
   onClose: () => void;
@@ -300,6 +311,12 @@ export default function MasterDataWizard({
   const [cRentAmount, setCRentAmount] = useState<number>(0);
   const [cFrequency, setCFrequency] = useState<"Mensile" | "Trimestrale" | "Semestrale" | "Annuale">("Mensile");
   const [cNotes, setCNotes] = useState("");
+  // Allineamento al wizard contratti completo: regime fiscale e deposito cauzionale come
+  // campi strutturati, non più solo suggeriti dentro le note libere.
+  const [cTaxRegime, setCTaxRegime] = useState<"CedolareSecca" | "Ordinaria">("Ordinaria");
+  const [cF24OwnerSplitPct, setCF24OwnerSplitPct] = useState<number>(100);
+  const [cSecurityDepositMonths, setCSecurityDepositMonths] = useState<number>(0);
+  const [cSecurityDepositAmount, setCSecurityDepositAmount] = useState<number>(0);
 
   // ============================================================================
   // Reset
@@ -689,6 +706,10 @@ export default function MasterDataWizard({
         frequency: cFrequency,
         status: "Active",
         notes: cNotes.trim() || undefined,
+        taxRegime: isBareOwnership ? "Ordinaria" : cTaxRegime,
+        f24OwnerSplitPct: !isBareOwnership && cTaxRegime === "Ordinaria" ? Number(cF24OwnerSplitPct) || 100 : undefined,
+        securityDepositMonths: Number(cSecurityDepositMonths) || 0,
+        securityDepositAmount: Number(cSecurityDepositAmount) || 0,
       };
     }
 
@@ -1780,11 +1801,85 @@ export default function MasterDataWizard({
                     </Field>
                   </div>
 
-                  <Field label="Note contratto">
+                  {/* Allineamento al wizard contratti completo (01/09/2026): stessi campi
+                      strutturati di ContractsView.tsx, non più solo suggeriti in una nota
+                      libera — regola "un solo flusso" (sezione 3 delle linee guida). */}
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-3">
+                    <p className="text-[11px] text-slate-500">
+                      "Nuda Proprietà" è uno status di titolarità (impostato allo step 1), il
+                      Regime Fiscale è un concetto separato: la Cedolare Secca non si applica
+                      in nuda proprietà.
+                    </p>
+                    <div className="flex gap-3">
+                      <label className={`flex-1 flex items-start space-x-2 bg-white p-3 rounded-lg border border-slate-200 transition-colors ${isBareOwnership ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-slate-50/50"}`}>
+                        <input
+                          type="radio"
+                          name="cTaxRegime"
+                          disabled={isBareOwnership}
+                          checked={cTaxRegime === "CedolareSecca"}
+                          onChange={() => setCTaxRegime("CedolareSecca")}
+                          className="w-4 h-4 accent-slate-900 mt-0.5"
+                        />
+                        <span className="text-xs font-bold text-slate-800 block">Cedolare Secca</span>
+                      </label>
+                      <label className="flex-1 flex items-start space-x-2 bg-white p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50/50">
+                        <input
+                          type="radio"
+                          name="cTaxRegime"
+                          checked={cTaxRegime === "Ordinaria"}
+                          onChange={() => setCTaxRegime("Ordinaria")}
+                          className="w-4 h-4 accent-slate-900 mt-0.5"
+                        />
+                        <span className="text-xs font-bold text-slate-800 block">Ordinaria</span>
+                      </label>
+                    </div>
+                    {!isBareOwnership && cTaxRegime === "Ordinaria" && (
+                      <Field label="Quota F24 a carico del proprietario (%)">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={cF24OwnerSplitPct}
+                          onChange={(e) => setCF24OwnerSplitPct(Number(e.target.value) || 0)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                        />
+                      </Field>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Deposito cauzionale — mensilità">
+                      <input
+                        type="number"
+                        min={0}
+                        value={cSecurityDepositMonths || ""}
+                        onChange={(e) => {
+                          const months = Number(e.target.value) || 0;
+                          setCSecurityDepositMonths(months);
+                          setCSecurityDepositAmount(months * (Number(cRentAmount) || 0));
+                        }}
+                        placeholder="es. 3"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
+                    </Field>
+                    <Field label="Deposito cauzionale — importo (€)">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={cSecurityDepositAmount || ""}
+                        onChange={(e) => setCSecurityDepositAmount(Number(e.target.value) || 0)}
+                        placeholder="es. 2400"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
+                    </Field>
+                  </div>
+
+                  <Field label="Note contratto (opzionale)">
                     <textarea
                       value={cNotes}
                       onChange={(e) => setCNotes(e.target.value)}
-                      placeholder="Deposit cauzionale, spese incluse, cedolare secca..."
+                      placeholder="Spese incluse, clausole particolari, accordi di recesso..."
                       rows={2}
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none"
                     />
@@ -1793,7 +1888,9 @@ export default function MasterDataWizard({
                   <InfoBox>
                     Il contratto verrà <strong>collegato automaticamente</strong> a
                     immobile, proprietario e inquilino. Le rate mensili verranno
-                    generate nella sezione "Fast Closing" al salvataggio.
+                    generate nella sezione "Fast Closing" al salvataggio, insieme a una
+                    voce dedicata per il deposito cauzionale (se indicato), separata dal
+                    canone.
                   </InfoBox>
                 </div>
               )}
