@@ -44,6 +44,8 @@ export interface SharedExpenseWizardProps {
     billingPeriodEnd?: string;
     lineItems: SharedExpenseLineItem[];
     allocations: ReturnType<typeof allocateFullExpense>;
+    // Scadenza unica (una data per l'intera spesa) oppure rate (array), mai entrambi.
+    dueDate?: string;
     installments?: { dueDate: string; amount: number }[];
     sourceDocumentUrl?: string;
     sourceDocumentText?: string;
@@ -80,8 +82,38 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
     { id: newLineItemId(), description: "", amount: 0, splitCriteria: "millesimi" },
   ]);
 
-  // Step 4 — rate
+  // Step 4 — scadenza unica o rateizzazione (01/09/2026, su richiesta di Massimo): la quota
+  // proprietario non è mai tracciata in Fast Closing (paga sempre lui il fornitore,
+  // obbligazione solidale), quindi la rateizzazione si applica solo alla quota inquilino —
+  // pura flessibilità di recupero verso inquilini meno abbienti, non un vincolo reale sul
+  // pagamento effettivo della bolletta.
+  const [paymentMode, setPaymentMode] = useState<"unica" | "rate">("unica");
+  const [expenseDueDate, setExpenseDueDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [installmentCount, setInstallmentCount] = useState<number>(2);
+  const [installmentFrequency, setInstallmentFrequency] = useState<"Mensile" | "Bimestrale" | "Trimestrale" | "Quadrimestrale" | "Semestrale" | "Annuale">("Mensile");
   const [installments, setInstallments] = useState<{ dueDate: string; amount: number }[]>([]);
+
+  const FREQUENCY_MONTHS: Record<string, number> = { Mensile: 1, Bimestrale: 2, Trimestrale: 3, Quadrimestrale: 4, Semestrale: 6, Annuale: 12 };
+
+  // Genera N rate in parti uguali, spaziate secondo la frequenza scelta, a partire da oggi
+  // ("la prima rata nel primo fast disponibile"). Rimangono poi modificabili una per una,
+  // sia nell'importo che nella data, esattamente come le rate del deposito cauzionale.
+  const generateInstallments = () => {
+    const n = Math.max(1, Number(installmentCount) || 1);
+    const perInstallment = Number((totalAmount / n).toFixed(2));
+    const months = FREQUENCY_MONTHS[installmentFrequency] || 1;
+    const start = new Date();
+    const rows: { dueDate: string; amount: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const d = new Date(start);
+      d.setMonth(d.getMonth() + i * months);
+      // L'ultima rata assorbe l'eventuale arrotondamento residuo, così la somma delle rate
+      // torna sempre esatta al totale bolletta (mai un centesimo perso o inventato).
+      const amount = i === n - 1 ? Number((totalAmount - perInstallment * (n - 1)).toFixed(2)) : perInstallment;
+      rows.push({ dueDate: d.toISOString().split("T")[0], amount });
+    }
+    setInstallments(rows);
+  };
 
   if (!isOpen) return null;
 
@@ -151,6 +183,13 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
   const canGoNext = () => {
     if (step === 2) return title.trim() !== "";
     if (step === 3) return lineItems.length > 0 && lineItems.every((li) => li.description.trim() !== "" && li.amount > 0);
+    if (step === 4) {
+      if (paymentMode === "unica") return expenseDueDate.trim() !== "";
+      // La somma delle rate deve tornare esatta al totale (tolleranza di un centesimo per
+      // arrotondamenti) — altrimenti si perderebbe o inventerebbe denaro nei mastrini.
+      const sum = installments.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+      return installments.length > 0 && installments.every((i) => i.dueDate.trim() !== "" && i.amount > 0) && Math.abs(sum - totalAmount) < 0.01;
+    }
     return true;
   };
 
@@ -167,7 +206,10 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
         billingPeriodEnd: billingPeriodEnd || undefined,
         lineItems,
         allocations,
-        installments: installments.length > 0 ? installments : undefined,
+        // Scadenza unica: un'unica data, nessuna rata. Rateizzata: solo l'array di rate,
+        // già validato (somma = totale) al passo 4 — mai entrambi insieme.
+        dueDate: paymentMode === "unica" ? expenseDueDate : undefined,
+        installments: paymentMode === "rate" && installments.length > 0 ? installments : undefined,
         sourceDocumentUrl: photoPreview ?? undefined,
         sourceDocumentText: sourceDocumentText || undefined,
         status: "Confirmed",
@@ -310,21 +352,95 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
           {step === 4 && (
             <div className="space-y-3">
               <p className="text-xs text-slate-500">
-                Facoltativo: se vuoi rateizzare l'importo su più scadenze, aggiungile qui. Ogni rata diventerà una voce a sé nel Fast Closing. Se non aggiungi nulla, la spesa viene registrata con scadenza unica alla data odierna.
+                Come vuoi registrare la quota a carico dell'inquilino? La quota del proprietario
+                non genera mai una voce da recuperare (paga sempre lui il fornitore).
               </p>
-              {installments.map((inst, idx) => (
-                <div key={idx} className="flex items-center space-x-2">
-                  <input type="date" value={inst.dueDate} onChange={(e) => updateInstallment(idx, { dueDate: e.target.value })} className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 font-mono" />
-                  <input type="number" step="0.01" value={inst.amount || ""} onChange={(e) => updateInstallment(idx, { amount: Number(e.target.value) })} placeholder="€" className="w-28 text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 font-mono text-right" />
-                  <button onClick={() => removeInstallment(idx)} className="p-2 text-slate-400 hover:text-rose-600">
-                    <Trash2 size={15} />
-                  </button>
+
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode("unica")}
+                  className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors ${paymentMode === "unica" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+                >
+                  Scadenza Unica
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode("rate")}
+                  className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors ${paymentMode === "rate" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+                >
+                  Rateizza
+                </button>
+              </div>
+
+              {paymentMode === "unica" ? (
+                <div>
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">Scadenza</label>
+                  <input
+                    type="date"
+                    value={expenseDueDate}
+                    onChange={(e) => setExpenseDueDate(e.target.value)}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 font-mono"
+                  />
                 </div>
-              ))}
-              <button onClick={addInstallment} className="flex items-center space-x-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700">
-                <Plus size={14} />
-                <span>Aggiungi Rata</span>
-              </button>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">Numero Rate</label>
+                      <input
+                        type="number"
+                        min={2}
+                        value={installmentCount}
+                        onChange={(e) => setInstallmentCount(Number(e.target.value) || 1)}
+                        className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">Frequenza</label>
+                      <select
+                        value={installmentFrequency}
+                        onChange={(e) => setInstallmentFrequency(e.target.value as typeof installmentFrequency)}
+                        className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 bg-white"
+                      >
+                        {Object.keys(FREQUENCY_MONTHS).map((f) => (
+                          <option key={f} value={f}>{f}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={generateInstallments}
+                    className="w-full py-2 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors"
+                  >
+                    Genera Rate in Parti Uguali
+                  </button>
+
+                  <p className="text-[11px] text-slate-500">
+                    Puoi correggere ogni rata singolarmente (importo e data) dopo averle generate.
+                  </p>
+                  {installments.map((inst, idx) => (
+                    <div key={idx} className="flex items-center space-x-2">
+                      <span className="text-[10px] font-bold text-slate-400 w-6">{idx + 1}ª</span>
+                      <input type="date" value={inst.dueDate} onChange={(e) => updateInstallment(idx, { dueDate: e.target.value })} className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 font-mono" />
+                      <input type="number" step="0.01" value={inst.amount || ""} onChange={(e) => updateInstallment(idx, { amount: Number(e.target.value) })} placeholder="€" className="w-28 text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 font-mono text-right" />
+                      <button onClick={() => removeInstallment(idx)} className="p-2 text-slate-400 hover:text-rose-600">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                  <button onClick={addInstallment} className="flex items-center space-x-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700">
+                    <Plus size={14} />
+                    <span>Aggiungi Rata</span>
+                  </button>
+                  {installments.length > 0 && (
+                    <p className={`text-[11px] font-semibold ${Math.abs(installments.reduce((s, i) => s + (Number(i.amount) || 0), 0) - totalAmount) < 0.01 ? "text-emerald-600" : "text-rose-600"}`}>
+                      Somma rate: € {installments.reduce((s, i) => s + (Number(i.amount) || 0), 0).toFixed(2)} — Totale bolletta: € {totalAmount.toFixed(2)}
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           )}
 
