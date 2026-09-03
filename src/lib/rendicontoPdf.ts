@@ -1,9 +1,20 @@
 /**
  * rendicontoPdf.ts
  * ============================================================================
- * Genera il PDF di rendiconto per una spesa comune, ricalcando voce per voce
- * la struttura della bolletta/fattura originale (mai un unico importo
- * aggregato), per una singola unità immobiliare/inquilino.
+ * Genera i PDF di riepilogo per una spesa comune, in due varianti (richieste
+ * da Massimo il 03/09/2026):
+ *
+ *  - PARTICOLARE (per singola unità/inquilino): da inviare al singolo
+ *    inquilino per pretendere il pagamento della sua quota. Contiene
+ *    descrizione spesa, importo totale bolletta, criterio di ripartizione,
+ *    importo dovuto da QUESTO inquilino, ed eventuale elenco rate.
+ *  - GENERALE (tutte le unità insieme): stessa spesa, ma con la ripartizione
+ *    completa su ogni unità dell'edificio in un'unica tabella.
+ *
+ * Le rate: per Fast Closing servono mese+giorno+anno (data di addebito
+ * precisa), ma nel documento per l'inquilino compaiono SOLO mese e anno —
+ * il giorno esatto è un dettaglio di gestione interna, non riguarda
+ * l'inquilino.
  *
  * Usa jsPDF, stessa libreria già in uso per la Messa in Mora (sezione 5 delle
  * linee guida) — nessuna nuova dipendenza da aggiungere al progetto.
@@ -13,98 +24,240 @@
 import jsPDF from "jspdf";
 import type { Property, OwnerProfile } from "../types";
 import type { SharedExpense, SharedExpenseAllocationLine } from "../types-shared-expenses";
+import { SHARED_EXPENSE_CATEGORY_LABELS, SPLIT_CRITERIA_LABELS } from "../types-shared-expenses";
 
-export function generateRendicontoPdf(
-    expense: SharedExpense,
-    property: Property,
-    tenantName: string,
-    owner: OwnerProfile,
-    buildingName: string
-  ): jsPDF {
-    const doc = new jsPDF();
-    const marginX = 18;
-    let y = 20;
+const MESI_ITALIANI = [
+  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
+];
 
-  // Intestazione — logo reale, come da regola sezione 11 (qui solo testo, il logo va aggiunto
-  // lato componente con doc.addImage se disponibile in base64, coerente col resto dei PDF già in uso)
+// Solo mese e anno (mai il giorno): quello che vede l'inquilino, mai la data
+// di addebito precisa che serve solo lato Fast Closing.
+function formatMeseAnno(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  if (isNaN(d.getTime())) return dateStr;
+  return `${MESI_ITALIANI[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function totaleBolletta(expense: SharedExpense): number {
+  return expense.lineItems.reduce((sum, li) => sum + (Number(li.amount) || 0), 0);
+}
+
+// Elenco criteri distinti usati nelle voci della spesa (spesso una sola, ma
+// una bolletta può avere voci con criteri diversi: es. quota fissa a
+// millesimi + quota consumo a contatore).
+function criteriUsati(expense: SharedExpense): string {
+  const set = new Set(expense.lineItems.map((li) => SPLIT_CRITERIA_LABELS[li.splitCriteria]));
+  return Array.from(set).join(", ");
+}
+
+function disegnaIntestazione(doc: jsPDF, marginX: number, y: number, expense: SharedExpense, buildingName: string): number {
   doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text("Rendiconto Spese Comuni", marginX, y);
-    y += 8;
+  doc.setFontSize(14);
+  doc.text("Riepilogo Spesa Comune", marginX, y);
+  y += 8;
 
   doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Edificio: ${buildingName}`, marginX, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Edificio: ${buildingName}`, marginX, y);
+  y += 6;
+  doc.text(`Spesa: ${expense.title}`, marginX, y);
+  y += 6;
+  doc.text(`Categoria: ${SHARED_EXPENSE_CATEGORY_LABELS[expense.category]} (${expense.isExtraordinary ? "Straordinaria" : "Ordinaria"})`, marginX, y);
+  y += 6;
+  if (expense.billingPeriodStart && expense.billingPeriodEnd) {
+    doc.text(`Periodo fatturato: ${expense.billingPeriodStart} — ${expense.billingPeriodEnd}`, marginX, y);
     y += 6;
-    doc.text(`Unità: ${property.name} — ${property.address}`, marginX, y);
-    y += 6;
-    doc.text(`Inquilino: ${tenantName}`, marginX, y);
-    y += 6;
-    doc.text(`Proprietario: ${owner.name}`, marginX, y);
-    y += 10;
+  }
+  doc.text(`Importo totale bolletta: € ${totaleBolletta(expense).toFixed(2)}`, marginX, y);
+  y += 6;
+  doc.text(`Criterio di ripartizione: ${criteriUsati(expense)}`, marginX, y);
+  y += 10;
+  return y;
+}
 
+function disegnaRate(doc: jsPDF, marginX: number, y: number, rate: { label: string; amount: number }[], titolo: string): number {
+  if (rate.length === 0) return y;
+  if (y > 250) { doc.addPage(); y = 20; }
   doc.setFont("helvetica", "bold");
-    doc.text(expense.title, marginX, y);
+  doc.setFontSize(10);
+  doc.text(titolo, marginX, y);
+  y += 6;
+  doc.setFontSize(9);
+  rate.forEach((r, i) => {
+    if (y > 270) { doc.addPage(); y = 20; }
+    doc.setFont("helvetica", "normal");
+    doc.text(`${i + 1}ª rata — ${r.label}`, marginX, y);
+    doc.text(`€ ${r.amount.toFixed(2)}`, marginX + 130, y);
     y += 6;
-    if (expense.billingPeriodStart && expense.billingPeriodEnd) {
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          doc.text(`Periodo fatturato: ${expense.billingPeriodStart} — ${expense.billingPeriodEnd}`, marginX, y);
-          y += 8;
-    } else {
-          y += 4;
-    }
+  });
+  y += 4;
+  return y;
+}
+
+function disegnaFooter(doc: jsPDF, marginX: number, y: number) {
+  doc.setFontSize(8);
+  doc.setTextColor(120);
+  doc.text(
+    "Riepilogo generato mediante procedura automatizzata del sistema, in nome e per conto del proprietario,\ncon supporto dell'intelligenza artificiale.",
+    marginX,
+    y
+  );
+}
+
+/**
+ * PARTICOLARE — riepilogo per una singola unità/inquilino, da inviare per
+ * pretendere il pagamento della sua quota.
+ */
+export function generateRendicontoPdf(
+  expense: SharedExpense,
+  property: Property,
+  tenantName: string,
+  owner: OwnerProfile,
+  buildingName: string
+): jsPDF {
+  const doc = new jsPDF();
+  const marginX = 18;
+  let y = disegnaIntestazione(doc, marginX, 20, expense, buildingName);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(`Unità: ${property.name}${property.address ? " — " + property.address : ""}`, marginX, y);
+  y += 6;
+  doc.text(`Inquilino: ${tenantName}`, marginX, y);
+  y += 6;
+  doc.text(`Proprietario: ${owner.name}`, marginX, y);
+  y += 10;
 
   // Tabella voce per voce, come nella bolletta originale
   doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.text("Voce", marginX, y);
-    doc.text("Criterio", marginX + 80, y);
-    doc.text("Quota Inquilino", marginX + 130, y, { align: "left" });
-    y += 4;
-    doc.setDrawColor(200);
-    doc.line(marginX, y, 192, y);
-    y += 5;
+  doc.setFont("helvetica", "bold");
+  doc.text("Voce", marginX, y);
+  doc.text("Criterio", marginX + 80, y);
+  doc.text("Quota Inquilino", marginX + 130, y);
+  y += 4;
+  doc.setDrawColor(200);
+  doc.line(marginX, y, 192, y);
+  y += 5;
 
   doc.setFont("helvetica", "normal");
-    const propertyAllocations = expense.allocations.filter((a) => a.propertyId === property.id);
-    let totalTenant = 0;
-    let totalOwner = 0;
+  const propertyAllocations = expense.allocations.filter((a) => a.propertyId === property.id);
+  let totalTenant = 0;
+  let totalOwner = 0;
 
   propertyAllocations.forEach((alloc: SharedExpenseAllocationLine) => {
-        const li = expense.lineItems.find((l) => l.id === alloc.lineItemId);
-        if (!li) return;
-        if (y > 270) {
-                doc.addPage();
-                y = 20;
-        }
-        doc.text(li.description, marginX, y, { maxWidth: 75 });
-        doc.text(li.splitCriteria, marginX + 80, y, { maxWidth: 45 });
-        doc.text(`€ ${alloc.amountTenant.toFixed(2)}`, marginX + 130, y);
-        y += 6;
-        totalTenant += alloc.amountTenant;
-        totalOwner += alloc.amountOwner;
+    const li = expense.lineItems.find((l) => l.id === alloc.lineItemId);
+    if (!li) return;
+    if (y > 270) { doc.addPage(); y = 20; }
+    doc.text(li.description, marginX, y, { maxWidth: 75 });
+    doc.text(SPLIT_CRITERIA_LABELS[li.splitCriteria], marginX + 80, y, { maxWidth: 45 });
+    doc.text(`€ ${alloc.amountTenant.toFixed(2)}`, marginX + 130, y);
+    y += 6;
+    totalTenant += alloc.amountTenant;
+    totalOwner += alloc.amountOwner;
   });
 
   y += 4;
-    doc.line(marginX, y, 192, y);
-    y += 6;
-    doc.setFont("helvetica", "bold");
-    doc.text(`Totale a carico dell'inquilino: € ${totalTenant.toFixed(2)}`, marginX, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(`(Quota già assorbita dal proprietario per questa unità: € ${totalOwner.toFixed(2)})`, marginX, y);
-    y += 10;
-
+  doc.line(marginX, y, 192, y);
+  y += 6;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(`Totale a carico dell'inquilino: € ${totalTenant.toFixed(2)}`, marginX, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-    doc.setTextColor(120);
-    doc.text(
-          "Rendiconto generato mediante procedura automatizzata del sistema, in nome e per conto del proprietario,\ncon supporto dell'intelligenza artificiale.",
-          marginX,
-          y
-        );
+  doc.text(`(Quota già a carico del proprietario per questa unità: € ${totalOwner.toFixed(2)})`, marginX, y);
+  y += 10;
 
+  // Rate — solo mese e anno per l'inquilino, mai il giorno esatto di addebito
+  if (expense.installments && expense.installments.length > 0) {
+    const totaleRate = expense.installments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const righeRata = expense.installments.map((r) => ({
+      label: formatMeseAnno(r.dueDate),
+      amount: totaleRate > 0 ? totalTenant * ((Number(r.amount) || 0) / totaleRate) : totalTenant / expense.installments!.length,
+    }));
+    y = disegnaRate(doc, marginX, y, righeRata, "Rateizzazione — quota dovuta per rata:");
+  }
+
+  disegnaFooter(doc, marginX, y);
+  return doc;
+}
+
+/**
+ * GENERALE — stessa spesa, ripartizione completa su tutte le unità
+ * dell'edificio in un'unica tabella (per uso interno o invio cumulativo).
+ */
+export function generateRendicontoGeneralePdf(
+  expense: SharedExpense,
+  properties: Property[],
+  tenantNamesByPropertyId: Record<string, string>,
+  owner: OwnerProfile,
+  buildingName: string
+): jsPDF {
+  const doc = new jsPDF();
+  const marginX = 18;
+  let y = disegnaIntestazione(doc, marginX, 20, expense, buildingName);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(`Proprietario: ${owner.name}`, marginX, y);
+  y += 10;
+
+  // Tabella per unità: somma di tutte le voci allocate a quell'unità
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.text("Unità", marginX, y);
+  doc.text("Inquilino", marginX + 55, y);
+  doc.text("Quota Inquilino", marginX + 110, y);
+  doc.text("Quota Proprietario", marginX + 150, y);
+  y += 4;
+  doc.setDrawColor(200);
+  doc.line(marginX, y, 192, y);
+  y += 5;
+
+  doc.setFont("helvetica", "normal");
+  let grandTotalTenant = 0;
+  let grandTotalOwner = 0;
+
+  const propertyIds = Array.from(new Set(expense.allocations.map((a) => a.propertyId)));
+  propertyIds.forEach((propertyId) => {
+    const property = properties.find((p) => p.id === propertyId);
+    const allocs = expense.allocations.filter((a) => a.propertyId === propertyId);
+    const tenantTotal = allocs.reduce((s, a) => s + a.amountTenant, 0);
+    const ownerTotal = allocs.reduce((s, a) => s + a.amountOwner, 0);
+    grandTotalTenant += tenantTotal;
+    grandTotalOwner += ownerTotal;
+
+    if (y > 270) { doc.addPage(); y = 20; }
+    doc.text(property?.name || propertyId, marginX, y, { maxWidth: 50 });
+    doc.text(tenantNamesByPropertyId[propertyId] || "—", marginX + 55, y, { maxWidth: 50 });
+    doc.text(`€ ${tenantTotal.toFixed(2)}`, marginX + 110, y);
+    doc.text(`€ ${ownerTotal.toFixed(2)}`, marginX + 150, y);
+    y += 6;
+  });
+
+  y += 4;
+  doc.line(marginX, y, 192, y);
+  y += 6;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(`Totale generale inquilini: € ${grandTotalTenant.toFixed(2)}`, marginX, y);
+  y += 6;
+  doc.setFontSize(9);
+  doc.text(`Totale generale proprietario: € ${grandTotalOwner.toFixed(2)}`, marginX, y);
+  y += 10;
+
+  // Rate — vista generale: importo complessivo per rata (somma su tutte le unità)
+  if (expense.installments && expense.installments.length > 0) {
+    const totaleRate = expense.installments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const righeRata = expense.installments.map((r) => ({
+      label: formatMeseAnno(r.dueDate),
+      amount: totaleRate > 0 ? grandTotalTenant * ((Number(r.amount) || 0) / totaleRate) : grandTotalTenant / expense.installments!.length,
+    }));
+    y = disegnaRate(doc, marginX, y, righeRata, "Rateizzazione — totale generale dovuto per rata:");
+  }
+
+  disegnaFooter(doc, marginX, y);
   return doc;
 }
 
@@ -113,5 +266,5 @@ export function generateRendicontoPdf(
  * se supportato dal template) o comunque per il download diretto.
  */
 export function rendicontoPdfToBase64(doc: jsPDF): string {
-    return doc.output("datauristring");
+  return doc.output("datauristring");
 }
