@@ -109,6 +109,8 @@ export interface SharedExpense {
     billingPeriodEnd?: string;
     lineItems: SharedExpenseLineItem[];
     allocations: SharedExpenseAllocationLine[];
+    // Scadenza unica (alternativa alle rate — mai valorizzati entrambi insieme).
+    dueDate?: string;
     installments?: { dueDate: string; amount: number; fastClosingItemIds?: string[] }[];
     sourceDocumentUrl?: string;
     sourceDocumentText?: string;
