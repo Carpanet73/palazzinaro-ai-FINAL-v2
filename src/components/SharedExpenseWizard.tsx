@@ -193,7 +193,7 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-5">
+        <div className="p-6 overflow-y-auto space-y-5 flex-1 min-h-0">
           {step === 1 && (
             <div className="space-y-4">
               <p className="text-xs text-slate-500">
