@@ -62,7 +62,6 @@ interface DashboardViewProps {
   setCurrentSection: (section: AppSection) => void;
   userName: string;
   onSeedDemoData?: () => Promise<void>;
-  onSeedSimulationData?: () => Promise<void>;
   onSeedTwoTestProperties?: () => Promise<void>;
   onEditContract?: (id: string, data: any) => Promise<void>;
   onUpdateReminderStatus?: (id: string, status: string, notes?: string, extraFields?: any) => Promise<void>;
@@ -88,7 +87,6 @@ export default function DashboardView({
   setCurrentSection,
   userName,
   onSeedDemoData,
-  onSeedSimulationData,
   onSeedTwoTestProperties,
   onEditContract,
   onUpdateReminderStatus,
@@ -1653,19 +1651,6 @@ export default function DashboardView({
         </div>
         
         <div className="flex flex-wrap gap-3">
-          {onSeedSimulationData && (
-            <button
-              onClick={onSeedSimulationData}
-              id="seed-simulation-data-btn"
-              className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md active:shadow-xs hover:scale-[1.02] active:scale-[0.98] transition-transform"
-            >
-              <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                <Building2 size={11} className="text-white" />
-              </span>
-              <span>Simula Locazione Meloni</span>
-            </button>
-          )}
-
           <button
             onClick={() => setCurrentSection("ai_area")}
             id="open-ai-area-btn"
