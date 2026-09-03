@@ -101,7 +101,6 @@ export default function DashboardView({
   const [timeLeftManual, setTimeLeftManual] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, unlocked: false });
 
   // Custom Second-Level Views States
-  const [showConsolidatedReport, setShowConsolidatedReport] = useState(false);
   const [selectedDashboardProperty, setSelectedDashboardProperty] = useState<Property | null>(null);
   // CORREZIONE CP (13/08/2026) — Fase 2 punto 2: da tab a scelta singola a multi-selezione
   // stile Excel. "Vista Completa" corrispondeva già, nella logica originale, a "mostra tutte
@@ -1660,16 +1659,6 @@ export default function DashboardView({
             <span>Apri Area AI</span>
           </button>
 
-          <button
-            onClick={() => setShowConsolidatedReport(true)}
-            id="open-consolidated-report-btn"
-            className="inline-flex items-center space-x-2 bg-violet-600 hover:bg-violet-500 text-white font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md active:shadow-xs hover:scale-[1.02] cursor-pointer"
-          >
-            <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
-              <BarChart3 size={11} className="text-white" />
-            </span>
-            <span>Rendicontazione Consolidata</span>
-          </button>
         </div>
       </div>
 
