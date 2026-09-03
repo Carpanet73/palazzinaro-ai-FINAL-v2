@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Building2,
@@ -1654,19 +1653,6 @@ export default function DashboardView({
         </div>
         
         <div className="flex flex-wrap gap-3">
-          {onSeedDemoData && (
-            <button
-              onClick={onSeedDemoData}
-              id="seed-demo-data-btn"
-              className="inline-flex items-center space-x-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md active:shadow-xs"
-            >
-              <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                <Rocket size={11} className="text-slate-950" />
-              </span>
-              <span>Inietta Dati Demo</span>
-            </button>
-          )}
-
           {onSeedSimulationData && (
             <button
               onClick={onSeedSimulationData}
@@ -1677,20 +1663,6 @@ export default function DashboardView({
                 <Building2 size={11} className="text-white" />
               </span>
               <span>Simula Locazione Meloni</span>
-            </button>
-          )}
-
-          {onSeedTwoTestProperties && (
-            <button
-              onClick={onSeedTwoTestProperties}
-              id="seed-two-test-properties-btn"
-              className="inline-flex items-center space-x-2 bg-rose-700 hover:bg-rose-600 text-white font-black text-xs px-5 py-3.5 rounded-xl active:transition-all shadow-md active:shadow-xs hover:scale-[1.02] active:scale-[0.98] transition-transform"
-              title="ATTENZIONE: cancella tutti i dati attuali e li sostituisce con due sole case di prova"
-            >
-              <span className="w-[18px] h-[18px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                <FlaskConical size={11} className="text-white" />
-              </span>
-              <span>Test: 2 Case (Condominio + Comproprietà)</span>
             </button>
           )}
 
@@ -2665,7 +2637,7 @@ export default function DashboardView({
         {totalProperties === 0 ? (
           <div className="py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 mt-4">
             <p className="text-xs text-slate-500">Nessun immobile censito nel sistema.</p>
-            <p className="text-[10px] text-slate-400 mt-1">Usa il tasto in alto per "Inietta Dati Demo" o aggiungine uno manuale.</p>
+            <p className="text-[10px] text-slate-400 mt-1">Aggiungine uno dalla sezione "Immobili".</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-6">
@@ -3161,4 +3133,3 @@ export default function DashboardView({
     </div>
   );
 }
-
