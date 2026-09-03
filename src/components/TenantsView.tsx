@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
 import GenderToggle from "./GenderToggle";
@@ -440,8 +439,14 @@ export default function TenantsView({
     // (matchesTenant) non basta più da solo. Priorità al collegamento diretto debtorId/
     // debtorType (sempre popolato sulle voci reali), testo SOLO come fallback per le voci
     // storiche prive di questi campi.
+    // Deposito Cauzionale (01/09/2026): voce dedicata, sourceId sempre "deposit-{contractId}"
+    // — va SEMPRE separata dal canone (mai la stessa etichetta), altrimenti si confonde
+    // con una rata mensile e non è più riconoscibile nel mastrino.
+    const isDepositItem = (item: any) => (item.sourceId || "").startsWith("deposit-");
+
     const rentItems = fastClosing.filter(item => {
       if (item.propertyId !== t.propertyId) return false;
+      if (isDepositItem(item)) return false;
       const isContractSource = item.source === "contract";
       const matchesDebtorStructured = item.debtorId === t.id && item.debtorType === "tenant";
       const matchesTenant = (item.title || "").toLowerCase().includes(tenantNameClean) ||
@@ -464,6 +469,31 @@ export default function TenantsView({
         description: item.description || "Rata canone d'affitto pattuito",
         amount: item.amount,
         status: item.status, // Paid, Pending, Overdue
+        source: "fastClosing",
+        isManualBacklogEntry: item.isManualBacklogEntry
+      });
+    });
+
+    // -- CATEGORY DEPOSITO CAUZIONALE --
+    const depositItems = fastClosing.filter(item => {
+      if (item.propertyId !== t.propertyId) return false;
+      if (!isDepositItem(item)) return false;
+      return item.debtorId === t.id && item.debtorType === "tenant";
+    });
+
+    depositItems.forEach(item => {
+      const linkedContract = activeContract && item.sourceId === `deposit-${activeContract.id}` ? activeContract : contracts.find((c: any) => item.sourceId === `deposit-${c.id}`);
+      movementsList.push({
+        id: item.id,
+        date: item.dueDate,
+        dueDate: item.dueDate,
+        paymentDate: item.status === "Paid" ? item.dueDate : "-",
+        category: "deposit",
+        categoryLabel: linkedContract?.securityDepositReturned ? "Deposito Cauzionale (Restituito)" : "Deposito Cauzionale",
+        title: item.title,
+        description: item.description || "Deposito cauzionale versato alla sottoscrizione",
+        amount: item.amount,
+        status: item.status,
         source: "fastClosing",
         isManualBacklogEntry: item.isManualBacklogEntry
       });
@@ -2224,4 +2254,3 @@ Restiamo a disposizione per qualsiasi chiarimento.`;
     </div>
   );
 }
-
