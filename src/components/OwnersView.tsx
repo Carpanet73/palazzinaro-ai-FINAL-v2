@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from "react";
 import AddressFields, { AddressValue } from "./AddressFields";
 import GenderToggle from "./GenderToggle";
@@ -290,7 +289,7 @@ export default function OwnersView({
 
     // 1. Canoni di Affitto (Rent)
     const rentLedger = buildUnifiedLedger(
-      item => item.source === "contract" || (item.title || "").toLowerCase().includes("affitto") || (item.title || "").toLowerCase().includes("canone"),
+      item => (item.source === "contract" && !(item.sourceId || "").startsWith("deposit-")) || (item.title || "").toLowerCase().includes("affitto") || (item.title || "").toLowerCase().includes("canone"),
       m => m.reconciledWith?.type === "contract" || (m.description || "").toLowerCase().includes("affitto") || (m.description || "").toLowerCase().includes("canone"),
       "Canone locazione"
     );
@@ -325,7 +324,7 @@ export default function OwnersView({
     // quote a carico dell'inquilino (stesso principio del punto 2 qui sopra).
     const otherLedger = buildUnifiedLedger(
       item => {
-        const isRent = item.source === "contract" || (item.title || "").toLowerCase().includes("affitto") || (item.title || "").toLowerCase().includes("canone");
+        const isRent = (item.source === "contract" && !(item.sourceId || "").startsWith("deposit-")) || (item.title || "").toLowerCase().includes("affitto") || (item.title || "").toLowerCase().includes("canone");
         const isCondo = item.source === "condominium" || (item.title || "").toLowerCase().includes("condominio") || (item.title || "").toLowerCase().includes("spese cond");
         const isTax = (item.title || "").toLowerCase().match(/(registro|imposta|tassa|f24|erario)/) !== null;
         const isMaint = item.source === "maintenance";
@@ -759,7 +758,7 @@ export default function OwnersView({
 
         const titleLower = (item.title || "").toLowerCase();
         
-        const isRent = item.source === "contract" || titleLower.includes("affitto") || titleLower.includes("canone");
+        const isRent = (item.source === "contract" && !(item.sourceId || "").startsWith("deposit-")) || titleLower.includes("affitto") || titleLower.includes("canone");
         const isCondo = item.source === "condominium" || titleLower.includes("condominio") || titleLower.includes("spese cond");
         const isTax = titleLower.match(/(registro|imposta|tassa|f24|erario)/) !== null;
         const isMaint = titleLower.includes("manutenzione") || titleLower.includes("fattura") || titleLower.includes("idraulico");
@@ -1241,7 +1240,7 @@ export default function OwnersView({
 
                 const hasOverdueRent = propertyClosingItems.some(item => 
                   (item.status === "Overdue" || new Date(item.dueDate) < new Date()) && 
-                  (item.source === "contract" || (item.title || "").toLowerCase().includes("affitto") || (item.title || "").toLowerCase().includes("canone"))
+                  ((item.source === "contract" && !(item.sourceId || "").startsWith("deposit-")) || (item.title || "").toLowerCase().includes("affitto") || (item.title || "").toLowerCase().includes("canone"))
                 );
 
                 const hasPendingOverdue = propertyClosingItems.some(item => 
@@ -2398,4 +2397,3 @@ export default function OwnersView({
     </div>
   );
 }
-
