@@ -1967,6 +1967,30 @@ export default function App() {
         }
       }
 
+      // Deposito Cauzionale (01/09/2026, su segnalazione di Massimo): prima restava solo
+      // un dato sul contratto, invisibile nei mastrini e nel Fast Closing. Genera ORA una
+      // singola voce economica dedicata, distinta dal canone (titolo riconoscibile), con
+      // scadenza alla decorrenza del contratto. Stesso ciclo di vita delle altre voci Fast
+      // Closing (nessun flusso Solleciti automatico dedicato: il deposito non è un canone
+      // ricorrente, resta marcabile manualmente come le spese accessorie).
+      const securityDepositAmount = Number(data.securityDepositAmount) || 0;
+      if (securityDepositAmount > 0 && data.startDate) {
+        await addDoc(collection(db, "fastClosing"), {
+          userId: user.uid,
+          title: `Deposito Cauzionale — ${finalTenantName} — ${finalPropertyName}`,
+          description: `Deposito cauzionale (${data.securityDepositMonths || "?"} mensilità) per il contratto su ${finalPropertyName}.`,
+          propertyId: finalPropertyId,
+          amount: securityDepositAmount,
+          dueDate: data.startDate,
+          source: "contract",
+          sourceId: `deposit-${contractDoc.id}`,
+          status: "Pending",
+          debtorId: finalTenantId || null,
+          debtorType: "tenant",
+          createdAt: serverTimestamp()
+        });
+      }
+
       // CORREZIONE CK (05/08/2026) — Registrazioni F24 reali: solo per regime Ordinaria
       // (Cedolare Secca non deve mai avere righe, solo il promemoria in Dashboard — vedi
       // DashboardView.tsx). Una riga per annualità (1ª alla decorrenza + successive ogni
@@ -2410,6 +2434,12 @@ export default function App() {
           notes: ct.notes || "",
           ownerName: p.owner || "",
           isBareOwnership: !!p.isBareOwnership,
+          // Allineamento al wizard contratti completo (01/09/2026): stessi campi
+          // strutturati, non più persi in una nota libera — regola "un solo flusso".
+          taxRegime: ct.taxRegime || "Ordinaria",
+          f24OwnerSplitPct: ct.f24OwnerSplitPct,
+          securityDepositAmount: Number(ct.securityDepositAmount) || 0,
+          securityDepositMonths: Number(ct.securityDepositMonths) || 0,
           userId: user.uid,
           createdAt: serverTimestamp(),
         });
@@ -2446,6 +2476,26 @@ export default function App() {
             currentDueDate.setMonth(currentDueDate.getMonth() + 1);
             monthIndex++;
           }
+        }
+
+        // Deposito Cauzionale (01/09/2026): stessa voce dedicata generata dal wizard
+        // contratti completo, per coerenza tra i due flussi (regola "un solo flusso").
+        const wizardSecurityDepositAmount = Number(ct.securityDepositAmount) || 0;
+        if (wizardSecurityDepositAmount > 0 && ct.startDate) {
+          await addDoc(collection(db, "fastClosing"), {
+            userId: user.uid,
+            title: `Deposito Cauzionale — ${tenantName || ""} — ${p.name}`,
+            description: `Deposito cauzionale (${ct.securityDepositMonths || "?"} mensilità) per il contratto su ${p.name}.`,
+            propertyId: propDoc.id,
+            amount: wizardSecurityDepositAmount,
+            dueDate: ct.startDate,
+            source: "contract",
+            sourceId: `deposit-${contractDoc.id}`,
+            status: "Pending",
+            debtorId: tenantId || null,
+            debtorType: "tenant",
+            createdAt: serverTimestamp(),
+          });
         }
 
         // Link tenant.contractId
