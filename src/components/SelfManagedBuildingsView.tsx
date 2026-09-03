@@ -197,10 +197,24 @@ export default function SelfManagedBuildingsView({
                   <div className="space-y-2">
                     {buildingProperties.map((p) => {
                       const latest = latestReadingByProperty(p.id);
+                      // Su richiesta di Massimo (01/09/2026): il nome dell'inquilino deve
+                      // comparire ben visibile nel badge dell'unità, non solo l'indirizzo.
+                      const occupant = tenants.find((t) => t.propertyId === p.id);
                       return (
                         <div key={p.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-150">
                           <div>
-                            <p className="text-xs font-bold text-slate-800">{p.name}</p>
+                            <div className="flex items-center space-x-2">
+                              <p className="text-xs font-bold text-slate-800">{p.name}</p>
+                              {occupant ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-150 text-[10px] font-bold text-indigo-700">
+                                  {occupant.name}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-[10px] font-semibold text-slate-400">
+                                  Sfitto
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[10px] text-slate-500">
                               {latest ? `Ultima lettura: ${latest.value} m³ (${latest.readingDate})` : "Nessuna lettura — punto zero da registrare"}
                             </p>
