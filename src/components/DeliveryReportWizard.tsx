@@ -67,6 +67,13 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
   const [damagesDescription, setDamagesDescription] = useState("");
   const [estimatedDamages, setEstimatedDamages] = useState<number>(0);
   const [closeContract, setCloseContract] = useState(true);
+  // Compensazione deposito cauzionale (01/09/2026, su richiesta di Massimo): prima il
+  // calcolo capienza/eccedenza era solo informativo ("gestite fuori dalla piattaforma").
+  // Ora diventa operativo — ma la scelta se aprire comunque una pratica in Area Legale
+  // resta SEMPRE una domanda esplicita all'utente (mai automatica, mai bloccata): utile
+  // sia se i danni superano il deposito, sia se l'inquilino contesta un addebito che
+  // rientra nella capienza.
+  const [openLegalCase, setOpenLegalCase] = useState(true);
 
   // CORREZIONE CN (task #50/#57) — verifica OTP via email per le firme, stesso hook
   // condiviso già usato per la disdetta anticipata in ContractsView.tsx. Opzionale:
@@ -193,8 +200,10 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
         createdAt: serverTimestamp(),
       });
 
-      // 2) Branching danni (TASK 2d): LegalCase SOLO se danni
-      if (isRiconsegna && hasDamages) {
+      // 2) Branching danni (TASK 2d): LegalCase solo se l'utente lo chiede esplicitamente
+      // (01/09/2026: prima era automatico ad ogni danno, ora è sempre una scelta — vedi
+      // checkbox "openLegalCase" al passo precedente).
+      if (isRiconsegna && hasDamages && openLegalCase) {
         const legalRef = await addDoc(collection(db, "legalCases"), {
           ...stripUndef({
             userId: user.uid,
@@ -217,6 +226,41 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
           createdAt: serverTimestamp(),
         });
         await updateDoc(doc(db, "deliveryReports", reportRef.id), { legalCaseId: legalRef.id });
+      }
+
+      // 2b) Compensazione e restituzione Deposito Cauzionale (01/09/2026, su richiesta di
+      // Massimo): prima il calcolo era solo informativo. Ora, alla riconsegna, il deposito
+      // viene sempre marcato come restituito (per intero se non ci sono danni, al netto
+      // della compensazione se ce ne sono) — coerente con quanto poi mostrato nei mastrini
+      // (vedi TenantsView.tsx, badge "Deposito Cauzionale (Restituito)"). Se i danni
+      // superano il deposito, l'eccedenza diventa una nuova voce reale in Fast Closing a
+      // carico dell'inquilino, con le stesse regole delle spese accessorie (mai un
+      // Sollecito automatico, solo se marcata insoluta a mano).
+      if (isRiconsegna && deposito > 0) {
+        const damagesAmount = hasDamages ? estimatedDamages : 0;
+        const returnedAmount = Math.max(0, deposito - damagesAmount);
+        const excessAmount = Math.max(0, damagesAmount - deposito);
+        await updateDoc(doc(db, "contracts", contract.id), {
+          securityDepositReturned: true,
+          securityDepositReturnedDate: reportDate,
+          securityDepositReturnedAmount: returnedAmount,
+        });
+        if (excessAmount > 0) {
+          await addDoc(collection(db, "fastClosing"), {
+            userId: user.uid,
+            title: `[Danni Riconsegna] Eccedenza su Deposito — ${contract.tenantName || ""} — ${contract.propertyName || ""}`,
+            description: `Danni stimati ${formatEuro(damagesAmount)} superiori al deposito cauzionale di ${formatEuro(deposito)}. Verbale di riconsegna ${reportRef.id}.`,
+            propertyId: contract.propertyId,
+            amount: excessAmount,
+            dueDate: reportDate,
+            source: "condominium",
+            sourceId: `deposit-excess-${contract.id}-${reportRef.id}`,
+            status: "Pending",
+            debtorId: contract.tenantId || null,
+            debtorType: "tenant",
+            createdAt: serverTimestamp(),
+          });
+        }
       }
 
       // 3) Chiusura contratto + STOP flussi economici (regola 5). Riusa il pattern
@@ -279,7 +323,7 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
       }
 
       showSuccess(isRiconsegna
-        ? (hasDamages ? "Verbale di riconsegna salvato e fascicolo legale creato." : "Verbale di riconsegna salvato correttamente.")
+        ? (hasDamages && openLegalCase ? "Verbale di riconsegna salvato, deposito compensato e fascicolo legale creato." : "Verbale di riconsegna salvato e deposito cauzionale aggiornato.")
         : "Verbale di consegna salvato. Relazione completa.");
       onSaved(reportRef.id);
       onClose();
@@ -437,12 +481,21 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
                       <div className="flex justify-between"><span>Deposito cauzionale</span><span className="font-black">{formatEuro(deposito)}</span></div>
                       <div className="flex justify-between"><span>Danni stimati</span><span className="font-black">{formatEuro(estimatedDamages)}</span></div>
                       <div className="mt-2 flex justify-between border-t border-current/20 pt-2 font-black"><span>{calcoloDeposito.label}</span><span>{formatEuro(calcoloDeposito.value)}</span></div>
-                      <p className="mt-2 text-[10px] opacity-80">Calcolo puramente informativo: compensazione/restituzione gestite dallo Studio Legale fuori dalla piattaforma.</p>
+                      <p className="mt-2 text-[10px] opacity-80">
+                        {calcoloDeposito.tone === "restituire"
+                          ? "Alla conferma, il deposito viene marcato come restituito per questo importo (compensato con i danni)."
+                          : "Il deposito copre solo parzialmente i danni: alla conferma verrà creata una nuova voce in Fast Closing a carico dell'inquilino per la differenza."}
+                      </p>
                     </div>
                   )}
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-                    Alla conferma verrà creato automaticamente un fascicolo nell'Area Legale ("Recupero Danni") collegato a questo contratto e a entrambi i verbali.
-                  </div>
+                  <label className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 cursor-pointer">
+                    <input type="checkbox" checked={openLegalCase} onChange={(e) => setOpenLegalCase(e.target.checked)} className="mt-0.5 h-4 w-4 accent-amber-600" />
+                    <span>
+                      Apri comunque un fascicolo in Area Legale ("Recupero Danni"), collegato a questo contratto e a
+                      entrambi i verbali — utile anche quando il deposito basta a coprire i danni, se prevedi che
+                      l'inquilino possa contestarli.
+                    </span>
+                  </label>
                 </div>
               )}
             </div>
@@ -472,7 +525,7 @@ export default function DeliveryReportWizard({ mode, contract, user, showSuccess
           {step < totalSteps ? (
             <button onClick={() => setStep((s) => s + 1)} disabled={((!isRiconsegna && step === 1) || (isRiconsegna && step === 2)) && !firmeOk} className="rounded-lg bg-amber-500 px-5 py-2 text-xs font-black text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40">Continua</button>
           ) : (
-            <button onClick={handleConfirm} disabled={saving || !firmeOk || !danniOk} className="rounded-lg bg-amber-500 px-5 py-2 text-xs font-black text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40">{saving ? "Salvataggio…" : isRiconsegna && hasDamages ? "Conferma e crea fascicolo legale" : "Conferma e salva verbale"}</button>
+            <button onClick={handleConfirm} disabled={saving || !firmeOk || !danniOk} className="rounded-lg bg-amber-500 px-5 py-2 text-xs font-black text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40">{saving ? "Salvataggio…" : isRiconsegna && hasDamages && openLegalCase ? "Conferma e crea fascicolo legale" : "Conferma e salva verbale"}</button>
           )}
         </div>
       </div>
