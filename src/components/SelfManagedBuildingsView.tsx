@@ -28,7 +28,7 @@ import { SHARED_EXPENSE_CATEGORY_LABELS } from "../types-shared-expenses";
 import MeterReadingWizard from "./MeterReadingWizard";
 import SharedExpenseWizard from "./SharedExpenseWizard";
 import { calculateDailyAverageConsumption, projectConsumptionOnBillingPeriod, type PropertyConsumptionInput } from "../lib/sharedExpensesEngine";
-import { generateRendicontoPdf } from "../lib/rendicontoPdf";
+import { generateRendicontoPdf, generateRendicontoGeneralePdf } from "../lib/rendicontoPdf";
 
 export interface SelfManagedBuildingsViewProps {
   buildings: SelfManagedBuilding[];
@@ -111,6 +111,19 @@ export default function SelfManagedBuildingsView({
       return { propertyId: p.id, consumptionInPeriod: consumption };
     });
   }, [selectedBuilding, buildingProperties, meterReadings]);
+
+  // Stampa Riepilogo Generale (03/09/2026, su richiesta di Massimo): un solo PDF con la
+  // ripartizione su TUTTE le unità dell'edificio, per uso interno o invio cumulativo —
+  // distinto dal rendiconto per singola unità già esistente (handleSendRendiconto sotto).
+  const handlePrintGenerale = (expense: SharedExpense) => {
+    const tenantNamesByPropertyId: Record<string, string> = {};
+    buildingProperties.forEach((p) => {
+      const t = tenants.find((tt) => tt.propertyId === p.id);
+      tenantNamesByPropertyId[p.id] = t?.name ?? "Non Specificato";
+    });
+    const doc = generateRendicontoGeneralePdf(expense, buildingProperties, tenantNamesByPropertyId, ownerProfile, selectedBuilding?.name ?? "");
+    doc.save(`riepilogo-generale-${expense.title.replace(/\s+/g, "-")}.pdf`);
+  };
 
   const handleSendRendiconto = async (expense: SharedExpense) => {
     setSendingRendicontoId(expense.id);
@@ -291,6 +304,14 @@ export default function SelfManagedBuildingsView({
                               <p className="font-mono font-black text-sm text-slate-900">
                                 € {exp.lineItems.reduce((s, li) => s + li.amount, 0).toFixed(2)}
                               </p>
+                              <button
+                                onClick={() => handlePrintGenerale(exp)}
+                                className="mt-1 flex items-center space-x-1 text-[10px] font-bold text-slate-500 hover:text-slate-800"
+                                title="Scarica il riepilogo generale con la ripartizione su tutte le unità"
+                              >
+                                <FileText size={11} />
+                                <span>Stampa Generale</span>
+                              </button>
                               <button
                                 onClick={() => handleSendRendiconto(exp)}
                                 disabled={sendingRendicontoId === exp.id}
