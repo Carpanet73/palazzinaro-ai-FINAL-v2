@@ -129,12 +129,15 @@ export function generateRendicontoPdf(
   doc.text(`Proprietario: ${owner.name}`, marginX, y);
   y += 10;
 
-  // Tabella voce per voce, come nella bolletta originale
+  // Tabella voce per voce: RICALCA la bolletta originale (una riga per ogni voce con il suo
+  // totale così com'è in bolletta), poi la QUOTA calcolata per questo inquilino, con la base
+  // di calcolo sempre visibile (03/09/2026, su richiesta di Massimo: "una ripetizione della
+  // voce con gli importi... secondo il criterio" — piena trasparenza verso l'inquilino).
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
-  doc.text("Voce", marginX, y);
-  doc.text("Criterio", marginX + 80, y);
-  doc.text("Quota Inquilino", marginX + 130, y);
+  doc.text("Voce (come in bolletta)", marginX, y);
+  doc.text("Totale Bolletta", marginX + 82, y);
+  doc.text("Tua Quota", marginX + 122, y);
   y += 4;
   doc.setDrawColor(200);
   doc.line(marginX, y, 192, y);
@@ -148,10 +151,19 @@ export function generateRendicontoPdf(
   propertyAllocations.forEach((alloc: SharedExpenseAllocationLine) => {
     const li = expense.lineItems.find((l) => l.id === alloc.lineItemId);
     if (!li) return;
-    if (y > 270) { doc.addPage(); y = 20; }
-    doc.text(li.description, marginX, y, { maxWidth: 75 });
-    doc.text(SPLIT_CRITERIA_LABELS[li.splitCriteria], marginX + 80, y, { maxWidth: 45 });
-    doc.text(`€ ${alloc.amountTenant.toFixed(2)}`, marginX + 130, y);
+    if (y > 260) { doc.addPage(); y = 20; }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text(li.description, marginX, y, { maxWidth: 60 });
+    doc.text(`€ ${Number(li.amount).toFixed(2)}`, marginX + 82, y);
+    doc.text(`€ ${alloc.amountTenant.toFixed(2)}`, marginX + 122, y);
+    y += 5;
+    // Base di calcolo, sempre esplicita, mai solo il numero finale.
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100);
+    doc.text(alloc.calculationNote, marginX, y, { maxWidth: 165 });
+    doc.setTextColor(0);
     y += 6;
     totalTenant += alloc.amountTenant;
     totalOwner += alloc.amountOwner;
@@ -258,6 +270,80 @@ export function generateRendicontoGeneralePdf(
   }
 
   disegnaFooter(doc, marginX, y);
+  return doc;
+}
+
+/**
+ * BACHECA — foglio da affiggere al portone d'ingresso (03/09/2026, su richiesta di
+ * Massimo): non è un rendiconto contabile, è un avviso essenziale, leggibile a colpo
+ * d'occhio — solo "Unità — Inquilino — Importo dovuto", carattere grande, una spesa per
+ * pagina. Nessuna tabella di dettaglio: quella resta nella Stampa Generale/Particolare.
+ */
+export function generateBachecaPdf(
+  expense: SharedExpense,
+  properties: Property[],
+  tenantNamesByPropertyId: Record<string, string>,
+  buildingName: string
+): jsPDF {
+  const doc = new jsPDF();
+  const marginX = 20;
+  let y = 25;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("Avviso Spese Comuni", marginX, y);
+  y += 10;
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "normal");
+  doc.text(buildingName, marginX, y);
+  y += 8;
+  doc.text(`${expense.title} — ${SHARED_EXPENSE_CATEGORY_LABELS[expense.category]}`, marginX, y);
+  y += 6;
+  if (expense.billingPeriodStart && expense.billingPeriodEnd) {
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Periodo: ${expense.billingPeriodStart} — ${expense.billingPeriodEnd}`, marginX, y);
+    doc.setTextColor(0);
+    y += 6;
+  }
+  y += 6;
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.6);
+  doc.line(marginX, y, 192, y);
+  y += 14;
+
+  const propertyIds = Array.from(new Set(expense.allocations.map((a) => a.propertyId)));
+  propertyIds.forEach((propertyId) => {
+    const property = properties.find((p) => p.id === propertyId);
+    const allocs = expense.allocations.filter((a) => a.propertyId === propertyId);
+    const tenantTotal = allocs.reduce((s, a) => s + a.amountTenant, 0);
+    if (tenantTotal <= 0) return;
+
+    if (y > 255) { doc.addPage(); y = 25; }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text(property?.name || propertyId, marginX, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(tenantNamesByPropertyId[propertyId] || "Non Specificato", marginX, y + 7);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(`€ ${tenantTotal.toFixed(2)}`, 150, y + 3);
+    y += 10;
+    doc.setDrawColor(220);
+    doc.setLineWidth(0.2);
+    doc.line(marginX, y, 192, y);
+    y += 12;
+  });
+
+  doc.setFontSize(8);
+  doc.setTextColor(120);
+  doc.text(
+    "Avviso generato mediante procedura automatizzata del sistema, in nome e per conto del proprietario, con supporto dell'intelligenza artificiale.",
+    marginX,
+    285,
+    { maxWidth: 172 }
+  );
   return doc;
 }
 
