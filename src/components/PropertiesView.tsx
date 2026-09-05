@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import DocumentScanner from "./DocumentScanner";
 import { uploadDocumentToStorage } from "../lib/documentUpload";
@@ -76,7 +75,9 @@ interface PropertiesViewProps {
   onDeleteProperty: (id: string) => Promise<void>;
   maintenance?: Maintenance[];
   // CORREZIONE C — callback per aprire il Wizard unico globale invece del form interno
-  onOpenMasterWizard?: () => void;
+  // CORREZIONE (05/09/2026): non più opzionale — l'aggiunta di un immobile passa SEMPRE
+  // e solo da qui, mai da un modulo di riserva interno (vedi openAddModal).
+  onOpenMasterWizard: () => void;
   // CORREZIONE P — creare un condominio al volo, con indirizzo bloccato su quello dell'immobile
   onAddCondominium?: (data: any) => Promise<string | null | void>;
 }
@@ -263,56 +264,14 @@ export default function PropertiesView({
   };
 
   const openAddModal = () => {
-    // CORREZIONE C — Se è disponibile il callback per il Wizard unico globale,
-    // lo usiamo invece del form interno di PropertiesView. Il form interno resta
-    // disponibile solo come fallback per retrocompatibilità (mai invocato in produzione).
-    if (onOpenMasterWizard) {
-      onOpenMasterWizard();
-      return;
-    }
-
-    setEditingProperty(null);
-    setName("");
-    setAddress("");
-    setType("Appartamento");
-    setStatus("Available");
-    setNotes("");
-    setOwner("");
-    setIsBareOwnership(false);
-    setIsCondoConstituted(false);
-    setCondominiumId("");
-
-    // Reset millesimi and utility meters
-    setMillesimi(120);
-    setLuceMeterNo("");
-    setCadastralFoglio(""); setCadastralParticella(""); setCadastralSubalterno("");
-    setCadastralCategoria(""); setCadastralVani(""); setCadastralClasse("");
-    setCadastralRendita(""); setCadastralPiano("");
-    setEnergyClasse(""); setEnergyIpe(""); setEnergyExpiry("");
-    setPropertyDocuments([]);
-    setLuceLastReading(0);
-    setLuceReadingDate("");
-    setLuceActiveFlag("proprietario");
-    setGasMeterNo("");
-    setGasLastReading(0);
-    setGasReadingDate("");
-    setGasActiveFlag("proprietario");
-    setAcquaMeterNo("");
-    setAcquaLastReading(0);
-    setAcquaReadingDate("");
-    setAcquaActiveFlag("proprietario");
-
-    // Reset wizard states
-    const uniqueOwnersList = getUniqueOwners();
-    setOwnerMode(uniqueOwnersList.length > 0 ? "select" : "guided");
-    setSelectedExistingOwner("");
-    setGuidedOwnerType("individual");
-    setIndFirstName("");
-    setIndLastName("");
-    setCompanyName("");
-    setMultipleOwnersList(["", ""]);
-
-    setShowModal(true);
+    // CORREZIONE (05/09/2026, su richiesta di Massimo — "rendi il flusso unico"): il form
+    // interno era tenuto come "fallback mai invocato in produzione", ma restare lì come
+    // codice morto raggiungibile violava comunque la regola "un solo flusso di creazione
+    // per ciascuna entità" (sezione 3 delle linee guida) — se per qualunque motivo
+    // onOpenMasterWizard non fosse stato passato, l'utente sarebbe silenziosamente finito
+    // in un secondo modulo con validazioni diverse (causa del blocco reale di oggi).
+    // Ora l'unico percorso possibile per CREARE un immobile è il wizard unico globale.
+    onOpenMasterWizard();
   };
 
   const openEditModal = (property: Property) => {
@@ -2856,4 +2815,3 @@ export default function PropertiesView({
     </div>
   );
 }
-
