@@ -2895,6 +2895,7 @@ La presente email è stata generata automaticamente dal sistema di intelligenza 
             sharedExpenses={sharedExpenses}
             tenants={tenants}
             ownerProfile={ownerProfile}
+            owners={owners}
             onCreateBuilding={handleCreateSelfManagedBuilding}
             onAddMeterReading={handleAddMeterReading}
             onAddSharedExpense={handleAddSharedExpense}
