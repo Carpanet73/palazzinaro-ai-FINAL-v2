@@ -18,7 +18,7 @@
 import React, { useMemo, useState } from "react";
 import { Plus, Building2, Droplet, FileText, Send, Download, Users, ChevronRight, X, MessageCircle, Printer } from "lucide-react";
 import emailjs from "@emailjs/browser";
-import type { Property, Tenant, OwnerProfile } from "../types";
+import type { Property, Tenant, OwnerProfile, Owner } from "../types";
 import type {
   SelfManagedBuilding,
   MeterReading,
@@ -37,6 +37,12 @@ export interface SelfManagedBuildingsViewProps {
   sharedExpenses: SharedExpense[]; // tutte le spese comuni dell'utente
   tenants: Tenant[];
   ownerProfile: OwnerProfile;
+  // CORREZIONE (03/09/2026, su segnalazione di Massimo): serve l'anagrafica REALE dei
+  // proprietari (collezione "owners", collegata a ogni immobile via property.ownerId) —
+  // ownerProfile da solo è il profilo personale dell'utente loggato, sempre lo stesso per
+  // ogni edificio. Se Massimo gestisce immobili di proprietari diversi da sé stesso (es.
+  // "Grazia Maria Benelli" nella bolletta), serve pescare nome e IBAN da QUESTO elenco.
+  owners: Owner[];
   onCreateBuilding: (data: { name: string; address?: string; notes?: string; propertyIds: string[] }) => Promise<void>;
   onAddMeterReading: (data: Omit<MeterReading, "id" | "userId" | "createdAt">) => Promise<void>;
   onAddSharedExpense: (data: any) => Promise<void>; // vedi SharedExpenseWizard onSave — sincronizza anche Fast Closing lato App.tsx
@@ -51,6 +57,7 @@ export default function SelfManagedBuildingsView({
   sharedExpenses,
   tenants,
   ownerProfile,
+  owners,
   onCreateBuilding,
   onAddMeterReading,
   onAddSharedExpense,
@@ -62,11 +69,33 @@ export default function SelfManagedBuildingsView({
   const [showExpenseWizard, setShowExpenseWizard] = useState(false);
   const [meterWizardProperty, setMeterWizardProperty] = useState<Property | null>(null);
   const [sendingRendicontoId, setSendingRendicontoId] = useState<string | null>(null);
+  // Scelta esplicita del proprietario da mostrare nelle stampe (03/09/2026, su richiesta
+  // di Massimo): la risoluzione automatica tramite property.ownerId resta il default, ma
+  // se un edificio ha unità di proprietari diversi (o comproprietà), la scelta finale
+  // spetta sempre a Massimo — mai imposta in automatico senza possibilità di cambiarla.
+  const [selectedPrintOwnerId, setSelectedPrintOwnerId] = useState<string | "auto">("auto");
+  // Riscossione a mano da parte di un condomino incaricato (03/09/2026, su richiesta di
+  // Massimo): alternativa al bonifico IBAN — cambia solo il testo di pagamento nel PDF
+  // particolare, mai la riga "Proprietario" (che resta sempre quella reale).
+  const [collectionMode, setCollectionMode] = useState<"iban" | "hand">("iban");
+  const [selectedCollectorTenantId, setSelectedCollectorTenantId] = useState<string>("");
 
   const selectedBuilding = buildings.find((b) => b.id === selectedBuildingId) ?? null;
   const buildingProperties = useMemo(
     () => (selectedBuilding ? properties.filter((p) => selectedBuilding.propertyIds.includes(p.id)) : []),
     [selectedBuilding, properties]
+  );
+  // Elenco dei proprietari realmente collegati a una o più unità di questo edificio
+  // (deduplicati) — sono le uniche scelte sensate da offrire nel selettore.
+  const buildingOwnerOptions = useMemo(() => {
+    const ids = new Set(buildingProperties.map((p) => p.ownerId).filter((id): id is string => !!id));
+    return owners.filter((o) => ids.has(o.id));
+  }, [buildingProperties, owners]);
+  // Inquilini disponibili come possibili incaricati alla raccolta (solo quelli delle
+  // unità di questo edificio — mai un inquilino estraneo all'edificio).
+  const buildingTenantOptions = useMemo(
+    () => tenants.filter((t) => buildingProperties.some((p) => p.id === t.propertyId)),
+    [buildingProperties, tenants]
   );
   // Helper: Firestore Timestamp, Date o stringa — mai un confronto diretto con
   // localeCompare, che esiste solo sulle stringhe (causa reale del crash del 03/09/2026:
@@ -112,6 +141,35 @@ export default function SelfManagedBuildingsView({
     });
   }, [selectedBuilding, buildingProperties, meterReadings]);
 
+  // CORREZIONE (03/09/2026, su segnalazione di Massimo): risolve il proprietario REALE
+  // dell'unità (tramite property.ownerId → anagrafica "owners"), con fallback al profilo
+  // personale dell'utente loggato solo se quel campo non è stato compilato — mai il
+  // contrario, altrimenti un edificio di un proprietario diverso da te mostrerebbe
+  // comunque il tuo nome e il tuo IBAN nei rendiconti.
+  const resolveOwnerForProperty = (property?: Property): { name: string; iban?: string } => {
+    // Scelta manuale di Massimo: ha sempre priorità, per tutte le unità dell'edificio.
+    if (selectedPrintOwnerId !== "auto") {
+      const chosen = owners.find((o) => o.id === selectedPrintOwnerId);
+      if (chosen) return { name: chosen.name, iban: chosen.iban };
+    }
+    if (property?.ownerId) {
+      const real = owners.find((o) => o.id === property.ownerId);
+      if (real) return { name: real.name, iban: real.iban };
+    }
+    if (property?.owner) return { name: property.owner, iban: ownerProfile.iban };
+    return { name: ownerProfile.name, iban: ownerProfile.iban };
+  };
+
+  // Riscossore effettivo per la stampa particolare: bonifico al proprietario (default) o
+  // condomino incaricato della raccolta a mano (03/09/2026, su richiesta di Massimo).
+  const resolveCollector = (): { mode: "iban" } | { mode: "hand"; name: string; phone?: string } => {
+    if (collectionMode === "hand" && selectedCollectorTenantId) {
+      const t = tenants.find((tt) => tt.id === selectedCollectorTenantId);
+      if (t) return { mode: "hand", name: t.name, phone: t.phone };
+    }
+    return { mode: "iban" };
+  };
+
   // Stampa Riepilogo Generale (03/09/2026, su richiesta di Massimo): un solo PDF con la
   // ripartizione su TUTTE le unità dell'edificio, per uso interno o invio cumulativo —
   // distinto dal rendiconto per singola unità già esistente (handleSendRendiconto sotto).
@@ -121,7 +179,10 @@ export default function SelfManagedBuildingsView({
       const t = tenants.find((tt) => tt.propertyId === p.id);
       tenantNamesByPropertyId[p.id] = t?.name ?? "Non Specificato";
     });
-    const doc = generateRendicontoGeneralePdf(expense, buildingProperties, tenantNamesByPropertyId, ownerProfile, selectedBuilding?.name ?? "");
+    // Un edificio autogestito ha tipicamente un solo proprietario: si usa quello della
+    // prima unità come intestatario del documento cumulativo.
+    const owner = resolveOwnerForProperty(buildingProperties[0]);
+    const doc = generateRendicontoGeneralePdf(expense, buildingProperties, tenantNamesByPropertyId, owner, selectedBuilding?.name ?? "");
     doc.save(`riepilogo-generale-${expense.title.replace(/\s+/g, "-")}.pdf`);
   };
 
@@ -167,7 +228,7 @@ export default function SelfManagedBuildingsView({
         const property = properties.find((p) => p.id === alloc.propertyId);
         if (!property) continue;
         const tenant = tenants.find((t) => t.propertyId === property.id);
-        const doc = generateRendicontoPdf(expense, property, tenant?.name ?? "Non Specificato", ownerProfile, selectedBuilding?.name ?? "");
+        const doc = generateRendicontoPdf(expense, property, tenant?.name ?? "Non Specificato", resolveOwnerForProperty(property), selectedBuilding?.name ?? "", resolveCollector());
 
         // Scarico sempre il PDF (disponibile comunque, anche senza invio email)
         doc.save(`rendiconto-${expense.title.replace(/\s+/g, "-")}-${property.name.replace(/\s+/g, "-")}.pdf`);
@@ -227,7 +288,7 @@ export default function SelfManagedBuildingsView({
             {buildings.map((b) => (
               <button
                 key={b.id}
-                onClick={() => setSelectedBuildingId(b.id)}
+                onClick={() => { setSelectedBuildingId(b.id); setSelectedPrintOwnerId("auto"); setCollectionMode("iban"); setSelectedCollectorTenantId(""); }}
                 className={`w-full text-left p-3 rounded-xl border transition-all ${
                   selectedBuildingId === b.id ? "border-indigo-300 bg-indigo-50/50" : "border-slate-150 bg-white hover:border-slate-250"
                 }`}
@@ -297,6 +358,71 @@ export default function SelfManagedBuildingsView({
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Selettore proprietario per le stampe (03/09/2026, su richiesta di Massimo):
+                    compare solo se l'edificio ha più di un proprietario collegato — altrimenti
+                    non ha senso scegliere. */}
+                {buildingOwnerOptions.length > 1 && (
+                  <div className="bg-white rounded-2xl border-2 border-amber-150 bg-amber-50/30 p-4 shadow-sm">
+                    <label className="block text-[11px] font-black text-slate-800 uppercase tracking-wider mb-1.5">
+                      Proprietario da indicare nelle stampe
+                    </label>
+                    <select
+                      value={selectedPrintOwnerId}
+                      onChange={(e) => setSelectedPrintOwnerId(e.target.value)}
+                      className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 bg-white font-semibold text-slate-800"
+                    >
+                      <option value="auto">Automatico (in base all'unità collegata a ciascun proprietario)</option>
+                      {buildingOwnerOptions.map((o) => (
+                        <option key={o.id} value={o.id}>{o.name}{o.iban ? ` — IBAN presente` : " — IBAN mancante"}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-500 mt-1.5">
+                      Questo edificio ha unità di più proprietari. Con "Automatico" ogni stampa userà il proprietario collegato alla singola unità; scegliendone uno qui, verrà usato per tutte le stampe di questo edificio finché non lo cambi.
+                    </p>
+                  </div>
+                )}
+
+                {/* Modalità di riscossione (03/09/2026, su richiesta di Massimo): bonifico
+                    al proprietario oppure raccolta a mano da parte di un condomino
+                    incaricato — cambia solo il testo del PDF particolare inviato
+                    all'inquilino, mai la riga "Proprietario". */}
+                <div className="bg-white rounded-2xl border-2 border-slate-100 p-4 shadow-sm">
+                  <label className="block text-[11px] font-black text-slate-800 uppercase tracking-wider mb-1.5">
+                    Chi riscuote le quote inquilini
+                  </label>
+                  <div className="flex gap-2 p-1 bg-slate-100 rounded-lg mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setCollectionMode("iban")}
+                      className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors ${collectionMode === "iban" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+                    >
+                      Proprietario (bonifico IBAN)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCollectionMode("hand")}
+                      className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors ${collectionMode === "hand" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+                    >
+                      Un condomino (raccolta a mano)
+                    </button>
+                  </div>
+                  {collectionMode === "hand" && (
+                    <select
+                      value={selectedCollectorTenantId}
+                      onChange={(e) => setSelectedCollectorTenantId(e.target.value)}
+                      className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 outline-hidden focus:border-indigo-500 bg-white font-semibold text-slate-800"
+                    >
+                      <option value="">— Seleziona l'inquilino incaricato —</option>
+                      {buildingTenantOptions.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}{t.phone ? ` — ${t.phone}` : ""}</option>
+                      ))}
+                    </select>
+                  )}
+                  {collectionMode === "hand" && !selectedCollectorTenantId && (
+                    <p className="text-[10px] text-amber-600 mt-1.5">Seleziona un inquilino, altrimenti le stampe useranno comunque il bonifico al proprietario.</p>
+                  )}
                 </div>
 
                 {/* Spese comuni */}
