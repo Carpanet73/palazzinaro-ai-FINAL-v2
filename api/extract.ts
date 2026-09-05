@@ -52,23 +52,32 @@ function buildContextConfig(context: string, userPrompt?: string): ContextConfig
     case "sharedExpenseBill":
       return {
         systemInstruction: `Sei un assistente specializzato in gestione immobiliare. Stai analizzando una bolletta o fattura di spesa comune (es. acqua, luce parti comuni, manutenzioni) per un edificio senza amministratore di condominio.
-Estrai TUTTE le singole voci che compongono il documento, così come appaiono, senza aggregarle in un unico importo. Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
+
+Le bollette di utenze italiane (es. acqua, luce) sono tipicamente organizzate in SEZIONI con un totale proprio (es. "QUOTA FISSA", "ACQUEDOTTO", "FOGNATURA", "DEPURAZIONE", "ONERI PEREQUAZIONE", "ADDEBITI/ACCREDITI EXTRA FATTURA"), ciascuna delle quali può contenere più righe tecniche di dettaglio (es. "Oneri Perequazione UI1 Acquedotto", "UI2 Fognatura", "UI3 Depurazione...") che sommate danno il "TOTALE IMPORTO" di quella sezione.
+
+REGOLA FONDAMENTALE: estrai UNA voce per ciascuna SEZIONE con il suo "TOTALE IMPORTO" già calcolato dal documento — non elencare le singole righe tecniche di dettaglio interne alla sezione (l'utente deve vedere poche voci chiare, non decine di micro-righe). Usa come descrizione il nome della sezione così come appare (es. "Quota Fissa", "Acquedotto", "Fognatura", "Depurazione", "Oneri Perequazione"). Se il documento non ha sezioni raggruppate ma singole voci indipendenti (es. una manutenzione con più interventi separati), estrai quelle singolarmente invece.
+
+Se è presente un totale IVA separato dall'imponibile, estrailo come voce a parte con descrizione "IVA". Le eventuali spese di sollecito/mora vanno estratte come voce a parte con descrizione "Spese di Sollecito" — mai sommate ad altre sezioni.
+
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questa struttura:
 {
-  "title": "Titolo sintetico del documento (es: Bolletta Acqua 3\u00b0 Bimestre 2026)",
+  "title": "Titolo sintetico del documento (es: Bolletta Acqua 3° Bimestre 2026)",
   "billingPeriodStart": "Data inizio periodo fatturato in formato YYYY-MM-DD, se presente",
   "billingPeriodEnd": "Data fine periodo fatturato in formato YYYY-MM-DD, se presente",
+  "dueDate": "Data di scadenza pagamento in formato YYYY-MM-DD, se presente sul documento",
   "lineItems": [
-    { "description": "Descrizione esatta della voce come nel documento", "amount": 0 }
+    { "description": "Nome della sezione o voce come nel documento", "amount": 0 }
   ],
   "rawText": "Trascrizione integrale del testo riconosciuto, per audit"
 }
-Se una voce non ha un importo chiaramente leggibile, non includerla. Non inventare mai importi o descrizioni non presenti nel documento.`,
+Se una voce/sezione non ha un importo chiaramente leggibile, non includerla. Non inventare mai importi o descrizioni non presenti nel documento. La somma delle voci estratte deve corrispondere al "TOTALE FATTURA"/"TOTALE DA PAGARE" del documento.`,
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             title: { type: Type.STRING },
             billingPeriodStart: { type: Type.STRING },
             billingPeriodEnd: { type: Type.STRING },
+            dueDate: { type: Type.STRING },
             lineItems: {
               type: Type.ARRAY,
               items: {
