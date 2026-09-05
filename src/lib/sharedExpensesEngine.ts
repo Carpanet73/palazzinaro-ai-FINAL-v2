@@ -128,8 +128,22 @@ export function allocateLineItem(
   const totalShareUnits = shares.reduce((sum, s) => sum + s.shareUnits, 0);
     if (totalShareUnits <= 0) return [];
 
-  return shares.map((s) => {
-        const propAmount = Number(((amount * s.shareUnits) / totalShareUnits).toFixed(2));
+  // Prima passata: importo grezzo arrotondato per ciascuna unità.
+  const rawAmounts = shares.map((s) => Number(((amount * s.shareUnits) / totalShareUnits).toFixed(2)));
+
+  // CORREZIONE (03/09/2026, su segnalazione di Massimo, emersa testando una bolletta
+  // reale): sommando gli arrotondamenti di ogni singola unità, il totale può discostarsi
+  // di qualche centesimo dall'importo reale della voce in bolletta. L'ultima unità della
+  // lista assorbe il residuo, così la somma torna SEMPRE esatta — mai un centesimo perso
+  // o inventato rispetto al documento originale.
+  const roundedSum = rawAmounts.reduce((sum, v) => sum + v, 0);
+  const residuo = Number((amount - roundedSum).toFixed(2));
+  if (rawAmounts.length > 0 && residuo !== 0) {
+    rawAmounts[rawAmounts.length - 1] = Number((rawAmounts[rawAmounts.length - 1] + residuo).toFixed(2));
+  }
+
+  return shares.map((s, idx) => {
+        const propAmount = rawAmounts[idx];
         const amountTenant = Number(((propAmount * chargedToTenantPct) / 100).toFixed(2));
         const amountOwner = Number((propAmount - amountTenant).toFixed(2));
         return {
