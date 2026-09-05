@@ -43,6 +43,14 @@ function totaleBolletta(expense: SharedExpense): number {
   return expense.lineItems.reduce((sum, li) => sum + (Number(li.amount) || 0), 0);
 }
 
+// CORREZIONE (03/09/2026, su segnalazione di Massimo, dopo test con PDF reale): i font
+// base di jsPDF (Helvetica) non includono i glifi emoji usati nelle etichette categoria
+// (es. "💧 Acqua Condivisa") — venivano stampati come caratteri illeggibili. Le rimuove
+// SOLO nel PDF: nell'interfaccia dell'app restano invariate.
+function categoriaSenzaEmoji(label: string): string {
+  return label.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F]+\s*/u, "").trim();
+}
+
 // Elenco criteri distinti usati nelle voci della spesa (spesso una sola, ma
 // una bolletta può avere voci con criteri diversi: es. quota fissa a
 // millesimi + quota consumo a contatore).
@@ -51,11 +59,19 @@ function criteriUsati(expense: SharedExpense): string {
   return Array.from(set).join(", ");
 }
 
-function disegnaIntestazione(doc: jsPDF, marginX: number, y: number, expense: SharedExpense, buildingName: string): number {
+function disegnaIntestazione(doc: jsPDF, marginX: number, y: number, expense: SharedExpense, buildingName: string, saluto?: string): number {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
   doc.text("Riepilogo Spesa Comune", marginX, y);
   y += 8;
+
+  if (saluto) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    const righe = doc.splitTextToSize(saluto, 172);
+    doc.text(righe, marginX, y);
+    y += righe.length * 5 + 4;
+  }
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
@@ -63,7 +79,7 @@ function disegnaIntestazione(doc: jsPDF, marginX: number, y: number, expense: Sh
   y += 6;
   doc.text(`Spesa: ${expense.title}`, marginX, y);
   y += 6;
-  doc.text(`Categoria: ${SHARED_EXPENSE_CATEGORY_LABELS[expense.category]} (${expense.isExtraordinary ? "Straordinaria" : "Ordinaria"})`, marginX, y);
+  doc.text(`Categoria: ${categoriaSenzaEmoji(SHARED_EXPENSE_CATEGORY_LABELS[expense.category])} (${expense.isExtraordinary ? "Straordinaria" : "Ordinaria"})`, marginX, y);
   y += 6;
   if (expense.billingPeriodStart && expense.billingPeriodEnd) {
     doc.text(`Periodo fatturato: ${expense.billingPeriodStart} — ${expense.billingPeriodEnd}`, marginX, y);
@@ -118,7 +134,8 @@ export function generateRendicontoPdf(
 ): jsPDF {
   const doc = new jsPDF();
   const marginX = 18;
-  let y = disegnaIntestazione(doc, marginX, 20, expense, buildingName);
+  const saluto = `Gentile ${tenantName}, di seguito Le comunichiamo la Sua quota per la spesa comune indicata, ripartita voce per voce come da bolletta originale.`;
+  let y = disegnaIntestazione(doc, marginX, 20, expense, buildingName, saluto);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
@@ -191,6 +208,28 @@ export function generateRendicontoPdf(
     y = disegnaRate(doc, marginX, y, righeRata, "Rateizzazione — quota dovuta per rata:");
   }
 
+  // Istruzioni di pagamento con IBAN (03/09/2026, su richiesta di Massimo: "sarebbe bene
+  // che si possa indicare l'IBAN del proprietario affinché la gente paghi unitamente ai
+  // canoni mensili") — solo nella stampa personale, mai in quella generale/da affiggere.
+  if (y > 255) { doc.addPage(); y = 20; }
+  y += 4;
+  doc.setDrawColor(220);
+  doc.setLineWidth(0.2);
+  doc.line(marginX, y, 192, y);
+  y += 8;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("Modalità di pagamento", marginX, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  const testoPagamento = doc.splitTextToSize(
+    `La preghiamo di versare l'importo dovuto unitamente al canone mensile, tramite bonifico intestato a ${owner.name}, IBAN: ${owner.iban || "non disponibile — richiedere al proprietario"}.`,
+    172
+  );
+  doc.text(testoPagamento, marginX, y);
+  y += testoPagamento.length * 5 + 6;
+
   disegnaFooter(doc, marginX, y);
   return doc;
 }
@@ -208,7 +247,8 @@ export function generateRendicontoGeneralePdf(
 ): jsPDF {
   const doc = new jsPDF();
   const marginX = 18;
-  let y = disegnaIntestazione(doc, marginX, 20, expense, buildingName);
+  const saluto = "Egregi Condomini, di seguito la ripartizione della spesa comune indicata, unità per unità.";
+  let y = disegnaIntestazione(doc, marginX, 20, expense, buildingName, saluto);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
@@ -297,7 +337,7 @@ export function generateBachecaPdf(
   doc.setFont("helvetica", "normal");
   doc.text(buildingName, marginX, y);
   y += 8;
-  doc.text(`${expense.title} — ${SHARED_EXPENSE_CATEGORY_LABELS[expense.category]}`, marginX, y);
+  doc.text(`${expense.title} — ${categoriaSenzaEmoji(SHARED_EXPENSE_CATEGORY_LABELS[expense.category])}`, marginX, y);
   y += 6;
   if (expense.billingPeriodStart && expense.billingPeriodEnd) {
     doc.setFontSize(10);
@@ -306,7 +346,12 @@ export function generateBachecaPdf(
     doc.setTextColor(0);
     y += 6;
   }
-  y += 6;
+  y += 4;
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(10);
+  doc.text("Egregi Condomini, di seguito la ripartizione della spesa indicata.", marginX, y);
+  doc.setFont("helvetica", "normal");
+  y += 8;
   doc.setDrawColor(0);
   doc.setLineWidth(0.6);
   doc.line(marginX, y, 192, y);
