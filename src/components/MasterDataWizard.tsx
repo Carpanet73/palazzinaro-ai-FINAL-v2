@@ -543,8 +543,12 @@ export default function MasterDataWizard({
         if (tenantMode === "select") return !!selectedTenantId;
         return tName.trim().length > 0;
       case 5:
+        // CORREZIONE (05/09/2026, su segnalazione di Massimo): se l'immobile non è
+        // affittato, lo step "Contratto" deve essere SEMPRE valido a prescindere da
+        // qualunque valore di hasContract — un contratto non ha senso senza inquilino,
+        // quindi non deve mai poter bloccare il salvataggio di un immobile "solo".
+        if (!isRented) return true;
         if (!hasContract) return true;
-        if (!isRented) return false; // contract requires tenant
         return cStartDate.length > 0 && cEndDate.length > 0 && cRentAmount > 0;
       default:
         return true;
@@ -1488,7 +1492,13 @@ export default function MasterDataWizard({
                 <input
                   type="checkbox"
                   checked={isRented}
-                  onChange={(e) => setIsRented(e.target.checked)}
+                  onChange={(e) => {
+                    setIsRented(e.target.checked);
+                    // Se si toglie la spunta "è affittato", azzera anche lo stato del
+                    // contratto — mai lasciare un valore residuo che potrebbe confondere
+                    // la validazione dello step successivo.
+                    if (!e.target.checked) setHasContract(false);
+                  }}
                   className="w-4 h-4 accent-slate-900"
                 />
                 <span>
