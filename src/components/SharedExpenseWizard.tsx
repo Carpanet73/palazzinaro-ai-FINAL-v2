@@ -156,6 +156,9 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
           if (json.data.title) setTitle(String(json.data.title));
           if (json.data.billingPeriodStart) setBillingPeriodStart(String(json.data.billingPeriodStart));
           if (json.data.billingPeriodEnd) setBillingPeriodEnd(String(json.data.billingPeriodEnd));
+          // Scadenza estratta dall'OCR (03/09/2026): pre-compila la data allo step 4, così
+          // non serve ridigitarla a mano se già leggibile sul documento originale.
+          if (json.data.dueDate) setExpenseDueDate(String(json.data.dueDate));
           if (json.data.rawText) setSourceDocumentText(String(json.data.rawText));
         } else {
           setOcrError("Non sono riuscito a riconoscere le voci della bolletta. Inseriscile manualmente al passo successivo.");
