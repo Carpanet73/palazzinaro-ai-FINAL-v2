@@ -16,7 +16,7 @@
  */
 
 import React, { useMemo, useState } from "react";
-import { Plus, Building2, Droplet, FileText, Send, Download, Users, ChevronRight, X } from "lucide-react";
+import { Plus, Building2, Droplet, FileText, Send, Download, Users, ChevronRight, X, MessageCircle, Printer } from "lucide-react";
 import emailjs from "@emailjs/browser";
 import type { Property, Tenant, OwnerProfile } from "../types";
 import type {
@@ -28,7 +28,7 @@ import { SHARED_EXPENSE_CATEGORY_LABELS } from "../types-shared-expenses";
 import MeterReadingWizard from "./MeterReadingWizard";
 import SharedExpenseWizard from "./SharedExpenseWizard";
 import { calculateDailyAverageConsumption, projectConsumptionOnBillingPeriod, type PropertyConsumptionInput } from "../lib/sharedExpensesEngine";
-import { generateRendicontoPdf, generateRendicontoGeneralePdf } from "../lib/rendicontoPdf";
+import { generateRendicontoPdf, generateRendicontoGeneralePdf, generateBachecaPdf } from "../lib/rendicontoPdf";
 
 export interface SelfManagedBuildingsViewProps {
   buildings: SelfManagedBuilding[];
@@ -123,6 +123,40 @@ export default function SelfManagedBuildingsView({
     });
     const doc = generateRendicontoGeneralePdf(expense, buildingProperties, tenantNamesByPropertyId, ownerProfile, selectedBuilding?.name ?? "");
     doc.save(`riepilogo-generale-${expense.title.replace(/\s+/g, "-")}.pdf`);
+  };
+
+  // Stampa da Affiggere (03/09/2026, su richiesta di Massimo): un foglio essenziale con
+  // "Unità — Inquilino — Importo", pensato per essere appeso al portone d'ingresso.
+  const handlePrintBacheca = (expense: SharedExpense) => {
+    const tenantNamesByPropertyId: Record<string, string> = {};
+    buildingProperties.forEach((p) => {
+      const t = tenants.find((tt) => tt.propertyId === p.id);
+      tenantNamesByPropertyId[p.id] = t?.name ?? "Non Specificato";
+    });
+    const doc = generateBachecaPdf(expense, buildingProperties, tenantNamesByPropertyId, selectedBuilding?.name ?? "");
+    doc.save(`avviso-bacheca-${expense.title.replace(/\s+/g, "-")}.pdf`);
+  };
+
+  // Invio WhatsApp per singolo inquilino (03/09/2026): stesso schema già in uso nei
+  // Solleciti (wa.me con testo precompilato) — un messaggio a testo con la quota dovuta,
+  // il PDF resta comunque scaricato localmente da allegare a mano se serve.
+  const handleSendWhatsApp = (expense: SharedExpense, propertyId: string) => {
+    const property = buildingProperties.find((p) => p.id === propertyId);
+    const tenant = tenants.find((t) => t.propertyId === propertyId);
+    if (!tenant?.phone || !tenant.phone.trim()) {
+      alert(`"${tenant?.name ?? "Questo inquilino"}" non ha un numero di telefono salvato in anagrafica. Impossibile inviare tramite WhatsApp.`);
+      return;
+    }
+    const allocs = expense.allocations.filter((a) => a.propertyId === propertyId);
+    const amount = allocs.reduce((s, a) => s + a.amountTenant, 0);
+    if (amount <= 0) return;
+    const message =
+      `Gentile ${tenant.name},\n\n` +
+      `Le comunichiamo la Sua quota per la spesa comune "${expense.title}" (${property?.name ?? ""}):\n` +
+      `Importo dovuto: € ${amount.toFixed(2)}\n\n` +
+      `Messaggio inviato mediante procedura automatizzata del sistema, in nome e per conto del proprietario, con supporto dell'intelligenza artificiale.`;
+    const phoneClean = tenant.phone.replace(/[^0-9+]/g, "");
+    window.open(`https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`, "_blank");
   };
 
   const handleSendRendiconto = async (expense: SharedExpense) => {
@@ -288,7 +322,7 @@ export default function SelfManagedBuildingsView({
                   ) : (
                     <div className="space-y-2">
                       {buildingExpenses.map((exp) => (
-                        <div key={exp.id} className="p-3 bg-slate-50 rounded-xl border border-slate-150">
+                        <div key={exp.id} className="p-3 bg-slate-50 rounded-xl border border-slate-150 space-y-2">
                           <div className="flex items-center justify-between">
                             <div>
                               <div className="flex items-center space-x-2">
@@ -304,6 +338,14 @@ export default function SelfManagedBuildingsView({
                               <p className="font-mono font-black text-sm text-slate-900">
                                 € {exp.lineItems.reduce((s, li) => s + li.amount, 0).toFixed(2)}
                               </p>
+                              <button
+                                onClick={() => handlePrintBacheca(exp)}
+                                className="mt-1 flex items-center space-x-1 text-[10px] font-bold text-slate-500 hover:text-slate-800"
+                                title="Foglio essenziale da appendere al portone d'ingresso, con l'importo dovuto da ogni unità"
+                              >
+                                <Printer size={11} />
+                                <span>Stampa da Affiggere</span>
+                              </button>
                               <button
                                 onClick={() => handlePrintGenerale(exp)}
                                 className="mt-1 flex items-center space-x-1 text-[10px] font-bold text-slate-500 hover:text-slate-800"
@@ -322,6 +364,33 @@ export default function SelfManagedBuildingsView({
                                 <span>{sendingRendicontoId === exp.id ? "Invio..." : "Invia Rendiconto"}</span>
                               </button>
                             </div>
+                          </div>
+
+                          {/* Elenco per unità con invio WhatsApp diretto al singolo inquilino
+                              (03/09/2026, su richiesta di Massimo: "esportare e inviare
+                              eventualmente e-mail o WhatsApp ai referenti di ogni appartamento"). */}
+                          <div className="pt-2 border-t border-slate-200 space-y-1">
+                            {Array.from(new Set(exp.allocations.map((a) => a.propertyId))).map((propertyId) => {
+                              const property = buildingProperties.find((p) => p.id === propertyId);
+                              const tenant = tenants.find((t) => t.propertyId === propertyId);
+                              const amount = exp.allocations.filter((a) => a.propertyId === propertyId).reduce((s, a) => s + a.amountTenant, 0);
+                              if (amount <= 0) return null;
+                              return (
+                                <div key={propertyId} className="flex items-center justify-between text-[10px]">
+                                  <span className="text-slate-600">{property?.name ?? propertyId} — {tenant?.name ?? "Non Specificato"}</span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-mono font-bold text-slate-800">€ {amount.toFixed(2)}</span>
+                                    <button
+                                      onClick={() => handleSendWhatsApp(exp, propertyId)}
+                                      className="text-emerald-600 hover:text-emerald-800"
+                                      title={`Invia via WhatsApp a ${tenant?.name ?? "questo inquilino"}`}
+                                    >
+                                      <MessageCircle size={13} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       ))}
