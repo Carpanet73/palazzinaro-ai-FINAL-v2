@@ -22,7 +22,7 @@
  */
 
 import jsPDF from "jspdf";
-import type { Property, OwnerProfile } from "../types";
+import type { Property } from "../types";
 import type { SharedExpense, SharedExpenseAllocationLine } from "../types-shared-expenses";
 import { SHARED_EXPENSE_CATEGORY_LABELS, SPLIT_CRITERIA_LABELS } from "../types-shared-expenses";
 
@@ -129,8 +129,13 @@ export function generateRendicontoPdf(
   expense: SharedExpense,
   property: Property,
   tenantName: string,
-  owner: OwnerProfile,
-  buildingName: string
+  owner: { name: string; iban?: string },
+  buildingName: string,
+  // CORREZIONE (03/09/2026, su richiesta di Massimo): la riscossione può avvenire in due
+  // modi — bonifico al proprietario (default, comportamento invariato) oppure a mano da
+  // parte di un condomino incaricato. Il testo del PDF si adatta di conseguenza, ma la
+  // riga "Proprietario: X" resta SEMPRE quella reale (mai sostituita dal riscossore).
+  collector?: { mode: "iban" } | { mode: "hand"; name: string; phone?: string }
 ): jsPDF {
   const doc = new jsPDF();
   const marginX = 18;
@@ -208,9 +213,10 @@ export function generateRendicontoPdf(
     y = disegnaRate(doc, marginX, y, righeRata, "Rateizzazione — quota dovuta per rata:");
   }
 
-  // Istruzioni di pagamento con IBAN (03/09/2026, su richiesta di Massimo: "sarebbe bene
-  // che si possa indicare l'IBAN del proprietario affinché la gente paghi unitamente ai
-  // canoni mensili") — solo nella stampa personale, mai in quella generale/da affiggere.
+  // Istruzioni di riscossione (03/09/2026, su richiesta di Massimo): bonifico IBAN al
+  // proprietario, oppure — se un condomino è stato incaricato di raccogliere a mano —
+  // testo adattato di conseguenza. Solo nella stampa personale, mai in quella
+  // generale/da affiggere.
   if (y > 255) { doc.addPage(); y = 20; }
   y += 4;
   doc.setDrawColor(220);
@@ -223,10 +229,11 @@ export function generateRendicontoPdf(
   y += 6;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
-  const testoPagamento = doc.splitTextToSize(
-    `La preghiamo di versare l'importo dovuto unitamente al canone mensile, tramite bonifico intestato a ${owner.name}, IBAN: ${owner.iban || "non disponibile — richiedere al proprietario"}.`,
-    172
-  );
+  const messaggioPagamento =
+    collector && collector.mode === "hand"
+      ? `La preghiamo di consegnare l'importo dovuto A MANO a ${collector.name}${collector.phone ? ` (tel. ${collector.phone})` : ""}, incaricato/a della raccolta per questa spesa.`
+      : `La preghiamo di versare l'importo dovuto unitamente al canone mensile, tramite bonifico intestato a ${owner.name}, IBAN: ${owner.iban || "non disponibile — richiedere al proprietario"}.`;
+  const testoPagamento = doc.splitTextToSize(messaggioPagamento, 172);
   doc.text(testoPagamento, marginX, y);
   y += testoPagamento.length * 5 + 6;
 
@@ -242,7 +249,7 @@ export function generateRendicontoGeneralePdf(
   expense: SharedExpense,
   properties: Property[],
   tenantNamesByPropertyId: Record<string, string>,
-  owner: OwnerProfile,
+  owner: { name: string; iban?: string },
   buildingName: string
 ): jsPDF {
   const doc = new jsPDF();
