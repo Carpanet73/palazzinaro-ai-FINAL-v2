@@ -16,7 +16,7 @@
  */
 
 import React, { useMemo, useState } from "react";
-import { Plus, Building2, Droplet, FileText, Send, Download, Users, ChevronRight, X, MessageCircle, Printer } from "lucide-react";
+import { Plus, Building2, Droplet, FileText, Send, Download, Users, ChevronRight, X, MessageCircle, Printer, Pencil } from "lucide-react";
 import emailjs from "@emailjs/browser";
 import type { Property, Tenant, OwnerProfile, Owner } from "../types";
 import type {
@@ -67,6 +67,25 @@ export default function SelfManagedBuildingsView({
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(buildings[0]?.id ?? null);
   const [showBuildingForm, setShowBuildingForm] = useState(false);
   const [showExpenseWizard, setShowExpenseWizard] = useState(false);
+  // Modifica Spesa (05/09/2026, su richiesta di Massimo): quale spesa esistente si sta
+  // modificando — null quando si sta invece creandone una nuova.
+  const [editingExpense, setEditingExpense] = useState<SharedExpense | null>(null);
+
+  // Doppia conferma prima di modificare (05/09/2026): la modifica cancella e rigenera le
+  // voci Fast Closing collegate — un'operazione delicata se qualcuna era già stata pagata
+  // o già inviata all'inquilino, quindi mai un click solo.
+  const handleEditExpense = (expense: SharedExpense) => {
+    const primaConferma = window.confirm(
+      `Vuoi modificare "${expense.title}"?\n\nATTENZIONE: le voci già generate in Fast Closing per questa spesa verranno cancellate e rigenerate con i nuovi dati. Se qualche inquilino ha già pagato o ha già ricevuto il rendiconto, verifica prima con lui.`
+    );
+    if (!primaConferma) return;
+    const secondaConferma = window.confirm(
+      `Confermi DEFINITIVAMENTE di voler procedere con la modifica di "${expense.title}"? Questa operazione non si annulla da sola.`
+    );
+    if (!secondaConferma) return;
+    setEditingExpense(expense);
+    setShowExpenseWizard(true);
+  };
   const [meterWizardProperty, setMeterWizardProperty] = useState<Property | null>(null);
   const [sendingRendicontoId, setSendingRendicontoId] = useState<string | null>(null);
   // Scelta esplicita del proprietario da mostrare nelle stampe (03/09/2026, su richiesta
@@ -433,7 +452,7 @@ export default function SelfManagedBuildingsView({
                       <span>Spese Comuni Registrate</span>
                     </h3>
                     <button
-                      onClick={() => setShowExpenseWizard(true)}
+                      onClick={() => { setEditingExpense(null); setShowExpenseWizard(true); }}
                       className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold"
                     >
                       <Plus size={12} />
@@ -464,6 +483,14 @@ export default function SelfManagedBuildingsView({
                               <p className="font-mono font-black text-sm text-slate-900">
                                 € {exp.lineItems.reduce((s, li) => s + li.amount, 0).toFixed(2)}
                               </p>
+                              <button
+                                onClick={() => handleEditExpense(exp)}
+                                className="mt-1 flex items-center space-x-1 text-[10px] font-bold text-amber-600 hover:text-amber-800"
+                                title="Modifica questa spesa (rigenera le voci Fast Closing collegate — doppia conferma richiesta)"
+                              >
+                                <Pencil size={11} />
+                                <span>Modifica</span>
+                              </button>
                               <button
                                 onClick={() => handlePrintBacheca(exp)}
                                 className="mt-1 flex items-center space-x-1 text-[10px] font-bold text-slate-500 hover:text-slate-800"
@@ -556,12 +583,14 @@ export default function SelfManagedBuildingsView({
       {showExpenseWizard && selectedBuilding && (
         <SharedExpenseWizard
           isOpen={true}
-          onClose={() => setShowExpenseWizard(false)}
+          onClose={() => { setShowExpenseWizard(false); setEditingExpense(null); }}
           buildingId={selectedBuilding.id}
           properties={buildingProperties}
           consumptionByProperty={consumptionByProperty}
+          existingExpense={editingExpense ?? undefined}
           onSave={async (payload) => {
             await onAddSharedExpense(payload);
+            setEditingExpense(null);
           }}
         />
       )}
