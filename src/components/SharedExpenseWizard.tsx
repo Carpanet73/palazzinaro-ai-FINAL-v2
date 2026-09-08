@@ -17,13 +17,14 @@
  * ============================================================================
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { X, ChevronRight, ChevronLeft, Camera, Loader2, Plus, Trash2, Check, Sparkles } from "lucide-react";
 import type { Property } from "../types";
 import type {
   SharedExpenseCategory,
   SharedExpenseLineItem,
   SplitCriteria,
+  SharedExpense,
 } from "../types-shared-expenses";
 import { SHARED_EXPENSE_CATEGORY_LABELS, SPLIT_CRITERIA_LABELS } from "../types-shared-expenses";
 import { allocateFullExpense, type PropertyConsumptionInput } from "../lib/sharedExpensesEngine";
@@ -34,7 +35,12 @@ export interface SharedExpenseWizardProps {
   buildingId: string;
   properties: Property[]; // le unità dell'edificio
   consumptionByProperty?: PropertyConsumptionInput[]; // consumi acqua stimati nel periodo, se la categoria è acqua
+  // Modifica Spesa (05/09/2026, su richiesta di Massimo): se valorizzata, il wizard si
+  // apre precompilato con questi dati e il salvataggio AGGIORNA la spesa esistente invece
+  // di crearne una nuova — la logica di rigenerazione Fast Closing resta in App.tsx.
+  existingExpense?: SharedExpense;
   onSave: (payload: {
+    expenseId?: string; // presente SOLO in modifica — assente = nuova spesa
     buildingId: string;
     title: string;
     category: SharedExpenseCategory;
@@ -59,7 +65,7 @@ function newLineItemId() {
   return `li-${Date.now()}-${lineItemCounter}`;
 }
 
-export default function SharedExpenseWizard({ isOpen, onClose, buildingId, properties, consumptionByProperty, onSave }: SharedExpenseWizardProps) {
+export default function SharedExpenseWizard({ isOpen, onClose, buildingId, properties, consumptionByProperty, existingExpense, onSave }: SharedExpenseWizardProps) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
@@ -114,6 +120,47 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
     }
     setInstallments(rows);
   };
+
+  // Precompilazione per la Modifica Spesa (05/09/2026, su richiesta di Massimo): quando si
+  // apre il wizard per modificare una spesa esistente, tutti i campi vengono riempiti con
+  // i suoi valori attuali — mai un wizard vuoto quando si sta modificando qualcosa.
+  useEffect(() => {
+    if (isOpen && existingExpense) {
+      setTitle(existingExpense.title);
+      setCategory(existingExpense.category);
+      setIsExtraordinary(existingExpense.isExtraordinary);
+      setChargedToTenantPct(existingExpense.chargedToTenantPct);
+      setBillingPeriodStart(existingExpense.billingPeriodStart || "");
+      setBillingPeriodEnd(existingExpense.billingPeriodEnd || "");
+      setLineItems(existingExpense.lineItems.length > 0 ? existingExpense.lineItems : [{ id: newLineItemId(), description: "", amount: 0, splitCriteria: "millesimi" }]);
+      if (existingExpense.installments && existingExpense.installments.length > 0) {
+        setPaymentMode("rate");
+        setInstallments(existingExpense.installments);
+      } else {
+        setPaymentMode("unica");
+        setExpenseDueDate(existingExpense.dueDate || new Date().toISOString().split("T")[0]);
+        setInstallments([]);
+      }
+      setStep(2); // si salta lo step Documento: non ha senso ri-scansionare una spesa già registrata
+    } else if (isOpen && !existingExpense) {
+      // Apertura per una spesa NUOVA: azzera tutto, per non ereditare residui dall'ultima
+      // modifica fatta nella stessa sessione del wizard.
+      setStep(1);
+      setTitle("");
+      setCategory("acqua_condivisa");
+      setIsExtraordinary(false);
+      setChargedToTenantPct(0);
+      setBillingPeriodStart("");
+      setBillingPeriodEnd("");
+      setLineItems([{ id: newLineItemId(), description: "", amount: 0, splitCriteria: "millesimi" }]);
+      setPaymentMode("unica");
+      setExpenseDueDate(new Date().toISOString().split("T")[0]);
+      setInstallments([]);
+      setPhotoPreview(null);
+      setSourceDocumentText("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, existingExpense]);
 
   if (!isOpen) return null;
 
@@ -200,6 +247,7 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
     setSaving(true);
     try {
       await onSave({
+        expenseId: existingExpense?.id,
         buildingId,
         title: title.trim(),
         category,
@@ -230,7 +278,7 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
       <div className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[92vh]">
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div>
-            <h3 className="font-sans font-bold text-base">Nuova Spesa Comune</h3>
+            <h3 className="font-sans font-bold text-base">{existingExpense ? "Modifica Spesa Comune" : "Nuova Spesa Comune"}</h3>
             <p className="text-[11px] text-slate-400">Passo {step} di 5 — {stepTitles[step - 1]}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
@@ -510,7 +558,7 @@ export default function SharedExpenseWizard({ isOpen, onClose, buildingId, prope
               className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
             >
               <Check size={14} />
-              <span>{saving ? "Salvataggio..." : "Conferma e Sincronizza Fast Closing"}</span>
+              <span>{saving ? "Salvataggio..." : existingExpense ? "Salva Modifiche e Risincronizza Fast Closing" : "Conferma e Sincronizza Fast Closing"}</span>
             </button>
           )}
         </div>
