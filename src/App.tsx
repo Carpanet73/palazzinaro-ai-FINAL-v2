@@ -2114,15 +2114,39 @@ export default function App() {
   const handleAddSharedExpense = async (payload: any) => {
     if (!user) return;
     try {
+      const isEditing = !!payload.expenseId;
       const cleanData: any = {};
       Object.keys(payload).forEach((key) => {
+        if (key === "expenseId") return; // campo di servizio, mai scritto sul documento
         if (payload[key] !== undefined) cleanData[key] = payload[key];
       });
-      const expenseDoc = await addDoc(collection(db, "sharedExpenses"), {
-        ...cleanData,
-        userId: user.uid,
-        createdAt: serverTimestamp()
-      });
+
+      let expenseDocId: string;
+      if (isEditing) {
+        // Modifica Spesa (05/09/2026, su richiesta di Massimo): prima si cancellano TUTTE
+        // le vecchie voci Fast Closing generate da questa spesa (qualunque rata, qualunque
+        // unità — riconoscibili dal prefisso sourceId "sharedexp-{id}-"), poi si aggiorna
+        // il documento e si rigenerano da zero con i dati nuovi. Mai lasciare voci vecchie
+        // e nuove convivere: creerebbero doppioni nei mastrini.
+        expenseDocId = payload.expenseId;
+        const oldItemsQuery = query(collection(db, "fastClosing"), where("userId", "==", user.uid));
+        const oldItemsSnap = await getDocs(oldItemsQuery);
+        const deletions = oldItemsSnap.docs.filter((d) => (d.data().sourceId || "").startsWith(`sharedexp-${expenseDocId}-`));
+        for (const d of deletions) {
+          await deleteDoc(doc(db, "fastClosing", d.id));
+        }
+        await updateDoc(doc(db, "sharedExpenses", expenseDocId), {
+          ...cleanData,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        const expenseDoc = await addDoc(collection(db, "sharedExpenses"), {
+          ...cleanData,
+          userId: user.uid,
+          createdAt: serverTimestamp()
+        });
+        expenseDocId = expenseDoc.id;
+      }
 
       // Rateizzazione (01/09/2026, su richiesta di Massimo): la quota proprietario non è
       // mai tracciata qui (paga sempre lui il fornitore, obbligazione solidale) — solo la
@@ -2151,7 +2175,7 @@ export default function App() {
           await handleAddClosingItem({
             propertyId: alloc.propertyId,
             source: "condominium",
-            sourceId: `sharedexp-${expenseDoc.id}-${alloc.propertyId}-${alloc.lineItemId}-r${idx}`,
+            sourceId: `sharedexp-${expenseDocId}-${alloc.propertyId}-${alloc.lineItemId}-r${idx}`,
             title: `[Spesa Comune] ${payload.title} — Quota Inquilino (${alloc.propertyName})${rataLabel}`,
             description: alloc.calculationNote,
             amount: rataAmount,
@@ -2161,7 +2185,7 @@ export default function App() {
         }
       }
 
-      showSuccess("Spesa comune registrata e Fast Closing sincronizzato!");
+      showSuccess(isEditing ? "Spesa comune modificata e Fast Closing risincronizzato!" : "Spesa comune registrata e Fast Closing sincronizzato!");
     } catch (error) {
       const errInfo = handleFirestoreError(error, OperationType.CREATE, "sharedExpenses");
       showError("Impossibile salvare la spesa comune: " + errInfo.error);
