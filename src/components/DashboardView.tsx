@@ -1638,11 +1638,6 @@ export default function DashboardView({
             <h2 className="text-2xl font-sans font-black text-slate-900 tracking-tight">
               Ciao, {userName}!
             </h2>
-            {totalProperties > 0 && (
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-200 flex items-center space-x-1 uppercase animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" /> <span>Dati Demo Caricati</span>
-              </span>
-            )}
           </div>
           <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
             Panoramica in tempo reale del tuo patrimonio immobiliare. Usa i tasti 3D per pilotare tutte le funzioni dell'applicazione.
@@ -1753,6 +1748,34 @@ export default function DashboardView({
           )}
         </div>
       </div>
+
+      {/* Ponte Immobili↔Contratti (05/09/2026, su richiesta di Massimo): relazioni "de
+          facto" — un inquilino collegato a un immobile (property.tenantId) ma senza
+          ancora un Contratto vero in "contracts" — segnalate subito, in verde (mai lo
+          stesso colore del rosso lampeggiante riservato all'Area Legale, per non creare
+          confusione tra "da formalizzare" e "urgenza legale"). */}
+      {(() => {
+        const relazioniDaFormalizzare = tenants.filter(
+          (t) => t.propertyId && !contracts.some((c) => c.tenantId === t.id)
+        );
+        if (relazioniDaFormalizzare.length === 0) return null;
+        return (
+          <button
+            onClick={() => setCurrentSection("contracts")}
+            className="w-full flex items-center justify-between bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-300 rounded-2xl px-5 py-4 transition-all animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.35)]"
+          >
+            <div className="flex items-center space-x-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+              <span className="text-sm font-black text-emerald-800 text-left">
+                {relazioniDaFormalizzare.length === 1
+                  ? "1 relazione immobile-inquilino da formalizzare in Contratti"
+                  : `${relazioniDaFormalizzare.length} relazioni immobile-inquilino da formalizzare in Contratti`}
+              </span>
+            </div>
+            <span className="text-xs font-bold text-emerald-700">Vai a Relazioni & Contratti →</span>
+          </button>
+        );
+      })()}
 
       {/* HIGH-FIDELITY BULLETIN BOARD: BACHECA ATTIVITÀ IN SCADENZA SIGNIFICATIVA (AT THE TOP) */}
       <div className="bg-white rounded-3xl border-2 border-slate-150 p-6 shadow-md w-full" id="dashboard-activities-bar">
