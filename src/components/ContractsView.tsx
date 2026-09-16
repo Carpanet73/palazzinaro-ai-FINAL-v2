@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import {
   Plus, Edit3, Trash2, FileText, Calendar, Wallet, Link2,
@@ -181,6 +180,9 @@ export default function ContractsView({
   const [wizardStep, setWizardStep] = useState(0); // 0: OCR scan, 1: Property, 2: Tenant, 3: Contract parameters, 4: Summary
   const [wizardPropertyMode, setWizardPropertyMode] = useState<"select" | "create">("select");
   const [wizardTenantMode, setWizardTenantMode] = useState<"select" | "create">("select");
+  // Ponte Immobili↔Contratti (05/09/2026): true quando si arriva qui per formalizzare una
+  // relazione de facto — mostra un avviso sulla data di inizio (vedi step Parametri).
+  const [isFormalizingRelationship, setIsFormalizingRelationship] = useState(false);
 
   // Inline Creation states for Guided Wizard
   // 1. New Property
@@ -587,7 +589,23 @@ export default function ContractsView({
     setAiError("");
     setUploadedScanName(null);
 
+    setIsFormalizingRelationship(false);
     setShowModal(true);
+  };
+
+  // Ponte Immobili↔Contratti (05/09/2026, su richiesta di Massimo): formalizza una
+  // relazione "de facto" (inquilino già collegato all'immobile, ma senza Contratto vero)
+  // aprendo lo stesso identico wizard, con Immobile e Inquilino già scelti — l'utente deve
+  // solo completare i parametri del contratto (canone, date, deposito...) che nell'inserimento
+  // da Anagrafica Immobili sono più scarni.
+  const handleFormalizeRelationship = (tenant: Tenant) => {
+    handleOpenAddWizard();
+    setWizardPropertyMode("select");
+    setPropertyId(tenant.propertyId || "");
+    setWizardTenantMode("select");
+    setTenantId(tenant.id);
+    setIsFormalizingRelationship(true);
+    setWizardStep(3); // salta OCR, selezione immobile e selezione inquilino: già noti
   };
 
   const handleOpenEditModal = (contract: Contract) => {
@@ -2102,6 +2120,40 @@ export default function ContractsView({
         onAddContract={onAddContract}
       />
 
+      {/* Ponte Immobili↔Contratti (05/09/2026): relazioni "de facto" — inquilini già
+          collegati a un immobile (property.tenantId) ma senza ancora un Contratto vero.
+          Sempre mostrate, indipendentemente da quanti contratti veri esistano già. */}
+      {tenants.filter((t) => t.propertyId && !contracts.some((c) => c.tenantId === t.id)).length > 0 && (
+        <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5 space-y-3">
+          <h3 className="font-sans font-black text-emerald-900 text-sm flex items-center space-x-2">
+            <Handshake size={15} className="shrink-0" />
+            <span>Relazioni da Formalizzare</span>
+          </h3>
+          <p className="text-[11px] text-emerald-800">
+            Inquilino già collegato all'immobile dall'Anagrafica, ma senza un contratto vero e proprio registrato qui. Nessuna voce economica è stata generata finché non lo completi.
+          </p>
+          {tenants
+            .filter((t) => t.propertyId && !contracts.some((c) => c.tenantId === t.id))
+            .map((t) => {
+              const prop = properties.find((p) => p.id === t.propertyId);
+              return (
+                <div key={t.id} className="flex items-center justify-between bg-white rounded-xl border border-emerald-150 px-4 py-3">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">{t.name}</p>
+                    <p className="text-[10px] text-slate-500">{prop?.name || "Immobile non trovato"}</p>
+                  </div>
+                  <button
+                    onClick={() => handleFormalizeRelationship(t)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg"
+                  >
+                    Completa in Contratto
+                  </button>
+                </div>
+              );
+            })}
+        </div>
+      )}
+
       {/* Contracts table with integrated RELATIONSHIPS */}
       {contracts.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center max-w-lg mx-auto mt-8">
@@ -2748,6 +2800,15 @@ export default function ContractsView({
                     <span>Passo 3: Parametri di Locazione & Canoni</span>
                   </h4>
 
+                  {isFormalizingRelationship && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-800">
+                      <strong>Attenzione alla Data di Inizio:</strong> se l'inquilino occupa già l'immobile da prima
+                      di oggi, e imposti qui una data di inizio passata, il sistema genererà retroattivamente tutte
+                      le rate di canone da quella data — verifica che sia quello che vuoi, specialmente se
+                      l'inquilino aveva già pagato informalmente in quel periodo.
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Canone Mensile (€) *</label>
@@ -3382,4 +3443,3 @@ export default function ContractsView({
     </div>
   );
 }
-
