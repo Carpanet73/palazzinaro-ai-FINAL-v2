@@ -406,102 +406,14 @@ export default function App() {
     }
   };
 
-  // Self-Healing Auto-Deduplication of Properties
-  const hasDeduplicatedRef = React.useRef(false);
-  useEffect(() => {
-    if (!user || properties.length === 0 || hasDeduplicatedRef.current) return;
+  // CORREZIONE (24/09/2026, su segnalazione di Massimo): la funzione di auto-pulizia
+  // duplicati immobili è stata RIMOSSA — cancellava in automatico, senza chiedere
+  // conferma, immobili legittimi che condividevano solo i primi 15 caratteri del nome
+  // (es. più unità della stessa palazzina: "Via Enrico Fermi 6 — Interno 1/2/3..."),
+  // trattandoli erroneamente come doppioni. Troppo rischiosa per dati reali: se in
+  // futuro serve individuare doppioni veri, va fatto con conferma esplicita dell'utente,
+  // mai in automatico e senza avviso.
 
-    const runDeduplication = async () => {
-      hasDeduplicatedRef.current = true;
-      
-      // Group properties by owner and lowercased prefix of name/address to find duplicates
-      const duplicatesGrouped = new Map<string, Property[]>();
-      
-      properties.forEach(p => {
-        if (!p.owner) return;
-        const ownerNorm = (p.owner || "").trim().toLowerCase();
-        // Extract a simplified key (e.g. "giulia bianchi_trilocale navigli")
-        const nameClean = (p.name || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase().substring(0, 15);
-        const key = `${ownerNorm}_${nameClean}`;
-        
-        if (!duplicatesGrouped.has(key)) {
-          duplicatesGrouped.set(key, []);
-        }
-        duplicatesGrouped.get(key)!.push(p);
-      });
-
-      for (const [key, group] of duplicatesGrouped.entries()) {
-        if (group.length > 1) {
-          console.log(`Auto-Deduplication: found duplicates for group key "${key}":`, group);
-          
-          // Select which one to keep
-          // 1. One with active contract
-          // 2. One with isCondoConstituted === true
-          // 3. First one
-          let bestProp = group[0];
-          let bestScore = -1;
-          
-          for (const p of group) {
-            let score = 0;
-            const hasContract = contracts.some(c => c.propertyId === p.id && c.status === "Active");
-            if (hasContract) score += 10;
-            if (p.isCondoConstituted) score += 5;
-            if (score > bestScore) {
-              bestScore = score;
-              bestProp = p;
-            }
-          }
-
-          const keepId = bestProp.id;
-          const toDelete = group.filter(p => p.id !== keepId);
-
-          for (const delProp of toDelete) {
-            console.log(`Auto-Deduplication: deleting duplicate property ${delProp.id} ("${delProp.name}") and preserving ${keepId}`);
-            
-            try {
-              // Delete the duplicate document
-              await deleteDoc(doc(db, "properties", delProp.id));
-
-              // Re-link contracts
-              const relatedContracts = contracts.filter(c => c.propertyId === delProp.id);
-              for (const c of relatedContracts) {
-                await updateDoc(doc(db, "contracts", c.id), { propertyId: keepId });
-              }
-
-              // Re-link maintenance
-              const relatedMaint = maintenance.filter(m => m.propertyId === delProp.id);
-              for (const m of relatedMaint) {
-                await updateDoc(doc(db, "maintenance", m.id), { propertyId: keepId });
-              }
-
-              // Re-link legal cases
-              const relatedLegal = legalCases.filter(l => l.propertyId === delProp.id);
-              for (const l of relatedLegal) {
-                await updateDoc(doc(db, "legalCases", l.id), { propertyId: keepId });
-              }
-
-              // Re-link reminders
-              const relatedReminders = reminders.filter(r => r.propertyId === delProp.id);
-              for (const r of relatedReminders) {
-                await updateDoc(doc(db, "reminders", r.id), { propertyId: keepId });
-              }
-
-              showSuccess(`Auto-Risoluzione: rimosso immobile duplicato "${delProp.name}" di ${delProp.owner}.`);
-            } catch (err) {
-              console.error(`Auto-Deduplication: error resolving property ${delProp.id}`, err);
-            }
-          }
-        }
-      }
-    };
-
-    // Delay slightly to ensure related states are fully loaded and synced
-    const timer = setTimeout(() => {
-      runDeduplication();
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [user, properties, contracts, maintenance, legalCases, reminders]);
 
   // ==========================================
   // DATABASE MUTATION CALLBACKS (CRUD)
