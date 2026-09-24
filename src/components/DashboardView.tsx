@@ -1777,6 +1777,41 @@ export default function DashboardView({
         );
       })()}
 
+      {/* Rilevamento Possibili Doppioni Immobili (24/09/2026, su richiesta di Massimo, dopo
+          l'incidente con l'auto-pulizia che cancellava da sola unità legittime di uno stesso
+          edificio): confronto sul NOME INTERO (non più i primi 15 caratteri, che rendevano
+          "Interno 1" e "Interno 2" indistinguibili) — e SOLO una segnalazione, mai una
+          cancellazione automatica. La decisione resta sempre a Massimo. */}
+      {(() => {
+        const norm = (s: string) => (s || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+        const groups = new Map<string, Property[]>();
+        properties.forEach((p) => {
+          if (!p.owner) return;
+          const key = `${norm(p.owner)}_${norm(p.name)}`;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key)!.push(p);
+        });
+        const possibiliDoppioni = Array.from(groups.values()).filter((g) => g.length > 1);
+        if (possibiliDoppioni.length === 0) return null;
+        const totale = possibiliDoppioni.reduce((s, g) => s + g.length, 0);
+        return (
+          <button
+            onClick={() => setCurrentSection("properties")}
+            className="w-full flex items-center justify-between bg-amber-50 hover:bg-amber-100 border-2 border-amber-300 rounded-2xl px-5 py-4 transition-all"
+          >
+            <div className="flex items-center space-x-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+              <span className="text-sm font-black text-amber-800 text-left">
+                {possibiliDoppioni.length === 1
+                  ? `2 immobili con nome identico ("${possibiliDoppioni[0][0].name}") — possibile doppione da verificare`
+                  : `${totale} immobili raggruppati in ${possibiliDoppioni.length} possibili doppioni da verificare`}
+              </span>
+            </div>
+            <span className="text-xs font-bold text-amber-700">Vai ad Anagrafica Immobili →</span>
+          </button>
+        );
+      })()}
+
       {/* HIGH-FIDELITY BULLETIN BOARD: BACHECA ATTIVITÀ IN SCADENZA SIGNIFICATIVA (AT THE TOP) */}
       <div className="bg-white rounded-3xl border-2 border-slate-150 p-6 shadow-md w-full" id="dashboard-activities-bar">
         <div className="flex items-center justify-between pb-4">
