@@ -178,6 +178,12 @@ export default function ContractsView({
 
   // Guided Relationship Wizard state
   const [wizardStep, setWizardStep] = useState(0); // 0: OCR scan, 1: Property, 2: Tenant, 3: Contract parameters, 4: Summary
+  // CORREZIONE (24/09/2026, su segnalazione di Massimo — bug confermato che ha causato
+  // fino a 6 contratti duplicati dallo stesso click, con relative rate duplicate in Fast
+  // Closing): il pulsante finale di salvataggio non dava alcun segnale visivo durante il
+  // salvataggio, inducendo a ricliccare pensando che il primo click non fosse partito.
+  // Questo stato blocca esplicitamente i click ripetuti finché il salvataggio è in corso.
+  const [isSavingContract, setIsSavingContract] = useState(false);
   const [wizardPropertyMode, setWizardPropertyMode] = useState<"select" | "create">("select");
   const [wizardTenantMode, setWizardTenantMode] = useState<"select" | "create">("select");
   // Ponte Immobili↔Contratti (05/09/2026): true quando si arriva qui per formalizzare una
@@ -744,6 +750,11 @@ export default function ContractsView({
   const handleWizardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Blocco esplicito dei click ripetuti: se un salvataggio è già in corso, ignora
+    // qualunque nuovo submit finché non è terminato — mai più contratti duplicati dallo
+    // stesso click.
+    if (isSavingContract) return;
+
     // Validations based on modes
     if (wizardPropertyMode === "select" && !propertyId) {
       alert("Seleziona un immobile esistente.");
@@ -842,6 +853,7 @@ export default function ContractsView({
       payload.tenantName = linkedTenant?.name || "Inquilino";
     }
 
+    setIsSavingContract(true);
     try {
       if (editingContract) {
         await onEditContract(editingContract.id, {
@@ -900,6 +912,8 @@ export default function ContractsView({
       setShowModal(false);
     } catch (err) {
       console.error("Error committing wizard relationship", err);
+    } finally {
+      setIsSavingContract(false);
     }
   };
 
@@ -3267,9 +3281,10 @@ export default function ContractsView({
                 {editingContract ? (
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm"
+                    disabled={isSavingContract}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Salva Modifiche
+                    {isSavingContract ? "Salvataggio..." : "Salva Modifiche"}
                   </button>
                 ) : wizardStep < 4 ? (
                   <button
@@ -3316,10 +3331,11 @@ export default function ContractsView({
                 ) : (
                   <button
                     type="submit"
-                    className="inline-flex items-center space-x-1 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all active:shadow-sm"
+                    disabled={isSavingContract}
+                    className="inline-flex items-center space-x-1 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all active:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Check size={14} className="stroke-[3]" />
-                    <span>Unifica e Salva Relazione</span>
+                    <span>{isSavingContract ? "Salvataggio..." : "Unifica e Salva Relazione"}</span>
                   </button>
                 )}
 
